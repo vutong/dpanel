@@ -35,6 +35,9 @@ case "${CMD}" in
       || curl -fsS "http://127.0.0.1:3000/api/health" 2>/dev/null \
       || echo "Panel health check failed — run: dpanel logs dpanel"
     ;;
+  setpass)
+    exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"
+    ;;
   help|*)
     cat <<'EOF'
 dpanel — stack management
@@ -46,6 +49,7 @@ dpanel — stack management
   dpanel update-panel        Rebuild & restart panel UI
   dpanel deploy              docker compose build & up
   dpanel credentials         Show install summary (if saved)
+  dpanel setpass <password>  Change panel login password
 
 Stack root: /opt/stack
 EOF

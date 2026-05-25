@@ -34,9 +34,14 @@ Install takes **15–30 minutes**. Terminal shows step lines only; details: `tai
 export DPANEL_NONINTERACTIVE=1
 export PANEL_DOMAIN=panel.example.com
 export ADMIN_EMAIL=admin@example.com
-export ADMIN_PASSWORD='your-secure-password'
 curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
 sudo -E bash install.sh
+```
+
+Default login password is **1234567**. Change after install:
+
+```bash
+dpanel setpass 'Your_new_password'
 ```
 
 ### Options

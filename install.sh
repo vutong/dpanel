@@ -9,19 +9,21 @@
 #   curl -fsSLO .../install-screen.sh && sudo bash install-screen.sh
 #
 # Non-interactive:
-#   export DPANEL_NONINTERACTIVE=1 PANEL_DOMAIN=... ADMIN_EMAIL=... ADMIN_PASSWORD=...
+#   export DPANEL_NONINTERACTIVE=1 PANEL_DOMAIN=... ADMIN_EMAIL=...
 #   sudo -E bash install.sh
+# Default login password: 1234567 — change after install: dpanel setpass <password>
 #
 set -eu
 
-INSTALLER_VERSION="1.0.8"
+INSTALLER_VERSION="1.0.9"
+DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-1234567}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
 DPANEL_BRANCH="${DPANEL_BRANCH:-main}"
 PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${DEFAULT_ADMIN_PASSWORD}}"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-install.log}"
 TOTAL_STEPS=11
 STEP=0
@@ -200,17 +202,6 @@ tty_read() {
   fi
 }
 
-tty_read_secret() {
-  local prompt="$1" varname="$2"
-  printf '%s' "${prompt}" >/dev/tty 2>/dev/null || printf '%s' "${prompt}"
-  if ! read -r -s "${varname}" </dev/tty 2>/dev/null; then
-    if ! read -r -s "${varname}"; then
-      die "No TTY for password — set ADMIN_PASSWORD with DPANEL_NONINTERACTIVE=1"
-    fi
-  fi
-  echo >/dev/tty 2>/dev/null || echo
-}
-
 normalize_domain() {
   local d="$1"
   d="$(echo "$d" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
@@ -222,9 +213,10 @@ collect_configuration() {
   step "Configuration"
 
   if [[ -n "${DPANEL_NONINTERACTIVE:-}" ]]; then
-    [[ -n "${PANEL_DOMAIN}" && -n "${ADMIN_EMAIL}" && -n "${ADMIN_PASSWORD:-}" ]] \
-      || die "Set PANEL_DOMAIN, ADMIN_EMAIL, ADMIN_PASSWORD"
+    [[ -n "${PANEL_DOMAIN}" && -n "${ADMIN_EMAIL}" ]] \
+      || die "Set PANEL_DOMAIN and ADMIN_EMAIL"
     PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
+    ADMIN_PASSWORD="${ADMIN_PASSWORD:-${DEFAULT_ADMIN_PASSWORD}}"
     return
   fi
 
@@ -289,11 +281,14 @@ Panel URL:    http://${PANEL_DOMAIN}
               http://${SERVER_IP}:8080
 
 Login email:  ${ADMIN_EMAIL}
+Login pass:   ${DEFAULT_ADMIN_PASSWORD}
+
+Change password: dpanel setpass <new-password>
 
 Stack:        ${STACK_ROOT}
 Install log:  ${INSTALL_LOG}
 
-CLI: dpanel status | dpanel health | dpanel credentials
+CLI: dpanel status | dpanel health | dpanel setpass
 EOF
   chmod 600 "${cred}"
 }
@@ -474,4 +469,5 @@ SERVER_IP="$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | aw
 write_credentials
 
 log "Done — http://${PANEL_DOMAIN} (or http://${SERVER_IP}:8080)"
+log "Login: ${ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD} — run: dpanel setpass <new-password>"
 log "Credentials: ${STACK_ROOT}/CREDENTIALS.txt"
