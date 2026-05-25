@@ -25,7 +25,7 @@ if [[ -z "${DPANEL_STDBUF:-}" ]] && command -v stdbuf >/dev/null 2>&1; then
   exec stdbuf -oL -eL bash "$0" "$@"
 fi
 
-INSTALLER_VERSION="1.0.6"
+INSTALLER_VERSION="1.0.7"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -248,13 +248,24 @@ ssh_session_hint() {
 tty_print() { printf '%s\n' "$*" >/dev/tty 2>/dev/null || printf '%s\n' "$*"; }
 
 tty_read() {
-  printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"
-  read -r "$2" </dev/tty
+  local prompt="$1" varname="$2"
+  printf '%s' "${prompt}" >/dev/tty 2>/dev/null || printf '%s' "${prompt}"
+  # set -e: bare read failure must not kill the installer (common inside screen)
+  if ! read -r "${varname}" </dev/tty 2>/dev/null; then
+    if ! read -r "${varname}"; then
+      die "Cannot read input (no TTY). Run: sudo bash install.sh  OR set DPANEL_NONINTERACTIVE=1"
+    fi
+  fi
 }
 
 tty_read_secret() {
-  printf '%s' "$1" >/dev/tty 2>/dev/null || printf '%s' "$1"
-  read -r -s "$2" </dev/tty
+  local prompt="$1" varname="$2"
+  printf '%s' "${prompt}" >/dev/tty 2>/dev/null || printf '%s' "${prompt}"
+  if ! read -r -s "${varname}" </dev/tty 2>/dev/null; then
+    if ! read -r -s "${varname}"; then
+      die "Cannot read password (no TTY). Set DPANEL_NONINTERACTIVE=1 with ADMIN_PASSWORD"
+    fi
+  fi
   echo >/dev/tty 2>/dev/null || echo
 }
 
@@ -390,7 +401,11 @@ banner
 ssh_session_hint
 
 [[ "${EUID:-0}" -eq 0 ]] || die "Run as root: sudo bash install.sh"
-[[ -r /dev/tty ]] && exec 0</dev/tty
+if [[ -r /dev/tty ]]; then
+  exec 0</dev/tty
+elif [[ -n "${STY:-}" ]]; then
+  log "Note: /dev/tty not readable in screen — using screen pty for prompts"
+fi
 
 preflight_checks
 confirm_existing_stack

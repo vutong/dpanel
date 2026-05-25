@@ -46,6 +46,23 @@ echo "  Detach (install keeps running): Ctrl+A then D"
 echo "  Reattach later:                 sudo screen -r ${SESSION_NAME}"
 echo "  Second terminal tail:         tail -f /var/log/dpanel-install-console.log"
 echo ""
-sleep 2
+sleep 1
 
-exec screen -S "${SESSION_NAME}" bash "${INSTALL_SCRIPT}"
+# Detached session + attach: stable TTY for prompts (direct "screen bash script" often exits instantly)
+screen -dmS "${SESSION_NAME}" env TERM="${TERM:-xterm-256color}" bash -l -c "exec bash '${INSTALL_SCRIPT}'"
+sleep 1
+
+if ! screen -ls 2>/dev/null | grep -qE "[[:space:]]+[0-9]+\.${SESSION_NAME}[[:space:]]"; then
+  echo "Screen session ended immediately — install.sh may have failed."
+  echo "  Log:    tail -30 /var/log/dpanel-install.log"
+  echo "  Direct: sudo bash '${INSTALL_SCRIPT}'"
+  exit 1
+fi
+
+if screen -ls 2>/dev/null | grep -qE "[[:space:]]+[0-9]+\.${SESSION_NAME}[[:space:]]+.*Dead"; then
+  echo "Install already finished or crashed. Last log lines:"
+  tail -30 /var/log/dpanel-install.log 2>/dev/null || true
+  exit 1
+fi
+
+exec screen -r "${SESSION_NAME}"
