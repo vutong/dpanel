@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # dpanel — Bootstrap VPS + Control Panel (một lệnh duy nhất)
-# Chạy qua SSH:
+# Chạy qua SSH (script tự gắn stdin vào /dev/tty khi dùng pipe):
 #   curl -fsSL https://raw.githubusercontent.com/vutong/dpanel/main/install.sh | sudo bash
+# Hoặc tải rồi chạy: curl -fsSLO .../install.sh && sudo bash install.sh
 # hoặc:
 #   chmod +x install.sh && sudo ./install.sh
 #
@@ -19,23 +20,41 @@ die() { echo "[dpanel] ERROR: $*" >&2; exit 1; }
 
 [[ "${EUID:-0}" -eq 0 ]] || die "Chạy với quyền root: sudo bash install.sh"
 
+# curl | bash: stdin là pipe — read phải dùng terminal thật
+if [[ ! -t 0 && -r /dev/tty ]]; then
+  exec 0</dev/tty
+fi
+
+normalize_domain() {
+  local d="$1"
+  d="$(echo "$d" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  d="${d#https://}"
+  d="${d#http://}"
+  d="${d%%/*}"
+  echo "$d"
+}
+
 log "Cấu hình dpanel — nhập thông tin bên dưới."
 echo
+
+ADMIN_EMAIL=""
+ADMIN_PASSWORD=""
+ADMIN_PASSWORD2=""
 
 # --- Thu thập cấu hình panel (chỉ cần chạy install.sh) ---
 if [[ -z "${PANEL_DOMAIN}" ]]; then
   while true; do
     read -r -p "Panel domain (vd: panel.example.com): " PANEL_DOMAIN
-    PANEL_DOMAIN="$(echo "${PANEL_DOMAIN}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
     [[ -n "${PANEL_DOMAIN}" ]] || { echo "Domain không được để trống."; continue; }
-    [[ "${PANEL_DOMAIN}" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || {
+    [[ "${PANEL_DOMAIN}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || {
       echo "Domain không hợp lệ (vd: panel.example.com)."
       continue
     }
     break
   done
 else
-  PANEL_DOMAIN="$(echo "${PANEL_DOMAIN}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
   log "Panel domain (từ biến môi trường): ${PANEL_DOMAIN}"
 fi
 
