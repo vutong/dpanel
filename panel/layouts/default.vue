@@ -4,7 +4,7 @@
       <div class="brand">dpanel <span class="ver">v1.0</span></div>
       <nav>
         <p class="nav-section">Website</p>
-        <NuxtLink to="/websites">List</NuxtLink>
+        <NuxtLink to="/websites">List Website</NuxtLink>
         <NuxtLink to="/websites/create">Create website</NuxtLink>
         <p class="nav-section">MariaDB</p>
         <NuxtLink to="/databases">List databases</NuxtLink>
