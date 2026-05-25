@@ -12,30 +12,21 @@ Docker hosting control panel for **Ubuntu 24.04 LTS**: manage websites (Node/PHP
 
 ## Install
 
-**Recommended on SSH** (live progress like other panels; survives disconnect if you detach screen):
+**SSH (recommended)** — step progress on screen; full log in `/var/log/dpanel-install.log`:
 
 ```bash
 cd /tmp && curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh && curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install-screen.sh && grep '^INSTALLER_VERSION=' install.sh && sudo bash install-screen.sh
 ```
 
-Detach install: `Ctrl+A` then `D`. Reattach: `sudo screen -r dpanel-install`.
+Detach: `Ctrl+A` `D` · Reattach: `sudo screen -r dpanel-install`
 
-**Direct foreground** (keep the SSH session open; do **not** pipe to `tee`):
+**Direct** (keep SSH open; do not pipe to `tee`):
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
-sudo bash install.sh
+curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh && sudo bash install.sh
 ```
 
-You will be prompted for:
-
-1. Panel domain (e.g. `panel.yourdomain.com`)
-2. Login email
-3. Password (min 8 characters)
-
-Install takes about **15–30 minutes** on a fresh VPS (Docker + Nuxt build). Progress prints to your terminal and is mirrored to `/var/log/dpanel-install-console.log` (full detail in `/var/log/dpanel-install.log`).
-
-**Fully detached** (only if you cannot use screen): `sudo bash install-background.sh`, then `tail -f /var/log/dpanel-install-console.log`.
+Install takes **15–30 minutes**. Terminal shows step lines only; details: `tail -f /var/log/dpanel-install.log`. Verbose terminal output: `DPANEL_VERBOSE=1`.
 
 ### Non-interactive install
 

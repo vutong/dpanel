@@ -1,31 +1,20 @@
 #!/usr/bin/env bash
 #
-# dpanel — VPS installer
+# dpanel VPS installer
 #
-# Recommended (SSH — foreground in screen, survives disconnect):
-#   curl -fsSLO .../install.sh && curl -fsSLO .../install-screen.sh
-#   sudo bash install-screen.sh
-#
-# Direct foreground (stay connected; do not pipe to tee):
+#   curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
 #   sudo bash install.sh
 #
+# SSH (recommended):
+#   curl -fsSLO .../install-screen.sh && sudo bash install-screen.sh
+#
 # Non-interactive:
-#   export DPANEL_NONINTERACTIVE=1
-#   export PANEL_DOMAIN=panel.example.com
-#   export ADMIN_EMAIL=admin@example.com
-#   export ADMIN_PASSWORD='your-secure-password'
+#   export DPANEL_NONINTERACTIVE=1 PANEL_DOMAIN=... ADMIN_EMAIL=... ADMIN_PASSWORD=...
 #   sudo -E bash install.sh
 #
-# Note: no pipefail — avoids silent exit when log/tee hits a closed SSH pipe
 set -eu
 
-# Line-buffered stdout/stderr when coreutils stdbuf is available
-if [[ -z "${DPANEL_STDBUF:-}" ]] && command -v stdbuf >/dev/null 2>&1; then
-  export DPANEL_STDBUF=1
-  exec stdbuf -oL -eL bash "$0" "$@"
-fi
-
-INSTALLER_VERSION="1.0.7"
+INSTALLER_VERSION="1.0.8"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -34,57 +23,40 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-install.log}"
-CONSOLE_LOG="${DPANEL_CONSOLE_LOG:-/var/log/dpanel-install-console.log}"
 TOTAL_STEPS=11
 STEP=0
-HEARTBEAT_PID=""
+PROGRESS_PID=""
 
 INSTALL_LOG_DIR="$(dirname "${INSTALL_LOG}")"
 mkdir -p "${INSTALL_LOG_DIR}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
-touch "${INSTALL_LOG}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
-CONSOLE_LOG_DIR="$(dirname "${CONSOLE_LOG}")"
-mkdir -p "${CONSOLE_LOG_DIR}" 2>/dev/null || CONSOLE_LOG="/tmp/dpanel-install-console.log"
-touch "${CONSOLE_LOG}" 2>/dev/null || CONSOLE_LOG="/tmp/dpanel-install-console.log"
+: >> "${INSTALL_LOG}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
+
+verbose_terminal() {
+  [[ "${DPANEL_VERBOSE:-0}" == "1" ]]
+}
 
 log() {
   local line="[dpanel] $(date '+%Y-%m-%d %H:%M:%S') $*"
   printf '%s\n' "$line" >> "${INSTALL_LOG}"
-  printf '%s\n' "$line" >> "${CONSOLE_LOG}" 2>/dev/null || true
   printf '%s\n' "$line" >&2 || true
 }
 
-start_heartbeat() {
-  local msg="$1"
-  stop_heartbeat 2>/dev/null || true
-  (
-    local elapsed=0
-    while sleep 60; do
-      elapsed=$((elapsed + 60))
-      log "${msg} — still running (${elapsed}s elapsed)"
-    done
-  ) &
-  HEARTBEAT_PID=$!
-}
-
-stop_heartbeat() {
-  if [[ -n "${HEARTBEAT_PID:-}" ]]; then
-    kill "${HEARTBEAT_PID}" 2>/dev/null || true
-    wait "${HEARTBEAT_PID}" 2>/dev/null || true
-    HEARTBEAT_PID=""
-  fi
+log_detail() {
+  printf '%s\n' "$*" >> "${INSTALL_LOG}"
 }
 
 die() {
   log "ERROR: $*"
-  log "See log: ${INSTALL_LOG}"
+  log "Log file: ${INSTALL_LOG}"
   exit 1
 }
 
 on_err() {
-  log "Install failed at line ${1:-?}. Check ${INSTALL_LOG}"
+  log "Install failed near line ${1:-?}"
 }
 
 on_exit() {
+  stop_progress 2>/dev/null || true
   [[ -n "${CLONE_TMP:-}" && -d "${CLONE_TMP}" ]] && rm -rf "${CLONE_TMP}"
 }
 
@@ -92,11 +64,59 @@ trap 'on_err $LINENO' ERR
 
 step() {
   STEP=$((STEP + 1))
-  log "[$STEP/$TOTAL_STEPS] $*"
+  log "[${STEP}/${TOTAL_STEPS}] $*"
+}
+
+start_progress() {
+  local label="$1"
+  stop_progress 2>/dev/null || true
+  (
+    local s=0
+    while sleep 30; do
+      s=$((s + 30))
+      printf '[dpanel] %s (%ds)\n' "${label}" "${s}" >&2 || true
+    done
+  ) &
+  PROGRESS_PID=$!
+}
+
+stop_progress() {
+  if [[ -n "${PROGRESS_PID:-}" ]]; then
+    kill "${PROGRESS_PID}" 2>/dev/null || true
+    wait "${PROGRESS_PID}" 2>/dev/null || true
+    PROGRESS_PID=""
+  fi
+}
+
+run_cmd() {
+  local label="$1"
+  shift
+  log_detail "--- ${label} ---"
+  log_detail "+ $*"
+  start_progress "${label}"
+  local rc=0
+  if verbose_terminal; then
+    "$@" 2>&1 | tee -a "${INSTALL_LOG}" || rc="${PIPESTATUS[0]:-1}"
+  else
+    "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
+  fi
+  stop_progress
+  [[ "$rc" -eq 0 ]] || die "${label} failed (exit ${rc})"
+}
+
+run_cmd_try() {
+  local label="$1"
+  shift
+  log_detail "--- ${label} (optional) ---"
+  log_detail "+ $*"
+  start_progress "${label}"
+  local rc=0
+  "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
+  stop_progress
+  return "$rc"
 }
 
 apt_lock_held() {
-  # pgrep first — works before psmisc/fuser is installed
   pgrep -x apt-get >/dev/null 2>&1 && return 0
   pgrep -x apt >/dev/null 2>&1 && return 0
   pgrep -x dpkg >/dev/null 2>&1 && return 0
@@ -113,136 +133,59 @@ apt_lock_held() {
 wait_for_apt_lock() {
   local max_wait="${APT_LOCK_WAIT_SEC:-600}"
   local waited=0
-
-  # Avoid: while apt_lock_held — with set -e, a false test exits the whole script
   while true; do
     if ! apt_lock_held; then
       break
     fi
     if [[ $waited -eq 0 ]]; then
-      log "Waiting for apt/dpkg lock (unattended-upgrades or another apt process)..."
-      pgrep -a apt 2>/dev/null >> "${INSTALL_LOG}" 2>&1 || true
+      log "Waiting for apt lock..."
+    elif (( waited % 30 == 0 )); then
+      log "Still waiting for apt lock (${waited}s / ${max_wait}s)"
     fi
     if [[ $waited -ge $max_wait ]]; then
-      die "apt lock held after ${max_wait}s. Run: sudo dpkg --configure -a && retry"
+      die "apt lock held after ${max_wait}s — run: dpkg --configure -a"
     fi
     sleep 5
     waited=$((waited + 5))
-    log "  waiting for apt lock... (${waited}s / ${max_wait}s)"
   done
-  [[ $waited -gt 0 ]] && log "apt lock released"
 }
 
 apt_get() {
-  log "Waiting for apt lock if needed..."
   wait_for_apt_lock
-  log "Running: apt-get $*"
+  log_detail "+ apt-get $*"
   local rc=0
-  if [[ -t 2 ]]; then
-    apt-get "$@" 2>&1 | tee -a "${INSTALL_LOG}"
-    rc="${PIPESTATUS[0]:-1}"
+  start_progress "apt-get $*"
+  if verbose_terminal; then
+    apt-get "$@" 2>&1 | tee -a "${INSTALL_LOG}" || rc="${PIPESTATUS[0]:-1}"
   else
     apt-get "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
   fi
-  if [[ "$rc" -ne 0 ]]; then
-    die "apt-get failed: apt-get $*"
-  fi
-  log "Finished: apt-get $*"
-}
-
-run_long() {
-  local label="$1"
-  shift
-  local rc=0
-  run_long_capture "${label}" "$@" || rc=$?
-  if [[ "$rc" -ne 0 ]]; then
-    die "${label} failed (exit ${rc})"
-  fi
-  log "Finished: ${label}"
-}
-
-run_long_capture() {
-  local label="$1"
-  shift
-  log "Starting: ${label}"
-  start_heartbeat "${label}"
-  local rc=0
-  if [[ -t 2 ]]; then
-    "$@" 2>&1 | tee -a "${INSTALL_LOG}" || rc="${PIPESTATUS[0]:-1}"
-  else
-    "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
-  fi
-  stop_heartbeat
-  return "$rc"
+  stop_progress
+  [[ "$rc" -eq 0 ]] || die "apt-get failed: apt-get $*"
 }
 
 preflight_checks() {
-  step "Preflight checks"
+  step "Preflight"
 
   if [[ ! -f /etc/os-release ]]; then
-    die "Cannot detect OS. Ubuntu 24.04 LTS is required."
+    die "Cannot detect OS (Ubuntu 24.04 required)"
   fi
   # shellcheck source=/dev/null
   source /etc/os-release
   if [[ "${ID:-}" != "ubuntu" ]]; then
-    die "Unsupported OS: ${ID:-unknown}. Use Ubuntu 24.04 LTS."
+    die "Unsupported OS: ${ID:-unknown}"
   fi
-  local ver="${VERSION_ID:-}"
-  if [[ "${ver}" != "24.04" ]]; then
-    log "Warning: tested on Ubuntu 24.04; you are on ${ver}"
+  if [[ "${VERSION_ID:-}" != "24.04" ]]; then
+    log "Warning: tested on Ubuntu 24.04 (detected ${VERSION_ID:-unknown})"
   fi
 
   local mem_kb
   mem_kb="$(grep MemTotal /proc/meminfo | awk '{print $2}')"
   if [[ "${mem_kb}" -lt 1800000 ]]; then
-    log "Warning: less than 2 GB RAM — panel build may be slow or fail"
-  else
-    log "Memory: $((mem_kb / 1024)) MB OK"
+    log "Warning: less than 2 GB RAM"
   fi
-
-  local disk_avail
-  disk_avail="$(df -BM "${STACK_ROOT%/*}" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d M || echo 0)"
-  if [[ "${disk_avail}" -lt 10240 ]] 2>/dev/null; then
-    log "Warning: less than 10 GB free disk under ${STACK_ROOT%/*}"
-  else
-    log "Disk free: ${disk_avail} MB OK"
-  fi
-
-  for port in 80 8080; do
-    if ss -tln 2>/dev/null | grep -q ":${port} "; then
-      if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
-        log "Warning: port ${port} is in use (install may conflict)"
-      fi
-    fi
-  done
 
   command -v curl >/dev/null 2>&1 || die "curl is required"
-  command -v git >/dev/null 2>&1 || log "git will be installed"
-  log "Preflight passed"
-}
-
-banner() {
-  log "=============================================="
-  log "  dpanel installer v${INSTALLER_VERSION}"
-  log "  Log: ${INSTALL_LOG}"
-  log "  Live mirror: ${CONSOLE_LOG}  (tail -f from another SSH window)"
-  log "  Typical time: 15–30 min (fresh VPS)"
-  log "  SSH tip: sudo bash install-screen.sh  (foreground + survives disconnect)"
-  log "  Avoid: bash install.sh | tee  — breaks the installer"
-  log "=============================================="
-}
-
-ssh_session_hint() {
-  if [[ -n "${DPANEL_NONINTERACTIVE:-}" || -n "${STY:-}" || -n "${TMUX:-}" ]]; then
-    return
-  fi
-  if [[ ! -t 2 ]]; then
-    return
-  fi
-  log "Running in an interactive terminal — progress will print here."
-  if [[ -z "${DPANEL_SKIP_SCREEN_HINT:-}" ]]; then
-    log "For SSH stability without background/nohup: sudo bash install-screen.sh"
-  fi
 }
 
 tty_print() { printf '%s\n' "$*" >/dev/tty 2>/dev/null || printf '%s\n' "$*"; }
@@ -250,10 +193,9 @@ tty_print() { printf '%s\n' "$*" >/dev/tty 2>/dev/null || printf '%s\n' "$*"; }
 tty_read() {
   local prompt="$1" varname="$2"
   printf '%s' "${prompt}" >/dev/tty 2>/dev/null || printf '%s' "${prompt}"
-  # set -e: bare read failure must not kill the installer (common inside screen)
   if ! read -r "${varname}" </dev/tty 2>/dev/null; then
     if ! read -r "${varname}"; then
-      die "Cannot read input (no TTY). Run: sudo bash install.sh  OR set DPANEL_NONINTERACTIVE=1"
+      die "No TTY for input — use DPANEL_NONINTERACTIVE=1 or run without screen wrapper issues"
     fi
   fi
 }
@@ -263,7 +205,7 @@ tty_read_secret() {
   printf '%s' "${prompt}" >/dev/tty 2>/dev/null || printf '%s' "${prompt}"
   if ! read -r -s "${varname}" </dev/tty 2>/dev/null; then
     if ! read -r -s "${varname}"; then
-      die "Cannot read password (no TTY). Set DPANEL_NONINTERACTIVE=1 with ADMIN_PASSWORD"
+      die "No TTY for password — set ADMIN_PASSWORD with DPANEL_NONINTERACTIVE=1"
     fi
   fi
   echo >/dev/tty 2>/dev/null || echo
@@ -272,9 +214,7 @@ tty_read_secret() {
 normalize_domain() {
   local d="$1"
   d="$(echo "$d" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  d="${d#https://}"
-  d="${d#http://}"
-  d="${d%%/*}"
+  d="${d#https://}"; d="${d#http://}"; d="${d%%/*}"
   echo "$d"
 }
 
@@ -283,52 +223,44 @@ collect_configuration() {
 
   if [[ -n "${DPANEL_NONINTERACTIVE:-}" ]]; then
     [[ -n "${PANEL_DOMAIN}" && -n "${ADMIN_EMAIL}" && -n "${ADMIN_PASSWORD:-}" ]] \
-      || die "Non-interactive mode requires PANEL_DOMAIN, ADMIN_EMAIL, ADMIN_PASSWORD"
+      || die "Set PANEL_DOMAIN, ADMIN_EMAIL, ADMIN_PASSWORD"
     PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
-    log "Non-interactive install for ${PANEL_DOMAIN}"
     return
   fi
 
-  tty_print ""
-  tty_print "Panel setup (press Enter after each answer):"
-
   if [[ -z "${PANEL_DOMAIN}" ]]; then
     while true; do
-      tty_read "Panel domain (e.g. panel.example.com): " PANEL_DOMAIN
+      tty_read "Panel domain: " PANEL_DOMAIN
       PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
-      [[ -n "${PANEL_DOMAIN}" ]] || { tty_print "Domain cannot be empty."; continue; }
+      [[ -n "${PANEL_DOMAIN}" ]] || { tty_print "Required."; continue; }
       [[ "${PANEL_DOMAIN}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || {
-        tty_print "Invalid domain (e.g. panel.example.com)."
-        continue
+        tty_print "Invalid domain format."; continue
       }
       break
     done
   else
     PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
-    log "Panel domain (env): ${PANEL_DOMAIN}"
   fi
 
   if [[ -z "${ADMIN_EMAIL:-}" ]]; then
-    tty_read "Panel login email: " ADMIN_EMAIL
+    tty_read "Admin email: " ADMIN_EMAIL
   fi
-  [[ -n "${ADMIN_EMAIL}" ]] || die "Email cannot be empty."
+  [[ -n "${ADMIN_EMAIL}" ]] || die "Email required"
 
   if [[ -z "${ADMIN_PASSWORD}" ]]; then
     while true; do
       local p1 p2
-      tty_read_secret "Password (min 8 chars): " p1
+      tty_read_secret "Password (min 8): " p1
       tty_read_secret "Confirm password: " p2
-      [[ "${p1}" == "${p2}" ]] || { tty_print "Passwords do not match."; continue; }
-      [[ ${#p1} -ge 8 ]] || { tty_print "Password must be at least 8 characters."; continue; }
+      [[ "${p1}" == "${p2}" ]] || { tty_print "Mismatch."; continue; }
+      [[ ${#p1} -ge 8 ]] || { tty_print "Min 8 characters."; continue; }
       ADMIN_PASSWORD="${p1}"
       break
     done
   fi
-  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || die "Password must be at least 8 characters."
+  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || die "Password min 8 characters"
 
-
-  log "Panel domain: ${PANEL_DOMAIN}"
-  log "Login email:  ${ADMIN_EMAIL}"
+  log "Domain: ${PANEL_DOMAIN} | Email: ${ADMIN_EMAIL}"
 }
 
 confirm_existing_stack() {
@@ -336,76 +268,55 @@ confirm_existing_stack() {
     return
   fi
   if [[ "${DPANEL_FORCE:-}" == "1" || -n "${DPANEL_NONINTERACTIVE:-}" ]]; then
-    log "Existing stack at ${STACK_ROOT} — continuing (forced)"
+    log "Existing ${STACK_ROOT} — overwrite panel config (DPANEL_FORCE)"
     return
   fi
   tty_print ""
-  tty_print "Existing installation found at ${STACK_ROOT}."
-  tty_print "Panel auth and sites.json will be reset. MariaDB data is kept unless you remove ${STACK_ROOT}."
+  tty_print "Existing install at ${STACK_ROOT}. Panel auth will reset; MariaDB data kept."
   local confirm=""
   tty_read "Type YES to continue: " confirm
-  [[ "${confirm}" == "YES" ]] || die "Install cancelled"
+  [[ "${confirm}" == "YES" ]] || die "Cancelled"
 }
 
 write_credentials() {
   local cred="${STACK_ROOT}/CREDENTIALS.txt"
-  local db_note="(unchanged — see .env)"
-  if [[ "${NEW_ENV_CREATED:-}" == "1" ]]; then
-    db_note="(new — saved in .env, not shown here for security)"
-  fi
   cat > "${cred}" <<EOF
 dpanel installation summary
 Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Installer: v${INSTALLER_VERSION}
 
 Panel URL:    http://${PANEL_DOMAIN}
-              http://${SERVER_IP}:8080  (before DNS)
+              http://${SERVER_IP}:8080
 
 Login email:  ${ADMIN_EMAIL}
-Login pass:   (the password you chose at install)
 
-MariaDB:      ${db_note}
-phpMyAdmin:   http://${PANEL_DOMAIN}/pma/  (via panel when logged in)
-
-Stack path:   ${STACK_ROOT}
+Stack:        ${STACK_ROOT}
 Install log:  ${INSTALL_LOG}
 
-Commands:
-  dpanel status
-  dpanel health
-  dpanel update-panel
-  dpanel credentials
-
+CLI: dpanel status | dpanel health | dpanel credentials
 EOF
   chmod 600 "${cred}"
-  log "Credentials summary: ${cred}"
 }
 
 wait_for_healthy_stack() {
-  step "Waiting for services to become healthy"
+  step "Health check"
   local i
   for i in $(seq 1 40); do
-    if docker compose ps --format json 2>/dev/null | grep -q '"Health":"healthy"' 2>/dev/null \
-      || docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
-      log "Panel is healthy"
+    if docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
+      log "Panel healthy"
       return 0
     fi
     sleep 3
   done
-  log "Warning: health check timed out — run: dpanel logs dpanel"
-  return 0
+  log "Warning: health check timeout — run: dpanel logs dpanel"
 }
 
 # --- Main ---
-banner
-ssh_session_hint
+log "dpanel installer v${INSTALLER_VERSION}"
+log "Log: ${INSTALL_LOG} (set DPANEL_VERBOSE=1 for full command output on screen)"
 
 [[ "${EUID:-0}" -eq 0 ]] || die "Run as root: sudo bash install.sh"
-if [[ -r /dev/tty ]]; then
-  exec 0</dev/tty
-elif [[ -n "${STY:-}" ]]; then
-  log "Note: /dev/tty not readable in screen — using screen pty for prompts"
-fi
+[[ -r /dev/tty ]] && exec 0</dev/tty
 
 preflight_checks
 confirm_existing_stack
@@ -425,35 +336,26 @@ CLONE_TMP=""
 trap on_exit EXIT
 
 if [[ "${USE_LOCAL_SRC}" == true ]]; then
-  step "Using local source at ${SRC_DIR}"
+  step "Local source"
 else
-  step "Downloading source from GitHub"
+  step "Download source"
   CLONE_TMP="$(mktemp -d)"
   export GIT_TERMINAL_PROMPT=0
-  git clone --progress --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}"
+  run_cmd "git clone" git clone --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}"
   SRC_DIR="${CLONE_TMP}"
 fi
 
-step "Preparing system packages"
+step "System packages"
 export DEBIAN_FRONTEND=noninteractive
 systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
-log "Starting apt (see ${INSTALL_LOG} for full apt output)..."
 apt_get update
 if [[ "${DPANEL_FULL_UPGRADE:-0}" == "1" ]]; then
-  log "Running full dist-upgrade (DPANEL_FULL_UPGRADE=1)..."
   apt_get upgrade -y
-else
-  log "Skipping dist-upgrade (faster install). Set DPANEL_FULL_UPGRADE=1 to enable."
 fi
-
-log "Installing required packages (may take a few minutes)..."
-apt_get install -y \
-  ca-certificates curl gnupg lsb-release git unzip rsync ufw \
-  apache2-utils python3
-log "System packages installed"
+apt_get install -y ca-certificates curl gnupg lsb-release git unzip rsync ufw apache2-utils python3
 
 if ! command -v docker &>/dev/null; then
-  step "Installing Docker Engine"
+  step "Docker Engine"
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
@@ -464,28 +366,22 @@ if ! command -v docker &>/dev/null; then
   apt_get update
   apt_get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker
-else
-  log "Docker already installed"
 fi
 
-docker compose version &>/dev/null || die "docker compose plugin is not available"
+docker compose version &>/dev/null || die "docker compose plugin missing"
 
 if command -v ufw &>/dev/null; then
-  log "Configuring UFW (SSH, 80, 443, 8080)..."
-  ufw allow OpenSSH || true
-  ufw allow 80/tcp || true
-  ufw allow 443/tcp || true
-  ufw allow 8080/tcp || true
-  ufw --force enable || true
+  ufw allow OpenSSH >/dev/null 2>&1 || true
+  ufw allow 80/tcp >/dev/null 2>&1 || true
+  ufw allow 443/tcp >/dev/null 2>&1 || true
+  ufw allow 8080/tcp >/dev/null 2>&1 || true
+  ufw --force enable >/dev/null 2>&1 || true
 fi
 
-step "Deploying stack to ${STACK_ROOT}"
+step "Deploy stack"
 mkdir -p "${STACK_ROOT}"
 rsync -a --delete \
-  --exclude '.git' \
-  --exclude 'node_modules' \
-  --exclude '.output' \
-  --exclude '.nuxt' \
+  --exclude '.git' --exclude 'node_modules' --exclude '.output' --exclude '.nuxt' \
   "${SRC_DIR}/" "${STACK_ROOT}/"
 
 DIRS=(
@@ -534,29 +430,26 @@ NUXT_PORT=3000
 PHP_MEMORY_LIMIT=256M
 EOF
   chmod 600 "${STACK_ROOT}/.env"
-  log "Created ${STACK_ROOT}/.env"
 else
   grep -q '^PANEL_DOMAIN=' "${STACK_ROOT}/.env" \
     && sed -i "s/^PANEL_DOMAIN=.*/PANEL_DOMAIN=${PANEL_DOMAIN}/" "${STACK_ROOT}/.env" \
     || echo "PANEL_DOMAIN=${PANEL_DOMAIN}" >> "${STACK_ROOT}/.env"
 fi
 
-step "Building control panel (Nuxt — often 5–15 min)"
+step "Build panel"
 PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
-export BUILDKIT_PROGRESS=plain
 _nuxt_build() {
   docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c "$1"
 }
-if ! run_long_capture "Nuxt panel build (npm ci)" _nuxt_build "npm ci && npm run build"; then
-  log "npm ci failed — trying npm install"
+if ! run_cmd_try "npm ci && build" _nuxt_build "npm ci && npm run build"; then
+  log "npm ci failed, using npm install"
 fi
 if [[ ! -d "${PANEL_SRC}/.output" ]]; then
-  run_long "Nuxt panel build (npm install)" _nuxt_build "npm install && npm run build"
+  run_cmd "npm install && build" _nuxt_build "npm install && npm run build"
 fi
-[[ -d "${PANEL_SRC}/.output" ]] || die "Nuxt build failed — no .output in ${PANEL_SRC}"
+[[ -d "${PANEL_SRC}/.output" ]] || die "Nuxt build failed"
 
-log "Deploying panel to apps/${PANEL_DOMAIN}"
 rm -rf "${APP_DIR}"
 mkdir -p "${APP_DIR}"
 rsync -a "${PANEL_SRC}/.output/" "${APP_DIR}/.output/"
@@ -568,26 +461,17 @@ ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
 export STACK_ROOT
 bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" panel-only 2>/dev/null || true
 
-step "Starting Docker stack"
+step "Start containers"
 cd "${STACK_ROOT}"
-run_long "Docker image build" docker compose build --progress=plain
-run_long "Docker compose up" docker compose up -d --remove-orphans
+run_cmd "docker compose build" docker compose build
+run_cmd "docker compose up" docker compose up -d --remove-orphans
 
 wait_for_healthy_stack
-docker compose ps
+
+systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
 
 SERVER_IP="$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 write_credentials
 
-log ""
-log "=============================================="
-log "  dpanel installed successfully"
-log "=============================================="
-log "Panel:     http://${PANEL_DOMAIN}"
-log "Fallback:  http://${SERVER_IP}:8080"
-log "Email:     ${ADMIN_EMAIL}"
-log "Summary:   ${STACK_ROOT}/CREDENTIALS.txt"
-log "CLI:       dpanel status | dpanel health"
-log "Log:       ${INSTALL_LOG}"
-log "DNS:       Point ${PANEL_DOMAIN} → ${SERVER_IP} (Cloudflare proxy for SSL)"
-log "=============================================="
+log "Done — http://${PANEL_DOMAIN} (or http://${SERVER_IP}:8080)"
+log "Credentials: ${STACK_ROOT}/CREDENTIALS.txt"
