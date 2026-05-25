@@ -39,6 +39,43 @@ step() {
   log "[$STEP/$TOTAL_STEPS] $*"
 }
 
+# Ubuntu VPS often runs unattended-upgrades at boot — wait instead of failing
+wait_for_apt_lock() {
+  local max_wait="${APT_LOCK_WAIT_SEC:-600}"
+  local waited=0
+  local locks=(/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock)
+
+  apt_lock_held() {
+    local f
+    for f in "${locks[@]}"; do
+      [[ -e "$f" ]] || continue
+      fuser "$f" >/dev/null 2>&1 && return 0
+    done
+    return 1
+  }
+
+  while apt_lock_held; do
+    if [[ $waited -eq 0 ]]; then
+      log "Waiting for apt/dpkg lock (unattended-upgrades or another apt process)..."
+      if pgrep -a apt >/dev/null 2>&1; then
+        pgrep -a apt | tee -a "${INSTALL_LOG}" >&2 || true
+      fi
+    fi
+    if [[ $waited -ge $max_wait ]]; then
+      die "apt lock still held after ${max_wait}s. Run: sudo kill \$(pgrep -x apt-get); sudo dpkg --configure -a  then retry install.sh"
+    fi
+    sleep 5
+    waited=$((waited + 5))
+    log "  still waiting for apt lock... (${waited}s / ${max_wait}s)"
+  done
+  [[ $waited -gt 0 ]] && log "apt lock released — continuing"
+}
+
+apt_get() {
+  wait_for_apt_lock
+  apt-get "$@"
+}
+
 banner() {
   log "=============================================="
   log "  dpanel installer"
@@ -159,11 +196,11 @@ fi
 
 step "Updating system packages (apt)"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get upgrade -y
+apt_get update
+apt_get upgrade -y
 
 step "Installing system dependencies"
-apt-get install -y \
+apt_get install -y \
   ca-certificates curl gnupg lsb-release git unzip rsync ufw \
   apache2-utils python3
 
@@ -176,8 +213,8 @@ if ! command -v docker &>/dev/null; then
     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
     $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" \
     > /etc/apt/sources.list.d/docker.list
-  apt-get update
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  apt_get update
+  apt_get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker
 else
   log "Docker already installed — skipping"
