@@ -16,13 +16,14 @@ export function scriptPath(name: string): string {
 export async function runScript(
   script: string,
   args: string[] = [],
-  timeoutMs = 120_000
+  timeoutMs = 120_000,
+  extraEnv: Record<string, string> = {}
 ): Promise<string> {
   const { stdout, stderr } = await execFileAsync(
     'bash',
     [scriptPath(script), ...args],
     {
-      env: { ...process.env, STACK_ROOT: stackRoot() },
+      env: { ...process.env, STACK_ROOT: stackRoot(), ...extraEnv },
       timeout: timeoutMs,
       maxBuffer: 4 * 1024 * 1024
     }

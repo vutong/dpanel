@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Usage: site-create.sh <domain> <node|php> [github_url] [github_token]
+# Usage: site-create.sh <domain> <node|php> [github_url]
+# Private repo: set GITHUB_TOKEN in env (not argv — avoids leaking in logs)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 DOMAIN="${1:-}"
 RUNTIME="${2:-}"
 GITHUB_URL="${3:-}"
-GITHUB_TOKEN="${4:-}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-${4:-}}"
 
 die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
@@ -21,15 +22,27 @@ NGINX_CONF="${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf"
 mkdir -p "$APP_DIR"
 
 if [[ -n "$GITHUB_URL" ]]; then
-  CLONE_URL="$GITHUB_URL"
-  if [[ -n "$GITHUB_TOKEN" ]]; then
-    CLONE_URL="${GITHUB_URL/https:\/\//https://${GITHUB_TOKEN}@}"
-    CLONE_URL="${CLONE_URL/http:\/\//http://${GITHUB_TOKEN}@}"
-  fi
   rm -rf "${APP_DIR:?}"/*
-  git clone --depth 1 "$CLONE_URL" "${APP_DIR}/_repo_tmp" 2>/dev/null \
-    || git clone "$CLONE_URL" "${APP_DIR}/_repo_tmp" \
-    || die "Failed to clone from GitHub"
+  export GIT_TERMINAL_PROMPT=0
+  _clone_repo() {
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+      git -c "http.extraHeader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" "$@"
+    else
+      git "$@"
+    fi
+  }
+  CLONE_ERR="$(mktemp)"
+  if ! _clone_repo clone --depth 1 "$GITHUB_URL" "${APP_DIR}/_repo_tmp" 2>"${CLONE_ERR}" \
+    && ! _clone_repo clone "$GITHUB_URL" "${APP_DIR}/_repo_tmp" 2>>"${CLONE_ERR}"; then
+    if [[ -n "$GITHUB_TOKEN" ]]; then
+      sed "s/${GITHUB_TOKEN}/***REDACTED***/g" "${CLONE_ERR}" >&2 || true
+    else
+      cat "${CLONE_ERR}" >&2 || true
+    fi
+    rm -f "${CLONE_ERR}"
+    die "Failed to clone from GitHub — check URL; for private repos use a PAT with read access to this repository (fine-grained: Contents read-only)"
+  fi
+  rm -f "${CLONE_ERR}"
   shopt -s dotglob
   mv "${APP_DIR}/_repo_tmp"/* "$APP_DIR/" 2>/dev/null || true
   rm -rf "${APP_DIR}/_repo_tmp"

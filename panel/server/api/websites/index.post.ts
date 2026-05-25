@@ -23,13 +23,14 @@ export default defineEventHandler(async (event) => {
   }
 
   const args = [domain, runtime]
+  const extraEnv: Record<string, string> = {}
   if (githubUrl) {
     args.push(githubUrl)
-    if (githubToken) args.push(githubToken)
+    if (githubToken) extraEnv.GITHUB_TOKEN = githubToken
   }
 
   try {
-    const out = await runScript('site-create.sh', args, 300_000)
+    const out = await runScript('site-create.sh', args, 300_000, extraEnv)
     const result = JSON.parse(out.split('\n').pop() || out)
     return result
   } catch (e: unknown) {

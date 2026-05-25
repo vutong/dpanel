@@ -44,8 +44,8 @@
             <strong>Public repo:</strong> leave token empty.<br>
             <strong>Private repo:</strong> create a Personal Access Token on GitHub
             (Settings → Developer settings → Tokens). Classic token: enable <code>repo</code> scope.
-            Fine-grained: read access to repository contents. The token is used only for
-            <code>git clone</code> and is <strong>not stored</strong> on the server.
+            Fine-grained: grant this repository <strong>Contents → Read-only</strong>.
+            Token is sent only for <code>git clone</code> (via env, not saved).
           </p>
         </div>
       </template>
