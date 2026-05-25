@@ -157,7 +157,7 @@ dpanel/
 │   │   ├── nginx.conf
 │   │   └── conf.d/
 │   │       ├── 00-panel.conf
-│   │       ├── 99-pma.conf
+│   │       ├── 00-panel.conf
 │   │       ├── blog.example.com.conf
 │   │       └── app.example.com.conf
 │   ├── docker/
