@@ -15,7 +15,7 @@
 #
 set -euo pipefail
 
-INSTALLER_VERSION="1.0.2"
+INSTALLER_VERSION="1.0.3"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -85,11 +85,14 @@ wait_for_apt_lock() {
 AUTO_UPGRADES_PAUSED=0
 
 pause_auto_upgrades() {
-  if systemctl list-unit-files unattended-upgrades.service &>/dev/null 2>&1; then
-    log "Pausing unattended-upgrades during install..."
-    systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
-    AUTO_UPGRADES_PAUSED=1
+  if ! command -v systemctl &>/dev/null; then
+    return 0
   fi
+  log "Pausing unattended-upgrades (background, install continues)..."
+  timeout 15 systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null &
+  AUTO_UPGRADES_PAUSED=1
+  sleep 1
+  log "Continuing package setup..."
 }
 
 resume_auto_upgrades() {
