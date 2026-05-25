@@ -13,9 +13,10 @@
 #   export ADMIN_PASSWORD='your-secure-password'
 #   sudo -E bash install.sh
 #
-set -euo pipefail
+# Note: no pipefail — avoids silent exit when log/tee hits a closed SSH pipe
+set -eu
 
-INSTALLER_VERSION="1.0.3"
+INSTALLER_VERSION="1.0.4"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -32,21 +33,26 @@ mkdir -p "${INSTALL_LOG_DIR}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.lo
 touch "${INSTALL_LOG}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
 
 log() {
-  echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${INSTALL_LOG}" >&2
+  local line="[dpanel] $(date '+%Y-%m-%d %H:%M:%S') $*"
+  printf '%s\n' "$line" >> "${INSTALL_LOG}"
+  printf '%s\n' "$line" >&2 || true
 }
 
 die() {
-  echo "[dpanel] ERROR: $*" | tee -a "${INSTALL_LOG}" >&2
-  echo "[dpanel] See log: ${INSTALL_LOG}" | tee -a "${INSTALL_LOG}" >&2
+  log "ERROR: $*"
+  log "See log: ${INSTALL_LOG}"
   exit 1
 }
 
 on_err() {
-  local line=$1
-  log "Install failed at line ${line}. Check ${INSTALL_LOG}"
+  log "Install failed at line ${1:-?}. Check ${INSTALL_LOG}"
 }
+
+on_exit() {
+  [[ -n "${CLONE_TMP:-}" && -d "${CLONE_TMP}" ]] && rm -rf "${CLONE_TMP}"
+}
+
 trap 'on_err $LINENO' ERR
-trap resume_auto_upgrades EXIT
 
 step() {
   STEP=$((STEP + 1))
@@ -70,7 +76,7 @@ wait_for_apt_lock() {
   while apt_lock_held; do
     if [[ $waited -eq 0 ]]; then
       log "Waiting for apt/dpkg lock (unattended-upgrades or another apt process)..."
-      pgrep -a apt 2>/dev/null | tee -a "${INSTALL_LOG}" >&2 || true
+      pgrep -a apt 2>/dev/null >> "${INSTALL_LOG}" 2>&1 || true
     fi
     if [[ $waited -ge $max_wait ]]; then
       die "apt lock held after ${max_wait}s. Run: sudo dpkg --configure -a && retry"
@@ -82,30 +88,14 @@ wait_for_apt_lock() {
   [[ $waited -gt 0 ]] && log "apt lock released"
 }
 
-AUTO_UPGRADES_PAUSED=0
-
-pause_auto_upgrades() {
-  if ! command -v systemctl &>/dev/null; then
-    return 0
-  fi
-  log "Pausing unattended-upgrades (background, install continues)..."
-  timeout 15 systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null &
-  AUTO_UPGRADES_PAUSED=1
-  sleep 1
-  log "Continuing package setup..."
-}
-
-resume_auto_upgrades() {
-  [[ "${AUTO_UPGRADES_PAUSED}" == "1" ]] || return 0
-  systemctl start unattended-upgrades.timer 2>/dev/null || true
-}
-
 apt_get() {
+  log "Waiting for apt lock if needed..."
   wait_for_apt_lock
   log "Running: apt-get $*"
-  apt-get "$@" 2>&1 | tee -a "${INSTALL_LOG}"
-  local rc="${PIPESTATUS[0]}"
-  [[ "$rc" -eq 0 ]] || die "apt-get failed (exit ${rc}): apt-get $*"
+  if ! apt-get "$@" >> "${INSTALL_LOG}" 2>&1; then
+    die "apt-get failed: apt-get $*"
+  fi
+  log "Finished: apt-get $*"
 }
 
 preflight_checks() {
@@ -338,7 +328,8 @@ fi
 
 step "Preparing system packages"
 export DEBIAN_FRONTEND=noninteractive
-pause_auto_upgrades
+systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
+log "Starting apt (see ${INSTALL_LOG} for full apt output)..."
 apt_get update
 if [[ "${DPANEL_FULL_UPGRADE:-0}" == "1" ]]; then
   log "Running full dist-upgrade (DPANEL_FULL_UPGRADE=1)..."
