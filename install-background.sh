@@ -17,6 +17,7 @@ echo "  Console log: ${CONSOLE_LOG}"
 echo "  Install log: /var/log/dpanel-install.log"
 echo "  Watch: tail -f ${CONSOLE_LOG}"
 
-nohup bash "${INSTALL_SCRIPT}" >> "${CONSOLE_LOG}" 2>&1 &
+# No pipe to tee — that caused SIGPIPE / early exit with set -e
+nohup env DPANEL_FORCE=1 bash "${INSTALL_SCRIPT}" >> "${CONSOLE_LOG}" 2>&1 &
 echo "PID: $!"
 echo "Do not close this terminal until you see 'installed successfully' in the log."

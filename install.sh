@@ -16,7 +16,7 @@
 # Note: no pipefail — avoids silent exit when log/tee hits a closed SSH pipe
 set -eu
 
-INSTALLER_VERSION="1.0.4"
+INSTALLER_VERSION="1.0.5"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -59,21 +59,30 @@ step() {
   log "[$STEP/$TOTAL_STEPS] $*"
 }
 
-wait_for_apt_lock() {
-  local max_wait="${APT_LOCK_WAIT_SEC:-600}"
-  local waited=0
-  local locks=(/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock)
-
-  apt_lock_held() {
+apt_lock_held() {
+  # pgrep first — works before psmisc/fuser is installed
+  pgrep -x apt-get >/dev/null 2>&1 && return 0
+  pgrep -x apt >/dev/null 2>&1 && return 0
+  pgrep -x dpkg >/dev/null 2>&1 && return 0
+  if command -v fuser >/dev/null 2>&1; then
     local f
-    for f in "${locks[@]}"; do
+    for f in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock; do
       [[ -e "$f" ]] || continue
       fuser "$f" >/dev/null 2>&1 && return 0
     done
-    return 1
-  }
+  fi
+  return 1
+}
 
-  while apt_lock_held; do
+wait_for_apt_lock() {
+  local max_wait="${APT_LOCK_WAIT_SEC:-600}"
+  local waited=0
+
+  # Avoid: while apt_lock_held — with set -e, a false test exits the whole script
+  while true; do
+    if ! apt_lock_held; then
+      break
+    fi
     if [[ $waited -eq 0 ]]; then
       log "Waiting for apt/dpkg lock (unattended-upgrades or another apt process)..."
       pgrep -a apt 2>/dev/null >> "${INSTALL_LOG}" 2>&1 || true
@@ -149,6 +158,7 @@ banner() {
   log "  Log: ${INSTALL_LOG}"
   log "  Typical time: 15–30 min (fresh VPS)"
   log "  Get latest: curl -fsSLO .../main/install.sh (do not reuse old ~/install.sh)"
+  log "  Do NOT run: bash install.sh | tee  — use: sudo bash install-background.sh"
   log "=============================================="
 }
 
