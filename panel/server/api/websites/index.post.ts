@@ -16,10 +16,10 @@ export default defineEventHandler(async (event) => {
   const githubToken = (body.githubToken || '').trim()
 
   if (!domain || !runtime) {
-    throw createError({ statusCode: 400, statusMessage: 'Domain và runtime bắt buộc' })
+    throw createError({ statusCode: 400, statusMessage: 'Domain and runtime are required' })
   }
   if (runtime !== 'node' && runtime !== 'php') {
-    throw createError({ statusCode: 400, statusMessage: 'Runtime phải là node hoặc php' })
+    throw createError({ statusCode: 400, statusMessage: 'Runtime must be node or php' })
   }
 
   const args = [domain, runtime]
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     const result = JSON.parse(out.split('\n').pop() || out)
     return result
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Tạo website thất bại'
+    const msg = e instanceof Error ? e.message : 'Failed to create website'
     throw createError({ statusCode: 500, statusMessage: msg })
   }
 })

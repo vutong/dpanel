@@ -1,15 +1,15 @@
 <template>
   <div>
     <h1>Dashboard</h1>
-    <p class="muted">Quản lý website và MariaDB trên VPS.</p>
+    <p class="muted">Manage websites and MariaDB on this VPS.</p>
     <div class="grid">
       <NuxtLink to="/websites" class="card link-card">
-        <h2>Website</h2>
-        <p>{{ siteCount }} site</p>
+        <h2>Websites</h2>
+        <p>{{ siteCount }} site(s)</p>
       </NuxtLink>
       <NuxtLink to="/databases" class="card link-card">
         <h2>MariaDB</h2>
-        <p>{{ dbCount }} database</p>
+        <p>{{ dbCount }} database(s)</p>
       </NuxtLink>
     </div>
   </div>

@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ name?: string; user?: string; password?: string }>(event)
   const name = (body.name || '').trim()
   if (!name) {
-    throw createError({ statusCode: 400, statusMessage: 'Tên database bắt buộc' })
+    throw createError({ statusCode: 400, statusMessage: 'Database name is required' })
   }
 
   const args = [name]
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     const out = await runScript('db-create.sh', args)
     return JSON.parse(out)
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Tạo database thất bại'
+    const msg = e instanceof Error ? e.message : 'Failed to create database'
     throw createError({ statusCode: 500, statusMessage: msg })
   }
 })

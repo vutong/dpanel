@@ -1,11 +1,11 @@
 <template>
   <div>
     <div class="header">
-      <h1>Danh sách website</h1>
-      <NuxtLink to="/websites/create" class="btn btn-primary">+ Tạo website</NuxtLink>
+      <h1>Websites</h1>
+      <NuxtLink to="/websites/create" class="btn btn-primary">+ Create website</NuxtLink>
     </div>
-    <div v-if="pending" class="muted">Đang tải...</div>
-    <div v-else-if="!sites.length" class="card muted">Chưa có website. Tạo site đầu tiên.</div>
+    <div v-if="pending" class="muted">Loading...</div>
+    <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
     <div v-else class="card">
       <table class="table">
         <thead>
@@ -13,7 +13,7 @@
             <th>Domain</th>
             <th>Runtime</th>
             <th>GitHub</th>
-            <th>Tạo lúc</th>
+            <th>Created</th>
           </tr>
         </thead>
         <tbody>
@@ -40,7 +40,7 @@ const sites = computed(() => data.value?.sites ?? [])
 
 function formatDate(iso?: string) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('vi-VN')
+  return new Date(iso).toLocaleString('en-US')
 }
 </script>
 

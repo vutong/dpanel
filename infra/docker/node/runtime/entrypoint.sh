@@ -8,14 +8,14 @@ export NUXT_PORT="${NUXT_PORT:-3000}"
 
 if [ -f package.json ]; then
   if [ ! -d node_modules/.bin ]; then
-    echo "[dpanel] Cài dependencies..."
+    echo "[dpanel] Installing dependencies..."
     npm ci --omit=dev 2>/dev/null || npm install --omit=dev
   fi
   if [ -f .output/server/index.mjs ]; then
     exec node .output/server/index.mjs
   fi
-  echo "[dpanel] Chưa có build .output — chạy install.sh trên VPS."
+  echo "[dpanel] No .output build — run install.sh on the VPS."
 fi
 
-echo "[dpanel] Thư mục /app trống — chạy: sudo bash install.sh"
+echo "[dpanel] /app is empty — run: sudo bash install.sh"
 exec sleep infinity

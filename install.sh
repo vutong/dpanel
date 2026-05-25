@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #
-# dpanel — Bootstrap VPS + Control Panel (một lệnh duy nhất)
-# Chạy qua SSH (script tự gắn stdin vào /dev/tty khi dùng pipe):
+# dpanel — Bootstrap VPS + Control Panel (single entry point)
+# Via SSH (script attaches stdin to /dev/tty when piped):
 #   curl -fsSL https://raw.githubusercontent.com/vutong/dpanel/main/install.sh | sudo bash
-# Hoặc tải rồi chạy: curl -fsSLO .../install.sh && sudo bash install.sh
-# hoặc:
-#   chmod +x install.sh && sudo ./install.sh
+# Or download first: curl -fsSLO .../install.sh && sudo bash install.sh
+# Or: chmod +x install.sh && sudo ./install.sh
 #
 set -euo pipefail
 
@@ -18,9 +17,9 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 log() { echo "[dpanel] $*"; }
 die() { echo "[dpanel] ERROR: $*" >&2; exit 1; }
 
-[[ "${EUID:-0}" -eq 0 ]] || die "Chạy với quyền root: sudo bash install.sh"
+[[ "${EUID:-0}" -eq 0 ]] || die "Run as root: sudo bash install.sh"
 
-# curl | bash: stdin là pipe — read phải dùng terminal thật
+# curl | bash: stdin is the pipe — reads must use the real terminal
 if [[ ! -t 0 && -r /dev/tty ]]; then
   exec 0</dev/tty
 fi
@@ -34,40 +33,39 @@ normalize_domain() {
   echo "$d"
 }
 
-log "Cấu hình dpanel — nhập thông tin bên dưới."
+log "dpanel setup — enter the details below."
 echo
 
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
 ADMIN_PASSWORD2=""
 
-# --- Thu thập cấu hình panel (chỉ cần chạy install.sh) ---
 if [[ -z "${PANEL_DOMAIN}" ]]; then
   while true; do
-    read -r -p "Panel domain (vd: panel.example.com): " PANEL_DOMAIN
+    read -r -p "Panel domain (e.g. panel.example.com): " PANEL_DOMAIN
     PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
-    [[ -n "${PANEL_DOMAIN}" ]] || { echo "Domain không được để trống."; continue; }
+    [[ -n "${PANEL_DOMAIN}" ]] || { echo "Domain cannot be empty."; continue; }
     [[ "${PANEL_DOMAIN}" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || {
-      echo "Domain không hợp lệ (vd: panel.example.com)."
+      echo "Invalid domain (e.g. panel.example.com)."
       continue
     }
     break
   done
 else
   PANEL_DOMAIN="$(normalize_domain "${PANEL_DOMAIN}")"
-  log "Panel domain (từ biến môi trường): ${PANEL_DOMAIN}"
+  log "Panel domain (from environment): ${PANEL_DOMAIN}"
 fi
 
-read -r -p "Email đăng nhập panel: " ADMIN_EMAIL
-[[ -n "${ADMIN_EMAIL}" ]] || die "Email không được để trống."
+read -r -p "Panel login email: " ADMIN_EMAIL
+[[ -n "${ADMIN_EMAIL}" ]] || die "Email cannot be empty."
 
 while true; do
-  read -r -s -p "Mật khẩu: " ADMIN_PASSWORD
+  read -r -s -p "Password: " ADMIN_PASSWORD
   echo
-  read -r -s -p "Nhập lại mật khẩu: " ADMIN_PASSWORD2
+  read -r -s -p "Confirm password: " ADMIN_PASSWORD2
   echo
-  [[ "${ADMIN_PASSWORD}" == "${ADMIN_PASSWORD2}" ]] || { echo "Mật khẩu không khớp, thử lại."; continue; }
-  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || { echo "Mật khẩu tối thiểu 8 ký tự."; continue; }
+  [[ "${ADMIN_PASSWORD}" == "${ADMIN_PASSWORD2}" ]] || { echo "Passwords do not match. Try again."; continue; }
+  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || { echo "Password must be at least 8 characters."; continue; }
   break
 done
 
@@ -75,7 +73,6 @@ log "Panel domain: ${PANEL_DOMAIN}"
 log "Email:        ${ADMIN_EMAIL}"
 echo
 
-# --- Nguồn mã ---
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
 CLONE_TMP=""
@@ -87,33 +84,32 @@ trap cleanup_clone EXIT
 
 if [[ -f "${SCRIPT_DIR}/panel/package.json" ]]; then
   SRC_DIR="${SCRIPT_DIR}"
-  log "Dùng mã nguồn local: ${SRC_DIR}"
+  log "Using local source: ${SRC_DIR}"
 else
   CLONE_TMP="$(mktemp -d)"
-  log "Clone ${DPANEL_REPO} (branch ${DPANEL_BRANCH})..."
+  log "Cloning ${DPANEL_REPO} (branch ${DPANEL_BRANCH})..."
   git clone --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}"
   SRC_DIR="${CLONE_TMP}"
 fi
 
-# --- Hệ thống ---
 if [[ -f /etc/os-release ]]; then
   # shellcheck source=/dev/null
   source /etc/os-release
-  [[ "${ID:-}" == "ubuntu" ]] || log "Cảnh báo: script viết cho Ubuntu, đang chạy trên ${ID:-unknown}"
+  [[ "${ID:-}" == "ubuntu" ]] || log "Warning: script targets Ubuntu, running on ${ID:-unknown}"
 fi
 
-log "Cập nhật hệ thống..."
+log "Updating system..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get upgrade -y -qq
 
-log "Cài dependencies..."
+log "Installing dependencies..."
 apt-get install -y -qq \
   ca-certificates curl gnupg lsb-release git unzip rsync ufw \
   apache2-utils python3
 
 if ! command -v docker &>/dev/null; then
-  log "Cài Docker Engine..."
+  log "Installing Docker Engine..."
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
@@ -125,10 +121,10 @@ if ! command -v docker &>/dev/null; then
   apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   systemctl enable --now docker
 else
-  log "Docker đã có sẵn."
+  log "Docker already installed."
 fi
 
-docker compose version &>/dev/null || die "docker compose plugin chưa sẵn sàng"
+docker compose version &>/dev/null || die "docker compose plugin is not available"
 
 if command -v ufw &>/dev/null; then
   ufw allow OpenSSH || true
@@ -138,8 +134,7 @@ if command -v ufw &>/dev/null; then
   ufw --force enable || true
 fi
 
-# --- Đồng bộ repo vào stack ---
-log "Triển khai stack tại ${STACK_ROOT}..."
+log "Deploying stack at ${STACK_ROOT}..."
 mkdir -p "${STACK_ROOT}"
 rsync -a --delete \
   --exclude '.git' \
@@ -148,7 +143,6 @@ rsync -a --delete \
   --exclude '.nuxt' \
   "${SRC_DIR}/" "${STACK_ROOT}/"
 
-# --- Thư mục dữ liệu ---
 DIRS=(
   "${STACK_ROOT}/apps/${PANEL_DOMAIN}"
   "${STACK_ROOT}/data/panel"
@@ -166,7 +160,6 @@ DIRS=(
 for d in "${DIRS[@]}"; do mkdir -p "$d"; done
 touch "${STACK_ROOT}/logs/nginx/access.log" "${STACK_ROOT}/logs/nginx/error.log"
 
-# --- Auth panel (bcrypt qua htpasswd) ---
 ADMIN_HASH="$(htpasswd -nbBC 10 dpanel "${ADMIN_PASSWORD}" | cut -d: -f2)"
 cat > "${STACK_ROOT}/data/panel/auth.json" <<EOF
 {"email":"${ADMIN_EMAIL}","passwordHash":"${ADMIN_HASH}"}
@@ -176,7 +169,6 @@ chmod 600 "${STACK_ROOT}/data/panel/auth.json"
 echo '[]' > "${STACK_ROOT}/data/panel/sites.json"
 chmod 644 "${STACK_ROOT}/data/panel/sites.json"
 
-# --- .env ---
 if [[ ! -f "${STACK_ROOT}/.env" ]]; then
   DB_ROOT_PASS="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)"
   REDIS_PASS="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)"
@@ -202,14 +194,12 @@ PHP_MEMORY_LIMIT=256M
 EOF
   chmod 600 "${STACK_ROOT}/.env"
 else
-  # Cập nhật domain panel nếu .env đã có
   grep -q '^PANEL_DOMAIN=' "${STACK_ROOT}/.env" \
     && sed -i "s/^PANEL_DOMAIN=.*/PANEL_DOMAIN=${PANEL_DOMAIN}/" "${STACK_ROOT}/.env" \
     || echo "PANEL_DOMAIN=${PANEL_DOMAIN}" >> "${STACK_ROOT}/.env"
 fi
 
-# --- Build & copy panel vào apps ---
-log "Build control panel (Nuxt)..."
+log "Building control panel (Nuxt)..."
 PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
 
@@ -227,11 +217,10 @@ rsync -a "${PANEL_SRC}/package.json" "${PANEL_SRC}/node_modules" "${APP_DIR}/" 2
 
 chmod +x "${STACK_ROOT}/infra/scripts/"*.sh 2>/dev/null || true
 
-# --- Nginx vhost panel ---
 export STACK_ROOT
 bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" panel-only 2>/dev/null || true
 
-log "Khởi động Docker stack..."
+log "Starting Docker stack..."
 cd "${STACK_ROOT}"
 docker compose build --quiet 2>/dev/null || docker compose build
 docker compose up -d --remove-orphans
@@ -239,9 +228,9 @@ docker compose up -d --remove-orphans
 SERVER_IP="$(curl -4 -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 
 log ""
-log "========== dpanel đã cài xong =========="
-log "Panel URL:  http://${PANEL_DOMAIN}  (hoặc http://${SERVER_IP}:8080 nếu chưa có DNS)"
-log "Đăng nhập:  ${ADMIN_EMAIL}"
+log "========== dpanel installed =========="
+log "Panel URL:  http://${PANEL_DOMAIN}  (or http://${SERVER_IP}:8080 if DNS is not ready)"
+log "Login:      ${ADMIN_EMAIL}"
 log "Stack:      ${STACK_ROOT}"
-log "Tiếp theo: trỏ DNS (Cloudflare) subdomain panel về VPS, SSL do Cloudflare."
-log "=========================================="
+log "Next: point panel subdomain DNS (Cloudflare) to this VPS; SSL via Cloudflare."
+log "======================================"

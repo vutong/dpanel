@@ -8,8 +8,8 @@ DB_PASS="${3:-}"
 
 die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
-[[ -n "$DB_NAME" ]] || die "Thiếu tên database"
-[[ "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] || die "Tên database không hợp lệ"
+[[ -n "$DB_NAME" ]] || die "Missing database name"
+[[ "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] || die "Invalid database name"
 
 cd "$STACK_ROOT"
 # shellcheck source=/dev/null
@@ -23,6 +23,6 @@ docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
    CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASS}';
    GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
    FLUSH PRIVILEGES;" 2>/dev/null \
-  || die "Không tạo được database"
+  || die "Failed to create database"
 
 python3 -c "import json; print(json.dumps({'ok':True,'name':'${DB_NAME}','user':'${DB_USER}','password':'${DB_PASS}'}))"

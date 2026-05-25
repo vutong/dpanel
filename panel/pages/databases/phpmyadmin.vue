@@ -1,12 +1,12 @@
 <template>
   <div>
     <h1>phpMyAdmin</h1>
-    <p class="muted">Quản lý MariaDB qua giao diện web. Mở tab mới.</p>
+    <p class="muted">Manage MariaDB in the browser. Opens in a new tab.</p>
     <div class="card">
       <a v-if="url" :href="url" target="_blank" rel="noopener" class="btn btn-primary">
-        Mở phpMyAdmin →
+        Open phpMyAdmin →
       </a>
-      <p v-else class="muted">Đang lấy URL...</p>
+      <p v-else class="muted">Loading URL...</p>
       <p class="hint">URL: <code>{{ url || '...' }}</code></p>
     </div>
   </div>

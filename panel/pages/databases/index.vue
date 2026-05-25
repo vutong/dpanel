@@ -1,19 +1,19 @@
 <template>
   <div>
     <div class="header">
-      <h1>Danh sách database</h1>
+      <h1>Databases</h1>
       <div class="actions">
         <NuxtLink to="/databases/phpmyadmin" class="btn btn-ghost">phpMyAdmin</NuxtLink>
-        <NuxtLink to="/databases/create" class="btn btn-primary">+ Tạo database</NuxtLink>
+        <NuxtLink to="/databases/create" class="btn btn-primary">+ Create database</NuxtLink>
       </div>
     </div>
-    <div v-if="pending" class="muted">Đang tải...</div>
-    <div v-else-if="!databases.length" class="card muted">Chưa có database (ngoài hệ thống).</div>
+    <div v-if="pending" class="muted">Loading...</div>
+    <div v-else-if="!databases.length" class="card muted">No user databases yet.</div>
     <div v-else class="card">
       <table class="table">
         <thead>
           <tr>
-            <th>Tên</th>
+            <th>Name</th>
             <th></th>
           </tr>
         </thead>
@@ -27,7 +27,7 @@
                 :disabled="deleting === db"
                 @click="remove(db)"
               >
-                Xóa
+                Delete
               </button>
             </td>
           </tr>
@@ -46,18 +46,18 @@ const deleteMsg = ref('')
 const deleteOk = ref(false)
 
 async function remove(name: string) {
-  if (!confirm(`Xóa database "${name}"? Hành động không hoàn tác.`)) return
+  if (!confirm(`Delete database "${name}"? This cannot be undone.`)) return
   deleting.value = name
   deleteMsg.value = ''
   try {
     await $fetch(`/api/databases/${encodeURIComponent(name)}`, { method: 'DELETE' })
     deleteOk.value = true
-    deleteMsg.value = `Đã xóa ${name}`
+    deleteMsg.value = `Deleted ${name}`
     await refresh()
   } catch (e: unknown) {
     deleteOk.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    deleteMsg.value = err.data?.statusMessage || err.statusMessage || 'Xóa thất bại'
+    deleteMsg.value = err.data?.statusMessage || err.statusMessage || 'Delete failed'
   } finally {
     deleting.value = ''
   }

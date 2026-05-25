@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backup — quy hoạch sau. Chưa triển khai.
+# Backup — planned for a future release. Not implemented yet.
 set -euo pipefail
-echo "[dpanel] Backup chưa được cấu hình — sẽ bổ sung trong bản sau."
+echo "[dpanel] Backup is not configured yet — coming in a future release."
 exit 0

@@ -4,14 +4,14 @@
       <div class="brand">dpanel</div>
       <nav>
         <p class="nav-section">Website</p>
-        <NuxtLink to="/websites">Danh sách</NuxtLink>
-        <NuxtLink to="/websites/create">Tạo website</NuxtLink>
+        <NuxtLink to="/websites">List</NuxtLink>
+        <NuxtLink to="/websites/create">Create website</NuxtLink>
         <p class="nav-section">MariaDB</p>
-        <NuxtLink to="/databases">Danh sách database</NuxtLink>
-        <NuxtLink to="/databases/create">Tạo database</NuxtLink>
+        <NuxtLink to="/databases">List databases</NuxtLink>
+        <NuxtLink to="/databases/create">Create database</NuxtLink>
         <NuxtLink to="/databases/phpmyadmin">phpMyAdmin</NuxtLink>
       </nav>
-      <button class="btn btn-ghost logout" type="button" @click="logout">Đăng xuất</button>
+      <button class="btn btn-ghost logout" type="button" @click="logout">Sign out</button>
     </aside>
     <main class="main">
       <slot />

@@ -1,28 +1,28 @@
 <template>
   <div>
-    <h1>Tạo database</h1>
+    <h1>Create database</h1>
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
     <form class="card form" @submit.prevent="submit">
       <div class="field">
-        <label class="label">Tên database</label>
+        <label class="label">Database name</label>
         <input v-model="name" class="input" pattern="[a-zA-Z0-9_]+" required placeholder="myapp_db" />
       </div>
       <div class="field">
-        <label class="label">User (tùy chọn, mặc định = tên DB)</label>
+        <label class="label">User (optional, defaults to database name)</label>
         <input v-model="user" class="input" placeholder="myapp_user" />
       </div>
       <div class="field">
-        <label class="label">Mật khẩu (tùy chọn, tự sinh nếu trống)</label>
+        <label class="label">Password (optional, auto-generated if empty)</label>
         <input v-model="password" class="input" type="password" />
       </div>
-      <button class="btn btn-primary" type="submit" :disabled="loading">Tạo database</button>
+      <button class="btn btn-primary" type="submit" :disabled="loading">Create database</button>
     </form>
     <div v-if="created" class="card creds">
-      <h2>Thông tin kết nối</h2>
+      <h2>Connection details</h2>
       <p><strong>Database:</strong> {{ created.name }}</p>
       <p><strong>User:</strong> {{ created.user }}</p>
       <p><strong>Password:</strong> <code>{{ created.password }}</code></p>
-      <p class="muted">Lưu lại — mật khẩu không hiển thị lại sau khi rời trang.</p>
+      <p class="muted">Save these credentials — the password will not be shown again after you leave this page.</p>
     </div>
   </div>
 </template>
@@ -51,11 +51,11 @@ async function submit() {
     })
     ok.value = true
     created.value = res
-    message.value = 'Tạo database thành công.'
+    message.value = 'Database created successfully.'
   } catch (e: unknown) {
     ok.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    message.value = err.data?.statusMessage || err.statusMessage || 'Lỗi'
+    message.value = err.data?.statusMessage || err.statusMessage || 'Error'
   } finally {
     loading.value = false
   }

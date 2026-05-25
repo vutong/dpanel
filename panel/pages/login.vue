@@ -2,7 +2,7 @@
   <div class="login-wrap">
     <div class="card login-card">
       <h1>dpanel</h1>
-      <p class="subtitle">Đăng nhập control panel</p>
+      <p class="subtitle">Sign in to the control panel</p>
       <div v-if="error" class="alert alert-error">{{ error }}</div>
       <form @submit.prevent="submit">
         <div class="field">
@@ -10,11 +10,11 @@
           <input v-model="email" class="input" type="email" required autocomplete="username" />
         </div>
         <div class="field">
-          <label class="label">Mật khẩu</label>
+          <label class="label">Password</label>
           <input v-model="password" class="input" type="password" required autocomplete="current-password" />
         </div>
         <button class="btn btn-primary" type="submit" :disabled="loading">
-          {{ loading ? 'Đang đăng nhập...' : 'Đăng nhập' }}
+          {{ loading ? 'Signing in...' : 'Sign in' }}
         </button>
       </form>
     </div>
@@ -40,7 +40,7 @@ async function submit() {
     await navigateTo('/')
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    error.value = err.data?.statusMessage || err.statusMessage || 'Đăng nhập thất bại'
+    error.value = err.data?.statusMessage || err.statusMessage || 'Sign in failed'
   } finally {
     loading.value = false
   }

@@ -10,9 +10,9 @@ GITHUB_TOKEN="${4:-}"
 
 die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
-[[ -n "$DOMAIN" && -n "$RUNTIME" ]] || die "Thiếu domain hoặc runtime"
-[[ "$RUNTIME" == "node" || "$RUNTIME" == "php" ]] || die "Runtime phải là node hoặc php"
-[[ "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Domain không hợp lệ"
+[[ -n "$DOMAIN" && -n "$RUNTIME" ]] || die "Missing domain or runtime"
+[[ "$RUNTIME" == "node" || "$RUNTIME" == "php" ]] || die "Runtime must be node or php"
+[[ "$DOMAIN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
@@ -29,13 +29,13 @@ if [[ -n "$GITHUB_URL" ]]; then
   rm -rf "${APP_DIR:?}"/*
   git clone --depth 1 "$CLONE_URL" "${APP_DIR}/_repo_tmp" 2>/dev/null \
     || git clone "$CLONE_URL" "${APP_DIR}/_repo_tmp" \
-    || die "Không clone được từ GitHub"
+    || die "Failed to clone from GitHub"
   shopt -s dotglob
   mv "${APP_DIR}/_repo_tmp"/* "$APP_DIR/" 2>/dev/null || true
   rm -rf "${APP_DIR}/_repo_tmp"
   shopt -u dotglob
 else
-  echo "Deploy mã vào ${DOMAIN}" > "${APP_DIR}/.gitkeep"
+  echo "Deploy application code to ${DOMAIN}" > "${APP_DIR}/.gitkeep"
 fi
 
 if [[ "$RUNTIME" == "node" ]]; then
