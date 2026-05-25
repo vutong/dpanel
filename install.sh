@@ -11,12 +11,12 @@
 # Non-interactive:
 #   export DPANEL_NONINTERACTIVE=1 PANEL_DOMAIN=... ADMIN_EMAIL=...
 #   sudo -E bash install.sh
-# Default login password: 1234567 — change after install: dpanel setpass <password>
+# Default login password: 12345678 — change after install: dpanel setpass <password>
 #
 set -eu
 
-INSTALLER_VERSION="1.0.11"
-DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-1234567}"
+INSTALLER_VERSION="1.0.12"
+DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"

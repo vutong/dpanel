@@ -38,7 +38,7 @@ curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
 sudo -E bash install.sh
 ```
 
-Default login password is **1234567**. Change after install:
+Default login password is **12345678**. Change after install:
 
 ```bash
 dpanel setpass 'Your_new_password'
@@ -56,7 +56,7 @@ dpanel setpass 'Your_new_password'
 
 - Panel: `http://<panel-domain>` or `http://<server-ip>:8080`
 - Summary file: `/opt/stack/CREDENTIALS.txt`
-- Default password: `1234567` → `dpanel setpass 'new-password'`
+- Default password: `12345678` → `dpanel setpass 'new-password'`
 
 ## Update (when repo changes)
 
