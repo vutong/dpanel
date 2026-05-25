@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.12"
+INSTALLER_VERSION="1.0.13"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -239,20 +239,11 @@ collect_configuration() {
   fi
   [[ -n "${ADMIN_EMAIL}" ]] || die "Email required"
 
-  if [[ -z "${ADMIN_PASSWORD}" ]]; then
-    while true; do
-      local p1 p2
-      tty_read_secret "Password (min 8): " p1
-      tty_read_secret "Confirm password: " p2
-      [[ "${p1}" == "${p2}" ]] || { tty_print "Mismatch."; continue; }
-      [[ ${#p1} -ge 8 ]] || { tty_print "Min 8 characters."; continue; }
-      ADMIN_PASSWORD="${p1}"
-      break
-    done
-  fi
-  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || die "Password min 8 characters"
+  ADMIN_PASSWORD="${ADMIN_PASSWORD:-${DEFAULT_ADMIN_PASSWORD}}"
+  [[ ${#ADMIN_PASSWORD} -ge 6 ]] || die "Password too short (min 6)"
 
   log "Domain: ${PANEL_DOMAIN} | Email: ${ADMIN_EMAIL}"
+  log "Default password: ${DEFAULT_ADMIN_PASSWORD} (change: dpanel setpass <password>)"
 }
 
 confirm_existing_stack() {

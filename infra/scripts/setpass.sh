@@ -11,8 +11,8 @@ if [[ -z "${NEW_PASS}" ]]; then
   exit 1
 fi
 
-if [[ ${#NEW_PASS} -lt 6 ]]; then
-  echo "Password must be at least 6 characters." >&2
+if [[ ${#NEW_PASS} -lt 8 ]]; then
+  echo "Password must be at least 8 characters." >&2
   exit 1
 fi
 
