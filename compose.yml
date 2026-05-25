@@ -84,10 +84,12 @@ services:
     image: phpmyadmin:5-apache
     container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-pma
     restart: unless-stopped
+    env_file: .env
     environment:
       PMA_HOST: mariadb
       PMA_USER: root
       PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-http://localhost/pma/}
       UPLOAD_LIMIT: 64M
     depends_on:
       mariadb:
