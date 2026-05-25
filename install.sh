@@ -15,7 +15,7 @@
 #
 set -euo pipefail
 
-INSTALLER_VERSION="1.0.0"
+INSTALLER_VERSION="1.0.1"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -136,6 +136,7 @@ banner() {
   log "  dpanel installer v${INSTALLER_VERSION}"
   log "  Log: ${INSTALL_LOG}"
   log "  Typical time: 15–30 min (fresh VPS)"
+  log "  Get latest: curl -fsSLO .../main/install.sh (do not reuse old ~/install.sh)"
   log "=============================================="
 }
 
@@ -191,7 +192,7 @@ collect_configuration() {
     log "Panel domain (env): ${PANEL_DOMAIN}"
   fi
 
-  if [[ -z "${ADMIN_EMAIL}" ]]; then
+  if [[ -z "${ADMIN_EMAIL:-}" ]]; then
     tty_read "Panel login email: " ADMIN_EMAIL
   fi
   [[ -n "${ADMIN_EMAIL}" ]] || die "Email cannot be empty."
