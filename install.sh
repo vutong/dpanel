@@ -313,8 +313,7 @@ if [[ -n "${SCRIPT_PATH}" && "${SCRIPT_PATH}" != "bash" && -f "${SCRIPT_PATH}" ]
 fi
 
 CLONE_TMP=""
-cleanup_clone() { [[ -n "${CLONE_TMP}" && -d "${CLONE_TMP}" ]] && rm -rf "${CLONE_TMP}"; }
-trap cleanup_clone EXIT
+trap on_exit EXIT
 
 if [[ "${USE_LOCAL_SRC}" == true ]]; then
   step "Using local source at ${SRC_DIR}"
