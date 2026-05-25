@@ -2,8 +2,11 @@
 #
 # dpanel — VPS installer
 #
-# Recommended:
-#   curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
+# Recommended (SSH — foreground in screen, survives disconnect):
+#   curl -fsSLO .../install.sh && curl -fsSLO .../install-screen.sh
+#   sudo bash install-screen.sh
+#
+# Direct foreground (stay connected; do not pipe to tee):
 #   sudo bash install.sh
 #
 # Non-interactive:
@@ -16,7 +19,13 @@
 # Note: no pipefail — avoids silent exit when log/tee hits a closed SSH pipe
 set -eu
 
-INSTALLER_VERSION="1.0.5"
+# Line-buffered stdout/stderr when coreutils stdbuf is available
+if [[ -z "${DPANEL_STDBUF:-}" ]] && command -v stdbuf >/dev/null 2>&1; then
+  export DPANEL_STDBUF=1
+  exec stdbuf -oL -eL bash "$0" "$@"
+fi
+
+INSTALLER_VERSION="1.0.6"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -25,17 +34,44 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-install.log}"
+CONSOLE_LOG="${DPANEL_CONSOLE_LOG:-/var/log/dpanel-install-console.log}"
 TOTAL_STEPS=11
 STEP=0
+HEARTBEAT_PID=""
 
 INSTALL_LOG_DIR="$(dirname "${INSTALL_LOG}")"
 mkdir -p "${INSTALL_LOG_DIR}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
 touch "${INSTALL_LOG}" 2>/dev/null || INSTALL_LOG="/tmp/dpanel-install.log"
+CONSOLE_LOG_DIR="$(dirname "${CONSOLE_LOG}")"
+mkdir -p "${CONSOLE_LOG_DIR}" 2>/dev/null || CONSOLE_LOG="/tmp/dpanel-install-console.log"
+touch "${CONSOLE_LOG}" 2>/dev/null || CONSOLE_LOG="/tmp/dpanel-install-console.log"
 
 log() {
   local line="[dpanel] $(date '+%Y-%m-%d %H:%M:%S') $*"
   printf '%s\n' "$line" >> "${INSTALL_LOG}"
+  printf '%s\n' "$line" >> "${CONSOLE_LOG}" 2>/dev/null || true
   printf '%s\n' "$line" >&2 || true
+}
+
+start_heartbeat() {
+  local msg="$1"
+  stop_heartbeat 2>/dev/null || true
+  (
+    local elapsed=0
+    while sleep 60; do
+      elapsed=$((elapsed + 60))
+      log "${msg} — still running (${elapsed}s elapsed)"
+    done
+  ) &
+  HEARTBEAT_PID=$!
+}
+
+stop_heartbeat() {
+  if [[ -n "${HEARTBEAT_PID:-}" ]]; then
+    kill "${HEARTBEAT_PID}" 2>/dev/null || true
+    wait "${HEARTBEAT_PID}" 2>/dev/null || true
+    HEARTBEAT_PID=""
+  fi
 }
 
 die() {
@@ -101,10 +137,43 @@ apt_get() {
   log "Waiting for apt lock if needed..."
   wait_for_apt_lock
   log "Running: apt-get $*"
-  if ! apt-get "$@" >> "${INSTALL_LOG}" 2>&1; then
+  local rc=0
+  if [[ -t 2 ]]; then
+    apt-get "$@" 2>&1 | tee -a "${INSTALL_LOG}"
+    rc="${PIPESTATUS[0]:-1}"
+  else
+    apt-get "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
+  fi
+  if [[ "$rc" -ne 0 ]]; then
     die "apt-get failed: apt-get $*"
   fi
   log "Finished: apt-get $*"
+}
+
+run_long() {
+  local label="$1"
+  shift
+  local rc=0
+  run_long_capture "${label}" "$@" || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    die "${label} failed (exit ${rc})"
+  fi
+  log "Finished: ${label}"
+}
+
+run_long_capture() {
+  local label="$1"
+  shift
+  log "Starting: ${label}"
+  start_heartbeat "${label}"
+  local rc=0
+  if [[ -t 2 ]]; then
+    "$@" 2>&1 | tee -a "${INSTALL_LOG}" || rc="${PIPESTATUS[0]:-1}"
+  else
+    "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
+  fi
+  stop_heartbeat
+  return "$rc"
 }
 
 preflight_checks() {
@@ -156,10 +225,24 @@ banner() {
   log "=============================================="
   log "  dpanel installer v${INSTALLER_VERSION}"
   log "  Log: ${INSTALL_LOG}"
+  log "  Live mirror: ${CONSOLE_LOG}  (tail -f from another SSH window)"
   log "  Typical time: 15–30 min (fresh VPS)"
-  log "  Get latest: curl -fsSLO .../main/install.sh (do not reuse old ~/install.sh)"
-  log "  Do NOT run: bash install.sh | tee  — use: sudo bash install-background.sh"
+  log "  SSH tip: sudo bash install-screen.sh  (foreground + survives disconnect)"
+  log "  Avoid: bash install.sh | tee  — breaks the installer"
   log "=============================================="
+}
+
+ssh_session_hint() {
+  if [[ -n "${DPANEL_NONINTERACTIVE:-}" || -n "${STY:-}" || -n "${TMUX:-}" ]]; then
+    return
+  fi
+  if [[ ! -t 2 ]]; then
+    return
+  fi
+  log "Running in an interactive terminal — progress will print here."
+  if [[ -z "${DPANEL_SKIP_SCREEN_HINT:-}" ]]; then
+    log "For SSH stability without background/nohup: sudo bash install-screen.sh"
+  fi
 }
 
 tty_print() { printf '%s\n' "$*" >/dev/tty 2>/dev/null || printf '%s\n' "$*"; }
@@ -304,6 +387,7 @@ wait_for_healthy_stack() {
 
 # --- Main ---
 banner
+ssh_session_hint
 
 [[ "${EUID:-0}" -eq 0 ]] || die "Run as root: sudo bash install.sh"
 [[ -r /dev/tty ]] && exec 0</dev/tty
@@ -442,13 +526,20 @@ else
     || echo "PANEL_DOMAIN=${PANEL_DOMAIN}" >> "${STACK_ROOT}/.env"
 fi
 
-step "Building control panel (Nuxt)"
+step "Building control panel (Nuxt — often 5–15 min)"
 PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
-docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c \
-  "npm ci && npm run build" \
-  || docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c \
-  "npm install && npm run build"
+export BUILDKIT_PROGRESS=plain
+_nuxt_build() {
+  docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c "$1"
+}
+if ! run_long_capture "Nuxt panel build (npm ci)" _nuxt_build "npm ci && npm run build"; then
+  log "npm ci failed — trying npm install"
+fi
+if [[ ! -d "${PANEL_SRC}/.output" ]]; then
+  run_long "Nuxt panel build (npm install)" _nuxt_build "npm install && npm run build"
+fi
+[[ -d "${PANEL_SRC}/.output" ]] || die "Nuxt build failed — no .output in ${PANEL_SRC}"
 
 log "Deploying panel to apps/${PANEL_DOMAIN}"
 rm -rf "${APP_DIR}"
@@ -464,8 +555,8 @@ bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" panel-only 2>/dev/null || tru
 
 step "Starting Docker stack"
 cd "${STACK_ROOT}"
-docker compose build
-docker compose up -d --remove-orphans
+run_long "Docker image build" docker compose build --progress=plain
+run_long "Docker compose up" docker compose up -d --remove-orphans
 
 wait_for_healthy_stack
 docker compose ps

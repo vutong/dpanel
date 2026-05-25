@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Optional: fully detached install (nohup). Prefer install-screen.sh for foreground UX.
 # Run installer detached from SSH (survives disconnect). Usage:
 #   curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install-background.sh
 #   curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
