@@ -42,10 +42,9 @@
           />
           <p class="hint">
             <strong>Public repo:</strong> leave token empty.<br>
-            <strong>Private repo:</strong> create a Personal Access Token on GitHub
-            (Settings → Developer settings → Tokens). Classic token: enable <code>repo</code> scope.
-            Fine-grained: grant this repository <strong>Contents → Read-only</strong>.
-            Token is sent only for <code>git clone</code> (via env, not saved).
+            <strong>Private repo:</strong> use a <strong>classic PAT</strong> (<code>ghp_...</code>, scope <code>repo</code>) — most reliable.
+            Fine-grained (<code>github_pat_...</code>): select this repo + <strong>Contents: Read</strong>; org repos may need owner approval.<br>
+            Token is sent via env for clone only (not saved). Revoke token if exposed.
           </p>
         </div>
       </template>

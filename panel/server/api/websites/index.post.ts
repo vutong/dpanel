@@ -34,7 +34,10 @@ export default defineEventHandler(async (event) => {
     const result = JSON.parse(out.split('\n').pop() || out)
     return result
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Failed to create website'
+    let msg = e instanceof Error ? e.message : 'Failed to create website'
+    msg = msg.replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
+    msg = msg.replace(/\bghp_[A-Za-z0-9]+\b/g, 'ghp_***')
+    msg = msg.replace(/\bgho_[A-Za-z0-9]+\b/g, 'gho_***')
     throw createError({ statusCode: 500, statusMessage: msg })
   }
 })
