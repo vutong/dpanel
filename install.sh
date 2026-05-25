@@ -21,6 +21,8 @@ PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
 DPANEL_BRANCH="${DPANEL_BRANCH:-main}"
 PANEL_DOMAIN="${PANEL_DOMAIN:-}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-install.log}"
 TOTAL_STEPS=11
 STEP=0
@@ -194,7 +196,7 @@ collect_configuration() {
   fi
   [[ -n "${ADMIN_EMAIL}" ]] || die "Email cannot be empty."
 
-  if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
+  if [[ -z "${ADMIN_PASSWORD}" ]]; then
     while true; do
       local p1 p2
       tty_read_secret "Password (min 8 chars): " p1
@@ -205,7 +207,8 @@ collect_configuration() {
       break
     done
   fi
-  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || die "Password must be at least 8 characters"
+  [[ ${#ADMIN_PASSWORD} -ge 8 ]] || die "Password must be at least 8 characters."
+
 
   log "Panel domain: ${PANEL_DOMAIN}"
   log "Login email:  ${ADMIN_EMAIL}"
