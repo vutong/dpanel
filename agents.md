@@ -1,76 +1,164 @@
-# ubuntu-docker — Kiến trúc & vận hành
+# dpanel — Kiến trúc & vận hành
 
-Dự án bootstrap Docker stack trên Ubuntu 24.04 LTS. Tài liệu tham chiếu cho agent và người vận hành khi triển khai, cấu hình hoặc debug.
+Bootstrap Docker stack trên Ubuntu 24.04 LTS + **control panel Nuxt** (`panel/`).
 
-> **Lưu ý:** Mọi domain trong tài liệu này (`app.example.com`, `blog.example.com`, …) **chỉ là ví dụ minh họa cấu trúc**. Khi triển khai thật, thay bằng domain của bạn trong `.env`, nginx `conf.d/` và tên thư mục tương ứng dưới `apps/` / `data/uploads/`.
+> Domain trong tài liệu (`*.example.com`) **chỉ là ví dụ**. Khi triển khai thật, dùng domain của bạn trong panel hoặc `.env`.
 
 ## Kiến trúc
 
 ```
 Ubuntu 24.04 LTS
 └── Docker Engine
-    └── docker-compose stack
-        ├── nginx (reverse proxy)
-        ├── nuxt (node runtime SSR)
-        ├── php-fpm (backend PHP)
-        ├── mariadb (database)
-        └── redis (cache/queue)
+    └── docker-compose stack (/opt/stack)
+        ├── nginx (reverse proxy + phpMyAdmin /pma/)
+        ├── dpanel (Nuxt SSR — control panel)
+        ├── php-fpm (các site PHP)
+        ├── nuxt-<slug> (mỗi site Node — compose.d/)
+        ├── mariadb
+        ├── phpmyadmin
+        └── redis
 ```
 
-**SSL:** Không cấu hình SSL trên VPS. Cloudflare xử lý HTTPS phía trước (Flexible hoặc Full). Nginx chỉ lắng nghe HTTP / port 80.
+**SSL:** Cloudflare phía trước. Nginx chỉ HTTP :80 và :8080 (panel khi chưa có DNS).
+
+## Bootstrap
+
+```bash
+sudo ./install.sh
+# hoặc: curl -fsSL .../install.sh | sudo bash
+```
+
+1. Hỏi panel domain + email + mật khẩu panel  
+2. Cài Docker, tạo `/opt/stack`  
+3. Build Nuxt panel → `apps/<PANEL_DOMAIN>/`  
+4. `docker compose up -d`
 
 ## Cấu trúc thư mục
 
-Tên thư mục app/upload theo **domain thật** của bạn. Ví dụ dưới đây dùng placeholder `*.example.com`:
+### Repo GitHub (`dpanel/` — phát triển)
 
 ```
-/opt/stack
+dpanel/
+├── install.sh                 # Entry point cài VPS (hỏi domain, email, mật khẩu)
+├── compose.yml                # Docker stack chính
+├── README.md
+├── AGENTS.md
+├── .gitignore
+│
+├── panel/                     # Mã nguồn control panel (Nuxt 3)
+│   ├── package.json
+│   ├── nuxt.config.ts
+│   ├── app.vue
+│   ├── assets/css/
+│   ├── layouts/
+│   ├── pages/
+│   │   ├── index.vue
+│   │   ├── login.vue
+│   │   ├── websites/
+│   │   │   ├── index.vue
+│   │   │   └── create.vue
+│   │   └── databases/
+│   │       ├── index.vue
+│   │       ├── create.vue
+│   │       └── phpmyadmin.vue
+│   ├── middleware/
+│   ├── server/
+│   │   ├── api/               # auth, websites, databases, phpmyadmin
+│   │   └── utils/
+│   └── node_modules/          # (local dev, không commit)
+│
+└── infra/
+    ├── nginx/
+    │   ├── nginx.conf
+    │   └── conf.d/
+    │       ├── .gitkeep
+    │       ├── 00-panel.conf      # sinh lại bởi nginx-reload.sh
+    │       └── 99-pma.conf
+    ├── docker/
+    │   ├── node/
+    │   │   ├── Dockerfile
+    │   │   └── runtime/entrypoint.sh
+    │   └── php/
+    │       ├── Dockerfile
+    │       └── config/99-custom.ini
+    └── scripts/
+        ├── site-create.sh
+        ├── site-list.sh
+        ├── db-list.sh
+        ├── db-create.sh
+        ├── db-delete.sh
+        ├── nginx-reload.sh
+        ├── deploy.sh
+        ├── backup.sh
+        └── cleanup.sh
+```
+
+### Trên VPS sau `install.sh` (`/opt/stack/`)
+
+```
+/opt/stack/
+├── install.sh                 # Bản copy từ repo
 ├── compose.yml
-├── .env
+├── compose.d/                 # Mỗi site Node → 1 file (tự sinh)
+│   └── nuxt-<slug>.yml        # vd: nuxt-app-example-com.yml
+├── .env                       # Mật khẩu DB, Redis, PANEL_DOMAIN, …
 │
-├── infra/
-│   ├── nginx/
-│   │   ├── conf.d/
-│   │   ├── templates/
-│   │   └── nginx.conf
-│   │
-│   ├── docker/
-│   │   ├── node/                 (Nuxt SSR + Node workers)
-│   │   │   ├── Dockerfile
-│   │   │   └── runtime/
-│   │   │
-│   │   ├── php/                  (Laravel / WordPress)
-│   │   │   ├── Dockerfile
-│   │   │   └── config/
-│   │   │
-│   │   └── base/
-│   │       ├── node/
-│   │       └── php/
-│   │
-│   └── scripts/
-│       ├── deploy.sh
-│       ├── backup.sh
-│       ├── migrate.sh
-│       └── cleanup.sh
+├── panel/                     # Mã nguồn panel (để build lại)
+│   ├── package.json
+│   ├── nuxt.config.ts
+│   ├── pages/ …
+│   └── server/ …
 │
-├── apps/
-│   ├── app.example.com/          (Nuxt SSR — ví dụ)
-│   ├── blog.example.com/         (PHP — ví dụ)
-│   └── admin.example.com/        (Admin — ví dụ)
+├── apps/                      # Mọi website — upload nằm TRONG từng project
+│   │
+│   ├── panel.example.com/     # Control panel (build Nuxt)
+│   │   ├── package.json
+│   │   ├── node_modules/
+│   │   └── .output/
+│   │       └── server/index.mjs
+│   │
+│   ├── blog.example.com/      # Ví dụ PHP — WordPress
+│   │   ├── .gitkeep           # (nếu chưa clone GitHub)
+│   │   ├── public/            # hoặc root WP tùy cấu trúc repo
+│   │   ├── wp-content/
+│   │   │   └── uploads/       # WordPress tự quản upload
+│   │   └── …
+│   │
+│   ├── shop.example.com/      # Ví dụ PHP — Laravel
+│   │   ├── public/            # nginx document root
+│   │   │   └── index.php
+│   │   ├── storage/
+│   │   │   └── app/public/    # upload / media Laravel
+│   │   └── …
+│   │
+│   └── app.example.com/       # Ví dụ Node — Nuxt site
+│       ├── package.json
+│       ├── public/              # static / file tùy app
+│       ├── .output/
+│       └── …
 │
 ├── data/
+│   ├── panel/
+│   │   ├── auth.json          # email + password hash (install.sh)
+│   │   └── sites.json         # danh sách site từ panel
 │   ├── mariadb/
-│   │   ├── volume/
-│   │   └── backup/
-│   │
-│   ├── redis/
-│   │   ├── dump/
-│   │   └── persistence/
-│   │
-│   └── uploads/
-│       ├── app.example.com/      (app tự quy tắc)
-│       ├── blog.example.com/
-│       └── admin.example.com/
+│   │   └── volume/            # dữ liệu MySQL persistent
+│   └── redis/
+│       ├── persistence/
+│       └── dump/
+│
+├── infra/                     # Giống repo (nginx, docker, scripts)
+│   ├── nginx/
+│   │   ├── nginx.conf
+│   │   └── conf.d/
+│   │       ├── 00-panel.conf
+│   │       ├── 99-pma.conf
+│   │       ├── blog.example.com.conf
+│   │       └── app.example.com.conf
+│   ├── docker/
+│   │   ├── node/
+│   │   └── php/
+│   └── scripts/
 │
 └── logs/
     ├── nginx/
@@ -82,73 +170,24 @@ Tên thư mục app/upload theo **domain thật** của bạn. Ví dụ dưới 
     └── redis/
 ```
 
-## Ứng dụng & domain (ví dụ)
+### Quy ước đặt tên
 
-| Domain (ví dụ) | Runtime | Ghi chú |
-|----------------|---------|---------|
-| `app.example.com` | Nuxt SSR (Node) | Frontend chính |
-| `blog.example.com` | PHP (Laravel / WordPress) | Blog / CMS |
-| `admin.example.com` | Node hoặc PHP | Backend quản trị |
-
-Thay `example.com` bằng domain thật. Có thể thêm/bớt site — mỗi site = một `server {}` trong nginx + thư mục trong `apps/` và `data/uploads/`.
-
-## Dịch vụ Docker
-
-| Service | Vai trò |
-|---------|---------|
-| **nginx** | Reverse proxy, route theo `Host`, phục vụ static/upload |
-| **nuxt** | SSR Nuxt, Node workers |
-| **php-fpm** | Laravel / WordPress |
-| **mariadb** | Database chính |
-| **redis** | Cache, session, queue |
-
-## Cloudflare
-
-- DNS trỏ A/AAAA về IP VPS.
-- SSL/TLS mode: **Flexible** hoặc **Full** (nếu sau này bật cert nội bộ).
-- Bật proxy (orange cloud) cho subdomain public.
-- Nginx đã cấu hình tin `CF-Connecting-IP` cho log IP thật.
-
-## Bootstrap VPS mới
-
-```bash
-# Domain tùy chỉnh (tùy chọn, trước khi chạy script)
-export APP_DOMAIN=app.yourdomain.com
-export BLOG_DOMAIN=blog.yourdomain.com
-export ADMIN_DOMAIN=admin.yourdomain.com
-
-chmod +x setup-vps.sh && sudo ./setup-vps.sh
-```
-
-Script sẽ:
-
-1. Cập nhật Ubuntu 24.04, cài Docker Engine + Compose plugin.
-2. Tạo cây thư mục `/opt/stack`.
-3. Sinh `compose.yml`, `.env`, nginx, Dockerfile, script vận hành.
-4. Không cài certbot / Let's Encrypt.
-
-## Sau bootstrap
-
-1. Chỉnh `.env` (mật khẩu DB, domain thật).
-2. Cập nhật `server_name` trong `infra/nginx/conf.d/` nếu đổi domain sau bootstrap.
-3. Deploy mã nguồn vào `apps/<domain-của-bạn>/`.
-4. `cd /opt/stack && docker compose up -d --build`.
-5. Trỏ DNS Cloudflare về VPS.
-
-## Script vận hành
-
-| Script | Mục đích |
-|--------|----------|
-| `infra/scripts/deploy.sh` | Pull/build/restart stack |
-| `infra/scripts/backup.sh` | Backup MariaDB + uploads |
-| `infra/scripts/migrate.sh` | Chạy migration (Laravel/Node tùy app) |
-| `infra/scripts/cleanup.sh` | Dọn image/volume/log cũ |
+| Thành phần | Quy tắc |
+|------------|---------|
+| Thư mục site | `apps/<domain>/` — domain thật, vd `shop.mydomain.com` |
+| Nginx vhost | `infra/nginx/conf.d/<domain>.conf` |
+| Site Node (Docker) | `compose.d/nuxt-<slug>.yml`, `<slug>` = domain đổi `.` → `-` |
+| Upload | **Không** có `data/uploads/` — mỗi framework tự quản trong `apps/<domain>/` |
+| Panel | Luôn 1 domain riêng → `apps/<PANEL_DOMAIN>/` |
 
 ## Quy ước cho agent
 
-- Domain trong repo **luôn là placeholder** trừ khi user cung cấp domain thật.
-- Mọi thay đổi infra nằm trong `/opt/stack/infra/`.
-- Upload persistent: `data/uploads/<domain>/` — mỗi app tự quy tắc thư mục con.
-- Log ghi ra `logs/<service>/`.
-- Không thêm SSL local trừ khi user yêu cầu; ưu tiên Cloudflare.
-- Biến nhạy cảm chỉ trong `.env`, không commit.
+- Tên dự án: **dpanel** (không còn ubuntu-docker).
+- Entry point duy nhất cho VPS: `install.sh`.
+- Panel API gọi script trong `infra/scripts/` — không shell tùy ý từ UI.
+- Site PHP: nginx → php-fpm, root `apps/<domain>/public`.
+- Site Node: service `nuxt-<slug>` trong `compose.d/`.
+- **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).
+- Mật khẩu nhạy cảm chỉ trong `.env` và `data/panel/auth.json`.
+- **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
+- Không SSL local trừ khi user yêu cầu.

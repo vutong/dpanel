@@ -1,0 +1,103 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./apps:/var/www/apps:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - dpanel
+      - php-fpm
+    networks:
+      - stack
+
+  dpanel:
+    build:
+      context: ./infra/docker/node
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-nuxt
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STACK_ROOT: /opt/stack
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+    volumes:
+      - ./apps/${PANEL_DOMAIN}:/app
+      - .:/opt/stack
+      - ./logs/node:/var/log/node
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - stack
+
+  php-fpm:
+    build:
+      context: ./infra/docker/php
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-php
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./apps:/var/www/apps
+      - ./infra/docker/php/config:/usr/local/etc/php/conf.d/custom:ro
+      - ./logs/php:/var/log/php
+    networks:
+      - stack
+
+  mariadb:
+    image: mariadb:11
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-mariadb
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - ./data/mariadb/volume:/var/lib/mysql
+      - ./logs/mariadb:/var/log/mysql
+    networks:
+      - stack
+
+  phpmyadmin:
+    image: phpmyadmin:5-apache
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-pma
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mariadb
+      PMA_USER: root
+      PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      - mariadb
+    networks:
+      - stack
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-redis
+    restart: unless-stopped
+    command: >
+      sh -c "redis-server
+      --requirepass $${REDIS_PASSWORD}
+      --dir /data
+      --appendonly yes"
+    env_file: .env
+    volumes:
+      - ./data/redis/persistence:/data
+      - ./logs/redis:/var/log/redis
+    networks:
+      - stack
+
+networks:
+  stack:
+    driver: bridge
+
+# Thêm site Node: compose.d/nuxt-<slug>.yml (tự sinh bởi panel)

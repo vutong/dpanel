@@ -1,0 +1,23 @@
+import { requireAuth } from '../../utils/auth-guard'
+import { runScript } from '../../utils/stack'
+
+export default defineEventHandler(async (event) => {
+  requireAuth(event)
+  const body = await readBody<{ name?: string; user?: string; password?: string }>(event)
+  const name = (body.name || '').trim()
+  if (!name) {
+    throw createError({ statusCode: 400, statusMessage: 'Tên database bắt buộc' })
+  }
+
+  const args = [name]
+  if (body.user) args.push(body.user)
+  if (body.password) args.push(body.password)
+
+  try {
+    const out = await runScript('db-create.sh', args)
+    return JSON.parse(out)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Tạo database thất bại'
+    throw createError({ statusCode: 500, statusMessage: msg })
+  }
+})
