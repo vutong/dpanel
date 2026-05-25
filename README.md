@@ -1,69 +1,89 @@
 # dpanel
 
-Bootstrap **Ubuntu 24.04 LTS** + Docker stack + **control panel Nuxt** — quản lý website và MariaDB qua giao diện web.
+Docker hosting control panel for **Ubuntu 24.04 LTS**: manage websites (Node/PHP) and MariaDB via a Nuxt web UI.
 
-## Cài đặt (một lệnh)
+## Requirements
 
-Trên VPS mới (SSH):
+- Ubuntu 24.04 LTS (22.04 may work; not fully tested)
+- Root or sudo
+- 2 GB+ RAM recommended
+- 10 GB+ free disk
+- Ports **80** and **8080** available
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/vutong/dpanel/main/install.sh | sudo bash
-```
-
-Hoặc clone repo rồi chạy:
-
-```bash
-git clone https://github.com/vutong/dpanel.git
-cd dpanel
-chmod +x install.sh
-sudo ./install.sh
-```
-
-Script sẽ hỏi lần lượt:
-
-1. **Panel domain** (vd: `panel.yourdomain.com`)  
-2. **Email** đăng nhập panel  
-3. **Mật khẩu** + nhập lại  
-
-Sau đó tự cài Docker, clone/sync mã, build panel, khởi động stack tại `/opt/stack`.
-
-Truy cập: `http://<panel-domain>` hoặc `http://<IP-VPS>:8080` (nếu chưa có DNS).
-
-### Tùy chọn (không bắt buộc)
+## Install
 
 ```bash
-export DPANEL_REPO=https://github.com/vutong/dpanel.git
-export PANEL_DOMAIN=panel.yourdomain.com   # bỏ qua prompt domain nếu đã set
-sudo ./install.sh
+curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
+sudo bash install.sh
 ```
 
-SSL: **Cloudflare** (Flexible/Full) — VPS chỉ HTTP port 80.
+You will be prompted for:
 
-## Control panel
+1. Panel domain (e.g. `panel.yourdomain.com`)
+2. Login email
+3. Password (min 8 characters)
 
-| Menu | Chức năng |
-|------|-----------|
-| **Website → Tạo** | Domain, Node/PHP, GitHub + token (tùy chọn), deploy |
-| **Website → Danh sách** | Các site đã tạo |
-| **MariaDB → Danh sách / Tạo / Xóa** | Quản lý database |
-| **MariaDB → phpMyAdmin** | Mở `/pma/` qua nginx |
+Install takes about **15–30 minutes** on a fresh VPS (Docker + Nuxt build). Progress is written to `/var/log/dpanel-install.log`.
 
-GitHub để trống → chỉ tạo `apps/<domain>/` + cấu hình nginx. Upload do từng dự án tự quản (vd. WordPress `wp-content/uploads`).
+### Non-interactive install
 
-## Cấu trúc trên VPS
+```bash
+export DPANEL_NONINTERACTIVE=1
+export PANEL_DOMAIN=panel.example.com
+export ADMIN_EMAIL=admin@example.com
+export ADMIN_PASSWORD='your-secure-password'
+curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
+sudo -E bash install.sh
+```
+
+### Options
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DPANEL_SKIP_UPGRADE` | — | Use `DPANEL_FULL_UPGRADE=1` to run `apt upgrade` |
+| `DPANEL_FORCE=1` | — | Reinstall over existing `/opt/stack` without prompt |
+| `APT_LOCK_WAIT_SEC` | `600` | Max wait for apt lock (unattended-upgrades) |
+
+## After install
+
+- Panel: `http://<panel-domain>` or `http://<server-ip>:8080`
+- Summary file: `/opt/stack/CREDENTIALS.txt`
+- CLI: `dpanel status`, `dpanel health`, `dpanel update-panel`
+
+```bash
+dpanel status          # service status
+dpanel health          # API health check
+dpanel update-panel    # rebuild UI after git pull
+dpanel credentials     # show CREDENTIALS.txt
+dpanel logs dpanel     # follow panel logs
+```
+
+## SSL
+
+Use **Cloudflare** (or similar) in front of the VPS — nginx listens on HTTP only (ports 80 / 8080).
+
+## Stack layout
 
 ```
 /opt/stack/
-├── install.sh (bản copy từ repo)
 ├── compose.yml
-├── panel/              # mã nguồn panel
-├── apps/<domain>/      # từng website
-├── data/panel/         # auth, sites.json
+├── .env
+├── CREDENTIALS.txt
+├── panel/              # panel source
+├── apps/<domain>/      # each website
+├── data/panel/         # auth, sites registry
 └── infra/              # nginx, docker, scripts
 ```
 
-Chi tiết kiến trúc: [AGENTS.md](./AGENTS.md).
+Details: [AGENTS.md](./AGENTS.md) (or `agents.md` on case-sensitive systems).
 
-## Đổi tên repo GitHub
+## Uninstall
 
-Repo mới: `https://github.com/vutong/dpanel` — đổi tên từ `ubuntu-docker` trên GitHub Settings → General → Repository name.
+```bash
+sudo bash /opt/stack/infra/scripts/uninstall.sh
+# type YES to confirm
+```
+
+## License
+
+MIT (see repository).

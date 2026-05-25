@@ -24,14 +24,19 @@ Ubuntu 24.04 LTS
 ## Bootstrap
 
 ```bash
-sudo ./install.sh
-# hoặc: curl -fsSL .../install.sh | sudo bash
+curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh
+sudo bash install.sh
 ```
 
-1. Hỏi panel domain + email + mật khẩu panel  
-2. Cài Docker, tạo `/opt/stack`  
-3. Build Nuxt panel → `apps/<PANEL_DOMAIN>/`  
-4. `docker compose up -d`
+Installer (`install.sh` v1.0.0):
+
+1. Preflight (Ubuntu 24.04, RAM, disk, ports)  
+2. Panel domain + email + password (or `DPANEL_NONINTERACTIVE=1`)  
+3. Wait for apt lock; skip `dist-upgrade` by default (`DPANEL_FULL_UPGRADE=1` to enable)  
+4. Clone repo → `/opt/stack`, build panel, `docker compose up`  
+5. Health check, write `/opt/stack/CREDENTIALS.txt`, symlink `dpanel` CLI  
+
+**CLI:** `dpanel status | health | update-panel | credentials | logs`
 
 ## Cấu trúc thư mục
 

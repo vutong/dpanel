@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <aside v-if="showNav" class="sidebar">
-      <div class="brand">dpanel</div>
+      <div class="brand">dpanel <span class="ver">v1.0</span></div>
       <nav>
         <p class="nav-section">Website</p>
         <NuxtLink to="/websites">List</NuxtLink>
@@ -40,6 +40,7 @@ async function logout() {
   flex-direction: column;
 }
 .brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--accent); }
+.brand .ver { font-size: 0.7rem; font-weight: 500; color: var(--muted); }
 .nav-section {
   font-size: 0.7rem;
   text-transform: uppercase;

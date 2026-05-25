@@ -12,8 +12,10 @@ services:
       - ./apps:/var/www/apps:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
-      - dpanel
-      - php-fpm
+      dpanel:
+        condition: service_healthy
+      php-fpm:
+        condition: service_started
     networks:
       - stack
 
@@ -33,6 +35,12 @@ services:
       - .:/opt/stack
       - ./logs/node:/var/log/node
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
     networks:
       - stack
 
@@ -63,6 +71,12 @@ services:
     volumes:
       - ./data/mariadb/volume:/var/lib/mysql
       - ./logs/mariadb:/var/log/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     networks:
       - stack
 
@@ -76,7 +90,8 @@ services:
       PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}
       UPLOAD_LIMIT: 64M
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
     networks:
       - stack
 
@@ -99,5 +114,3 @@ services:
 networks:
   stack:
     driver: bridge
-
-# Thêm site Node: compose.d/nuxt-<slug>.yml (tự sinh bởi panel)
