@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.9"
+INSTALLER_VERSION="1.0.10"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-1234567}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -288,7 +288,7 @@ Change password: dpanel setpass <new-password>
 Stack:        ${STACK_ROOT}
 Install log:  ${INSTALL_LOG}
 
-CLI: dpanel status | dpanel health | dpanel setpass
+CLI: dpanel update | dpanel setpass | dpanel status
 EOF
   chmod 600 "${cred}"
 }
@@ -398,6 +398,15 @@ cat > "${STACK_ROOT}/data/panel/auth.json" <<EOF
 EOF
 chmod 600 "${STACK_ROOT}/data/panel/auth.json"
 echo '[]' > "${STACK_ROOT}/data/panel/sites.json"
+STACK_ROOT="${STACK_ROOT}" INSTALLER_VERSION="${INSTALLER_VERSION}" python3 <<'PY' 2>/dev/null || true
+import json, os
+from datetime import datetime, timezone
+root = os.environ["STACK_ROOT"]
+ver = os.environ["INSTALLER_VERSION"]
+path = os.path.join(root, "data", "panel", "version.json")
+with open(path, "w", encoding="utf-8") as f:
+    json.dump({"version": ver, "installed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}, f)
+PY
 
 NEW_ENV_CREATED=0
 if [[ ! -f "${STACK_ROOT}/.env" ]]; then
@@ -410,6 +419,9 @@ COMPOSE_PROJECT_NAME=${PROJECT_NAME}
 PANEL_DOMAIN=${PANEL_DOMAIN}
 STACK_ROOT=${STACK_ROOT}
 INSTALLER_VERSION=${INSTALLER_VERSION}
+DPANEL_VERSION=${INSTALLER_VERSION}
+DPANEL_REPO=${DPANEL_REPO}
+DPANEL_BRANCH=${DPANEL_BRANCH}
 
 MARIADB_ROOT_PASSWORD=${DB_ROOT_PASS}
 MARIADB_DATABASE=dpanel
@@ -469,5 +481,6 @@ SERVER_IP="$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | aw
 write_credentials
 
 log "Done — http://${PANEL_DOMAIN} (or http://${SERVER_IP}:8080)"
-log "Login: ${ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD} — run: dpanel setpass <new-password>"
+log "Login: ${ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD} — dpanel setpass <new-password>"
+log "Updates: dpanel update-check | sudo dpanel update"
 log "Credentials: ${STACK_ROOT}/CREDENTIALS.txt"

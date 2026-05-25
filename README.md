@@ -56,14 +56,32 @@ dpanel setpass 'Your_new_password'
 
 - Panel: `http://<panel-domain>` or `http://<server-ip>:8080`
 - Summary file: `/opt/stack/CREDENTIALS.txt`
-- CLI: `dpanel status`, `dpanel health`, `dpanel update-panel`
+- Default password: `1234567` → `dpanel setpass 'new-password'`
+
+## Update (when repo changes)
 
 ```bash
-dpanel status          # service status
-dpanel health          # API health check
-dpanel update-panel    # rebuild UI after git pull
-dpanel credentials     # show CREDENTIALS.txt
-dpanel logs dpanel     # follow panel logs
+dpanel update-check     # installed vs latest on GitHub
+sudo dpanel update      # pull main, sync stack, rebuild panel & Docker
+```
+
+Keeps `.env`, `data/`, `apps/` (sites), `logs/`, `compose.d/`. Log: `/var/log/dpanel-update.log`.
+
+| Command | Purpose |
+|---------|---------|
+| `dpanel update` | Full update from `DPANEL_REPO` / `DPANEL_BRANCH` (in `.env`) |
+| `dpanel update --check` | Version check only |
+| `dpanel update --no-build` | Sync files + restart containers, skip Nuxt rebuild |
+| `dpanel update-panel` | Rebuild panel UI only (local `panel/` already changed) |
+| `dpanel version` | Installed version JSON |
+
+First run on an old install (before `update.sh` existed): `dpanel update` downloads the script automatically.
+
+```bash
+dpanel status
+dpanel health
+dpanel credentials
+dpanel logs dpanel
 ```
 
 ## SSL

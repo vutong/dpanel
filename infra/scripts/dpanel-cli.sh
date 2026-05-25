@@ -17,7 +17,26 @@ case "${CMD}" in
   restart)
     docker compose restart "${2:-}"
     ;;
-  update|update-panel)
+  update)
+    if [[ ! -f "${STACK_ROOT}/infra/scripts/update.sh" ]]; then
+      echo "Fetching update.sh..." >&2
+      install -d "${STACK_ROOT}/infra/scripts"
+      curl -fsSL "${DPANEL_RAW_URL:-https://raw.githubusercontent.com/vutong/dpanel/main}/infra/scripts/update.sh" \
+        -o "${STACK_ROOT}/infra/scripts/update.sh"
+      chmod +x "${STACK_ROOT}/infra/scripts/update.sh"
+    fi
+    exec bash "${STACK_ROOT}/infra/scripts/update.sh" "${@:2}"
+    ;;
+  update-check|update-check-only)
+    if [[ ! -f "${STACK_ROOT}/infra/scripts/update.sh" ]]; then
+      install -d "${STACK_ROOT}/infra/scripts"
+      curl -fsSL "${DPANEL_RAW_URL:-https://raw.githubusercontent.com/vutong/dpanel/main}/infra/scripts/update.sh" \
+        -o "${STACK_ROOT}/infra/scripts/update.sh"
+      chmod +x "${STACK_ROOT}/infra/scripts/update.sh"
+    fi
+    exec bash "${STACK_ROOT}/infra/scripts/update.sh" --check
+    ;;
+  update-panel)
     exec bash "${STACK_ROOT}/infra/scripts/update-panel.sh"
     ;;
   deploy)
@@ -38,6 +57,15 @@ case "${CMD}" in
   setpass)
     exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"
     ;;
+  version)
+    if [[ -f "${STACK_ROOT}/data/panel/version.json" ]]; then
+      cat "${STACK_ROOT}/data/panel/version.json"
+    elif grep -E '^DPANEL_VERSION=' "${STACK_ROOT}/.env" 2>/dev/null; then
+      grep -E '^DPANEL_VERSION=' "${STACK_ROOT}/.env"
+    else
+      echo "Version unknown — run: dpanel update"
+    fi
+    ;;
   help|*)
     cat <<'EOF'
 dpanel — stack management
@@ -46,7 +74,10 @@ dpanel — stack management
   dpanel health              Panel API health check
   dpanel logs [svc] [lines]  Follow logs (default: dpanel)
   dpanel restart [svc]       Restart service(s)
-  dpanel update-panel        Rebuild & restart panel UI
+  dpanel update [--check]    Pull latest stack from GitHub & restart
+  dpanel update-check        Show installed vs latest version
+  dpanel update-panel        Rebuild panel UI only (no git pull)
+  dpanel version             Show installed version
   dpanel deploy              docker compose build & up
   dpanel credentials         Show install summary (if saved)
   dpanel setpass <password>  Change panel login password
