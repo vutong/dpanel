@@ -15,7 +15,7 @@
 #
 set -euo pipefail
 
-INSTALLER_VERSION="1.0.1"
+INSTALLER_VERSION="1.0.2"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
 DPANEL_REPO="${DPANEL_REPO:-https://github.com/vutong/dpanel.git}"
@@ -46,6 +46,7 @@ on_err() {
   log "Install failed at line ${line}. Check ${INSTALL_LOG}"
 }
 trap 'on_err $LINENO' ERR
+trap resume_auto_upgrades EXIT
 
 step() {
   STEP=$((STEP + 1))
@@ -81,9 +82,27 @@ wait_for_apt_lock() {
   [[ $waited -gt 0 ]] && log "apt lock released"
 }
 
+AUTO_UPGRADES_PAUSED=0
+
+pause_auto_upgrades() {
+  if systemctl list-unit-files unattended-upgrades.service &>/dev/null 2>&1; then
+    log "Pausing unattended-upgrades during install..."
+    systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
+    AUTO_UPGRADES_PAUSED=1
+  fi
+}
+
+resume_auto_upgrades() {
+  [[ "${AUTO_UPGRADES_PAUSED}" == "1" ]] || return 0
+  systemctl start unattended-upgrades.timer 2>/dev/null || true
+}
+
 apt_get() {
   wait_for_apt_lock
-  apt-get "$@"
+  log "Running: apt-get $*"
+  apt-get "$@" 2>&1 | tee -a "${INSTALL_LOG}"
+  local rc="${PIPESTATUS[0]}"
+  [[ "$rc" -eq 0 ]] || die "apt-get failed (exit ${rc}): apt-get $*"
 }
 
 preflight_checks() {
@@ -316,6 +335,7 @@ fi
 
 step "Preparing system packages"
 export DEBIAN_FRONTEND=noninteractive
+pause_auto_upgrades
 apt_get update
 if [[ "${DPANEL_FULL_UPGRADE:-0}" == "1" ]]; then
   log "Running full dist-upgrade (DPANEL_FULL_UPGRADE=1)..."
@@ -324,9 +344,11 @@ else
   log "Skipping dist-upgrade (faster install). Set DPANEL_FULL_UPGRADE=1 to enable."
 fi
 
+log "Installing required packages (may take a few minutes)..."
 apt_get install -y \
   ca-certificates curl gnupg lsb-release git unzip rsync ufw \
   apache2-utils python3
+log "System packages installed"
 
 if ! command -v docker &>/dev/null; then
   step "Installing Docker Engine"
