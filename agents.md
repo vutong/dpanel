@@ -10,7 +10,7 @@ Bootstrap Docker stack trên Ubuntu 24.04 LTS + **control panel Nuxt** (`panel/`
 Ubuntu 24.04 LTS
 └── Docker Engine
     └── docker-compose stack (/opt/stack)
-        ├── nginx (reverse proxy + phpMyAdmin /pma/)
+        ├── nginx (reverse proxy + phpMyAdmin /mariadb/)
         ├── dpanel (Nuxt SSR — control panel)
         ├── php-fpm (các site PHP)
         ├── nuxt-<slug> (mỗi site Node — compose.d/)
@@ -78,7 +78,7 @@ dpanel/
     │   └── conf.d/
     │       ├── .gitkeep
     │       ├── 00-panel.conf      # sinh lại bởi nginx-reload.sh
-    │       └── 99-pma.conf
+    │       └── 00-panel.conf (/mariadb/ → phpMyAdmin)
     ├── docker/
     │   ├── node/
     │   │   ├── Dockerfile

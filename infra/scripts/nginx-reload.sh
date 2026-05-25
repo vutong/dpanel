@@ -9,7 +9,7 @@ cd "$STACK_ROOT"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-panel.local}"
 
-PMA_ABSOLUTE_URI="http://${PANEL_DOMAIN}/pma/"
+PMA_ABSOLUTE_URI="http://${PANEL_DOMAIN}/mariadb/"
 if grep -q '^PMA_ABSOLUTE_URI=' "${STACK_ROOT}/.env" 2>/dev/null; then
   sed -i "s|^PMA_ABSOLUTE_URI=.*|PMA_ABSOLUTE_URI=${PMA_ABSOLUTE_URI}|" "${STACK_ROOT}/.env"
 else
@@ -22,7 +22,7 @@ server {
     listen 8080;
     server_name ${PANEL_DOMAIN};
 
-    location /pma/ {
+    location /mariadb/ {
         proxy_pass http://phpmyadmin:80/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
@@ -46,7 +46,7 @@ server {
 }
 EOF
 
-rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf"
+rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf" "${STACK_ROOT}/infra/nginx/conf.d/99-mariadb.conf"
 
 if [[ "$MODE" != "panel-only" ]]; then
   docker compose exec -T nginx nginx -s reload 2>/dev/null \

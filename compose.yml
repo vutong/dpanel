@@ -89,7 +89,7 @@ services:
       PMA_HOST: mariadb
       PMA_USER: root
       PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}
-      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-http://localhost/pma/}
+      PMA_ABSOLUTE_URI: ${PMA_ABSOLUTE_URI:-http://localhost/mariadb/}
       UPLOAD_LIMIT: 64M
     depends_on:
       mariadb:
