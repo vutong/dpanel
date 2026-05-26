@@ -10,6 +10,8 @@
       </NuxtLink>
 
       <nav class="nav">
+        <SidebarNavLink to="/" icon="dashboard" label="Dashboard" :sub="false" />
+
         <p class="nav-section">
           <AppIcon name="globe" :size="14" class="section-icon" />
           Website
@@ -130,36 +132,58 @@ async function logout() {
   opacity: 0.75;
 }
 
+:deep(.nav-link--main),
 :deep(.nav-link--sub) {
   display: flex;
   align-items: center;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+:deep(.nav-link--main) {
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.35rem;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+:deep(.nav-link--sub) {
   gap: 0.55rem;
   padding: 0.4rem 0.55rem 0.4rem 0.75rem;
   border-radius: 7px;
   color: var(--text);
-  text-decoration: none;
   font-size: 0.8rem;
-  transition: background 0.15s, color 0.15s;
 }
 
+:deep(.nav-link--main:hover),
 :deep(.nav-link--sub:hover) {
   background: var(--bg);
   color: var(--accent);
   text-decoration: none;
 }
 
+:deep(.nav-link--main.router-link-active),
 :deep(.nav-link--sub.router-link-active) {
   background: rgba(59, 130, 246, 0.12);
   color: var(--accent);
   font-weight: 500;
 }
 
+:deep(.nav-link--main .app-icon),
 :deep(.nav-link--sub .app-icon) {
   opacity: 0.85;
 }
 
+:deep(.nav-link--main.router-link-active .app-icon),
 :deep(.nav-link--sub.router-link-active .app-icon) {
   opacity: 1;
+}
+
+:deep(.nav-link--main .nav-label) {
+  line-height: 1.3;
 }
 
 :deep(.nav-link--sub .nav-label) {
