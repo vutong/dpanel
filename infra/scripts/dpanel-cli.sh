@@ -110,7 +110,7 @@ case "${CMD}" in
     fi
     ;;
   health|doctor)
-    local hc="${STACK_ROOT}/infra/scripts/health-check.sh"
+    hc="${STACK_ROOT}/infra/scripts/health-check.sh"
     if [[ ! -f "${hc}" ]]; then
       curl -fsSL "${DPANEL_RAW_URL:-https://raw.githubusercontent.com/vutong/dpanel/main}/infra/scripts/health-check.sh" \
         -o "${hc}"
