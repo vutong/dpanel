@@ -1,5 +1,5 @@
 import { requireAuth } from '../../utils/auth-guard'
-import { runScript } from '../../utils/stack'
+import { parseScriptJson, runScript } from '../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -31,8 +31,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const out = await runScript('site-create.sh', args, 300_000, extraEnv)
-    const result = JSON.parse(out.split('\n').pop() || out)
-    return result
+    return parseScriptJson(out)
   } catch (e: unknown) {
     let msg = e instanceof Error ? e.message : 'Failed to create website'
     msg = msg.replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')

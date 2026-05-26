@@ -34,6 +34,16 @@ export async function runScript(
   return (stdout || stderr).trim()
 }
 
+/** Parse last JSON object line from bash script stdout (ignores log lines). */
+export function parseScriptJson<T extends Record<string, unknown>>(stdout: string): T {
+  const lines = stdout.trim().split('\n').map((l) => l.trim()).filter((l) => l.startsWith('{'))
+  const last = lines[lines.length - 1]
+  if (!last) {
+    throw new Error('Script did not return JSON')
+  }
+  return JSON.parse(last) as T
+}
+
 export async function readAuth() {
   const raw = await readFile(join(stackRoot(), 'data', 'panel', 'auth.json'), 'utf8')
   return JSON.parse(raw) as { email: string; passwordHash: string }

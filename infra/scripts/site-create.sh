@@ -149,6 +149,6 @@ with open(path, "w") as f:
     json.dump(sites, f, indent=2)
 PY
 
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh"
+bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2
 
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\"}"

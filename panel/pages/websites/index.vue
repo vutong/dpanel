@@ -4,6 +4,7 @@
       <h1>Websites</h1>
       <NuxtLink to="/websites/create" class="btn btn-primary">+ Create website</NuxtLink>
     </div>
+
     <div v-if="pending" class="muted">Loading...</div>
     <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
     <div v-else class="card">
@@ -14,7 +15,7 @@
             <th>Runtime</th>
             <th>GitHub</th>
             <th>Created</th>
-            <th></th>
+            <th style="text-align: right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -25,53 +26,118 @@
                 {{ s.runtime }}
               </span>
             </td>
-            <td>{{ s.githubUrl || '—' }}</td>
+            <td class="github-cell">{{ s.githubUrl || '—' }}</td>
             <td>{{ formatDate(s.createdAt) }}</td>
-            <td>
+            <td style="text-align: right">
               <button
                 type="button"
-                class="btn btn-danger btn-sm"
-                :disabled="removing === s.domain"
-                @click="removeSite(s.domain)"
+                class="btn btn-danger"
+                :disabled="!!removing"
+                @click="openDelete(s)"
               >
-                {{ removing === s.domain ? 'Removing…' : 'Remove' }}
+                Delete
               </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+
     <p v-if="msg" class="alert" :class="ok ? 'alert-success' : 'alert-error'">{{ msg }}</p>
+
+    <div v-if="deleteTarget" class="modal-backdrop" @click.self="closeDelete">
+      <div class="modal card" role="dialog" aria-labelledby="delete-title">
+        <h2 id="delete-title">Delete website</h2>
+        <p class="muted">
+          Remove <strong>{{ deleteTarget.domain }}</strong> from the panel and stack.
+        </p>
+        <ul class="delete-list">
+          <li>Panel registry (<code>sites.json</code>)</li>
+          <li>Nginx vhost (<code>infra/nginx/conf.d/{{ deleteTarget.domain }}.conf</code>)</li>
+          <li v-if="deleteTarget.runtime === 'node'">
+            Docker service <code>nuxt-{{ slug(deleteTarget.domain) }}</code> and
+            <code>compose.d/nuxt-{{ slug(deleteTarget.domain) }}.yml</code>
+          </li>
+          <li v-else>PHP site nginx config (app files served from <code>apps/{{ deleteTarget.domain }}/</code>)</li>
+        </ul>
+        <label class="purge-label">
+          <input v-model="purgeFiles" type="checkbox" />
+          Also delete <code>apps/{{ deleteTarget.domain }}/</code> (all application files and uploads inside the project)
+        </label>
+        <p v-if="!purgeFiles" class="hint">
+          If unchecked, code remains on disk — you can redeploy the same domain later.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" :disabled="!!removing" @click="closeDelete">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            :disabled="!!removing"
+            @click="confirmDelete"
+          >
+            {{ removing ? 'Deleting…' : 'Delete website' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
+type DeleteResult = { ok: boolean; domain?: string; purged?: boolean; removed?: string[] }
+
 const { data, pending, refresh } = await useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
+
+const deleteTarget = ref<Site | null>(null)
+const purgeFiles = ref(false)
 const removing = ref('')
 const msg = ref('')
 const ok = ref(false)
 
-async function removeSite(domain: string) {
-  if (!confirm(`Remove ${domain}? (nginx, Docker service, and panel entry)`)) return
-  const deleteFiles = confirm(
-    `Also delete apps/${domain}/ entirely? (includes uploads managed by the app, e.g. wp-content/uploads)`
-  )
-  removing.value = domain
+function slug(domain: string) {
+  return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+}
+
+function openDelete(site: Site) {
+  deleteTarget.value = site
+  purgeFiles.value = false
+}
+
+function closeDelete() {
+  if (removing.value) return
+  deleteTarget.value = null
+}
+
+async function confirmDelete() {
+  const site = deleteTarget.value
+  if (!site) return
+
+  removing.value = site.domain
   msg.value = ''
   try {
-    await $fetch(`/api/websites/${encodeURIComponent(domain)}`, {
-      method: 'DELETE',
-      query: deleteFiles ? { purge: '1' } : {}
-    })
+    const result = await $fetch<DeleteResult>(
+      `/api/websites/${encodeURIComponent(site.domain)}`,
+      {
+        method: 'DELETE',
+        query: purgeFiles.value ? { purge: '1' } : {}
+      }
+    )
     ok.value = true
-    msg.value = `Removed ${domain}`
+    const n = result.removed?.length ?? 0
+    msg.value =
+      n > 0
+        ? `Deleted ${site.domain} (${n} stack item${n === 1 ? '' : 's'} removed${result.purged ? ', files purged' : ''})`
+        : `Deleted ${site.domain}`
+    deleteTarget.value = null
     await refresh()
   } catch (e: unknown) {
     ok.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Remove failed'
+    msg.value = err.data?.statusMessage || err.statusMessage || 'Delete failed'
   } finally {
     removing.value = ''
   }
@@ -84,12 +150,68 @@ function formatDate(iso?: string) {
 </script>
 
 <style scoped>
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
 .muted { color: var(--muted); }
-.btn-sm { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
-.btn-danger { background: #b91c1c; color: #fff; border: none; cursor: pointer; }
-.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-.alert { margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 6px; }
-.alert-success { background: #14532d33; color: #86efac; }
-.alert-error { background: #7f1d1d33; color: #fca5a5; }
+.github-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.modal {
+  width: 100%;
+  max-width: 480px;
+}
+.modal h2 {
+  margin-bottom: 0.75rem;
+  font-size: 1.15rem;
+}
+.delete-list {
+  margin: 1rem 0;
+  padding-left: 1.25rem;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.delete-list li { margin-bottom: 0.35rem; }
+.delete-list code {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.purge-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+.hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
 </style>

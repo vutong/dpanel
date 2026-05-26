@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Usage: site-delete.sh <domain> [--purge]
-# Removes site from registry and all stack artifacts (nginx, compose.d, container).
-# --purge also deletes apps/<domain>/ (uploads live inside the app tree, not data/uploads/)
+# Full removal: sites.json, nginx vhost, compose.d, Nuxt container, optional apps/<domain>/
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -15,12 +14,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --purge) PURGE=1 ;;
     -h|--help)
-      echo "Usage: site-delete.sh <domain> [--purge]"
+      echo "Usage: site-delete.sh <domain> [--purge]" >&2
       exit 0
       ;;
   esac
   shift
 done
+
+log() { echo "[dpanel] $*" >&2; }
 
 die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
@@ -38,29 +39,31 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 SLUG="$(site_slug "${DOMAIN}")"
 SVC="nuxt-${SLUG}"
+declare -a REMOVED=()
 
 ensure_python3 || die "python3 required"
+export SITES_FILE DOMAIN="${DOMAIN}"
 
-# Detect runtime before removing from registry
 RUNTIME=""
 if [[ -f "${SITES_FILE}" ]]; then
   RUNTIME="$("${PYBIN}" -c "
-import json, os, sys
+import json, os
 domain = os.environ['DOMAIN']
 with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         if s.get('domain') == domain:
             print(s.get('runtime') or '')
-            sys.exit(0)
+            break
 " 2>/dev/null || true)"
 fi
-export SITES_FILE DOMAIN="${DOMAIN}"
-"${PYBIN}" <<'PY' || die "Site not found in sites.json"
+
+log "Removing website: ${DOMAIN} (runtime=${RUNTIME:-unknown}, purge=${PURGE})"
+
+if [[ -f "${SITES_FILE}" ]]; then
+  if ! "${PYBIN}" <<'PY'; then
 import json, os, sys
 path = os.environ["SITES_FILE"]
 domain = os.environ["DOMAIN"]
-if not os.path.isfile(path):
-    sys.exit(1)
 with open(path) as f:
     sites = json.load(f)
 new = [s for s in sites if s.get("domain") != domain]
@@ -69,27 +72,62 @@ if len(new) == len(sites):
 with open(path, "w") as f:
     json.dump(new, f, indent=2)
 PY
+    die "Site not found in sites.json"
+  fi
+  REMOVED+=("sites.json")
+  log "Removed from sites.json"
+else
+  die "sites.json not found"
+fi
 
-# Stop/remove Nuxt service while compose fragment still exists
 if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
+  log "Stopping Docker service ${SVC}..."
   stack_compose stop "${SVC}" 2>/dev/null || true
   stack_compose rm -f "${SVC}" 2>/dev/null || true
+  REMOVED+=("container:${SVC}")
 fi
 
-rm -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml"
-rm -f "${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf"
-rm -f "${STACK_ROOT}/infra/nginx/conf.d/disabled/${DOMAIN}.conf"
+if [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
+  rm -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml"
+  REMOVED+=("compose.d:nuxt-${SLUG}.yml")
+  log "Removed compose.d/nuxt-${SLUG}.yml"
+fi
+
+for conf in \
+  "${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf" \
+  "${STACK_ROOT}/infra/nginx/conf.d/disabled/${DOMAIN}.conf"; do
+  if [[ -f "${conf}" ]]; then
+    rm -f "${conf}"
+    REMOVED+=("nginx:$(basename "${conf}")")
+    log "Removed ${conf}"
+  fi
+done
 
 if [[ "${PURGE}" -eq 1 ]]; then
-  rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
+  if [[ -d "${STACK_ROOT}/apps/${DOMAIN}" ]]; then
+    rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
+    REMOVED+=("apps:${DOMAIN}")
+    log "Deleted apps/${DOMAIN}/"
+  fi
+else
+  log "Kept apps/${DOMAIN}/ (use --purge to delete application files)"
 fi
 
+log "Pruning orphan artifacts..."
 prune_orphan_site_artifacts 2>/dev/null || true
 
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx-reload failed after site remove"
+log "Reloading nginx..."
+bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2 || die "nginx-reload failed after site remove"
 
-# Recreate compose without deleted fragment and drop orphan containers
-cd "${STACK_ROOT}"
+log "Applying compose stack..."
 stack_compose up -d --remove-orphans 2>/dev/null || true
 
-echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"purged\":${PURGE}}"
+REMOVED_JSON="$(printf '%s\n' "${REMOVED[@]}" | "${PYBIN}" -c "
+import json, sys
+items = [l.strip() for l in sys.stdin if l.strip()]
+print(json.dumps(items))
+")"
+
+log "Done — ${DOMAIN} removed"
+printf '{"ok":true,"domain":"%s","purged":%s,"removed":%s}\n' \
+  "${DOMAIN}" "${PURGE}" "${REMOVED_JSON}"
