@@ -19,10 +19,16 @@ PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
 
 log "Building panel..."
-docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c \
-  "npm ci && npm run build" \
-  || docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c \
-  "npm install && npm run build"
+_panel_docker_build() {
+  docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c "$1"
+}
+if ! _panel_docker_build "npm ci && npm run build"; then
+  log "npm ci failed (lockfile out of sync) — running npm install && build..."
+  _panel_docker_build "npm install && npm run build" || {
+    log "Panel build failed"
+    exit 1
+  }
+fi
 
 log "Deploying to ${APP_DIR}"
 rm -rf "${APP_DIR}"
