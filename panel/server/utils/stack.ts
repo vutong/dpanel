@@ -54,12 +54,20 @@ function siteLogBasename(domain: string, op: string): string {
 
 export type SiteOpKind = 'update' | 'rebuild'
 
+/** Log sources for the site log viewer (Eye). */
+export type SiteLogKind = SiteOpKind | 'create' | 'container'
+
 export function domainSlug(domain: string): string {
   return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
 }
 
-export function siteOpLogPath(domain: string, op: SiteOpKind): string {
-  return join(stackRoot(), 'logs', 'node', `site-${op}-${domainSlug(domain)}.log`)
+export function siteOpLogPath(domain: string, op: Exclude<SiteLogKind, 'container'>): string {
+  const slug = domainSlug(domain)
+  const base = join(stackRoot(), 'logs', 'node')
+  if (op === 'create') {
+    return join(base, `site-create-${slug}.log`)
+  }
+  return join(base, `site-${op}-${slug}.log`)
 }
 
 /** Reset site-ops status before a background script starts (avoids stale poll results). */

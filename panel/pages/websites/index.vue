@@ -40,6 +40,19 @@
                 />
                 <IconButton
                   v-if="s.runtime === 'node'"
+                  icon="eye"
+                  title="View logs"
+                  @click="openLogView(s)"
+                />
+                <IconButton
+                  v-if="s.runtime === 'node'"
+                  icon="edit"
+                  title="Edit .env"
+                  :disabled="isSiteBusy(s.domain)"
+                  @click="openEnvEdit(s)"
+                />
+                <IconButton
+                  v-if="s.runtime === 'node'"
                   icon="wrench"
                   title="Rebuild (npm build)"
                   :disabled="isSiteBusy(s.domain)"
@@ -69,6 +82,19 @@
       :op="streamOp?.op ?? 'rebuild'"
       @close="onStreamClose"
       @done="onStreamDone"
+    />
+
+    <SiteEnvEditModal
+      :open="!!envEditDomain"
+      :domain="envEditDomain ?? ''"
+      @close="closeEnvEdit"
+      @saved="onEnvSaved"
+    />
+
+    <SiteLogViewModal
+      :open="!!logViewDomain"
+      :domain="logViewDomain ?? ''"
+      @close="closeLogView"
     />
 
     <div v-if="updateTarget" class="modal-backdrop" @click.self="closeUpdate">
@@ -169,6 +195,8 @@ const deletePhase = ref<'confirm' | 'background'>('confirm')
 const updateTarget = ref<Site | null>(null)
 const updateToken = ref('')
 const streamOp = ref<{ domain: string; op: SiteOpKind } | null>(null)
+const envEditDomain = ref<string | null>(null)
+const logViewDomain = ref<string | null>(null)
 const opsRunning = ref<Set<string>>(new Set())
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
@@ -205,6 +233,38 @@ function onStreamDone(payload: { ok: boolean; message: string }) {
 
 function slug(domain: string) {
   return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+}
+
+function openLogView(site: Site) {
+  if (site.runtime !== 'node') return
+  logViewDomain.value = site.domain
+}
+
+function closeLogView() {
+  logViewDomain.value = null
+}
+
+function openEnvEdit(site: Site) {
+  if (site.runtime !== 'node') return
+  clearAlert()
+  envEditDomain.value = site.domain
+}
+
+function closeEnvEdit() {
+  envEditDomain.value = null
+}
+
+function onEnvSaved(payload: { restarted: boolean }) {
+  const domain = envEditDomain.value
+  envEditDomain.value = null
+  if (!domain) return
+  showAlert(
+    payload.restarted
+      ? `${domain}: .env saved and app restarted`
+      : `${domain}: .env saved — restart app or Rebuild to apply`,
+    true,
+    8000
+  )
 }
 
 function openUpdate(site: Site) {

@@ -108,6 +108,16 @@
     <template v-else-if="name === 'wrench'">
       <path d="M14.7 6.3a4 4 0 0 0-5.6 5.6l-5.1 5.1a2 2 0 0 0 2.8 2.8l5.1-5.1a4 4 0 0 0 5.6-5.6l-2 2-3.6-3.6 2-2Z" />
     </template>
+    <!-- edit / pencil -->
+    <template v-else-if="name === 'edit'">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+    </template>
+    <!-- eye / view -->
+    <template v-else-if="name === 'eye'">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </template>
   </svg>
 </template>
 
