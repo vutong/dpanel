@@ -251,6 +251,16 @@ h2 {
   font-size: 0.88rem;
 }
 
+.page-alert-enter-active,
+.page-alert-leave-active {
+  transition: opacity 0.12s ease;
+}
+
+.page-alert-enter-from,
+.page-alert-leave-to {
+  opacity: 0;
+}
+
 .alert-info {
   background: var(--accent-muted);
   border: 1px solid var(--accent);

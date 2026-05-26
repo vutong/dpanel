@@ -61,7 +61,7 @@
       </table>
     </div>
 
-    <p v-if="msg" class="alert" :class="ok ? 'alert-success' : 'alert-error'">{{ msg }}</p>
+    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
 
     <div v-if="updateTarget" class="modal-backdrop" @click.self="closeUpdate">
       <div class="modal card" role="dialog" aria-labelledby="update-title">
@@ -189,8 +189,7 @@ const updateToken = ref('')
 const opsRunning = ref<Set<string>>(new Set())
 const pollTimers = new Map<string, ReturnType<typeof setInterval>>()
 const busy = ref('')
-const msg = ref('')
-const ok = ref(false)
+const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 onUnmounted(() => {
   for (const t of pollTimers.values()) clearInterval(t)
@@ -220,8 +219,7 @@ function startOpPoll(domain: string) {
     attempts += 1
     if (attempts > maxAttempts) {
       stopOpPoll(domain)
-      ok.value = false
-      msg.value = `${domain}: operation timed out — check logs/node on the server`
+      showAlert(`${domain}: operation timed out — check logs/node on the server`, false)
       return
     }
     try {
@@ -231,15 +229,13 @@ function startOpPoll(domain: string) {
       if (s.status === 'running' || s.status === 'none') return
       stopOpPoll(domain)
       if (s.status === 'ok') {
-        ok.value = true
-        msg.value = s.message || `Done: ${domain}`
+        showAlert(s.message || `Done: ${domain}`, true)
         if (updateTarget.value?.domain === domain) {
           updateTarget.value = null
           updatePhase.value = 'confirm'
         }
       } else if (s.status === 'error') {
-        ok.value = false
-        msg.value = s.message || `Failed: ${domain}`
+        showAlert(s.message || `Failed: ${domain}`, false)
       }
     } catch {
       /* keep polling */
@@ -259,7 +255,7 @@ function openUpdate(site: Site) {
   updateTarget.value = site
   updatePhase.value = 'confirm'
   updateToken.value = ''
-  msg.value = ''
+  clearAlert()
 }
 
 function closeUpdate() {
@@ -273,7 +269,7 @@ function confirmUpdate() {
 
   const domain = site.domain
   updatePhase.value = 'background'
-  msg.value = ''
+  clearAlert()
 
   void $fetch(`/api/websites/${encodeURIComponent(domain)}/update`, {
     method: 'POST',
@@ -282,9 +278,8 @@ function confirmUpdate() {
     .then(() => startOpPoll(domain))
     .catch((e: unknown) => {
       updatePhase.value = 'confirm'
-      ok.value = false
       const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-      msg.value = err.data?.statusMessage || err.statusMessage || 'Could not start pull'
+      showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start pull', false)
     })
 }
 
@@ -292,17 +287,15 @@ function runRebuild(site: Site) {
   if (site.runtime !== 'node' || isSiteBusy(site.domain)) return
 
   const domain = site.domain
-  ok.value = true
-  msg.value = 'Rebuild is running in the background.'
+  showAlert('Rebuild is running in the background.', true)
   startOpPoll(domain)
 
   window.setTimeout(() => {
     void $fetch(`/api/websites/${encodeURIComponent(domain)}/rebuild`, { method: 'POST' }).catch(
       (e: unknown) => {
         stopOpPoll(domain)
-        ok.value = false
         const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-        msg.value = err.data?.statusMessage || err.statusMessage || 'Could not start rebuild'
+        showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start rebuild', false)
       }
     )
   }, 0)
@@ -311,7 +304,7 @@ function runRebuild(site: Site) {
 function openDelete(site: Site) {
   deleteTarget.value = site
   deletePhase.value = 'confirm'
-  msg.value = ''
+  clearAlert()
 }
 
 function closeDelete() {
@@ -329,15 +322,13 @@ function confirmDelete() {
   hiddenDomains.value = nextHidden
 
   deletePhase.value = 'background'
-  ok.value = true
-  msg.value = ''
+  clearAlert()
 
   void $fetch(`/api/websites/${encodeURIComponent(domain)}`, { method: 'DELETE' })
     .catch((e: unknown) => {
       const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
       const raw = err.data?.statusMessage || err.statusMessage || ''
-      ok.value = false
-      msg.value = raw || `Could not start delete for ${domain}`
+      showAlert(raw || `Could not start delete for ${domain}`, false)
     })
     .finally(() => {
       window.setTimeout(() => {
@@ -346,10 +337,10 @@ function confirmDelete() {
             const restored = new Set(hiddenDomains.value)
             restored.delete(domain)
             hiddenDomains.value = restored
-            if (!msg.value || ok.value) {
-              ok.value = false
-              msg.value = `${domain} is still listed — try Delete again or: sudo dpanel site-remove ${domain}`
-            }
+            showAlert(
+              `${domain} is still listed — try Delete again or: sudo dpanel site-remove ${domain}`,
+              false
+            )
           } else {
             const done = new Set(hiddenDomains.value)
             done.delete(domain)

@@ -47,7 +47,7 @@
       </table>
     </div>
 
-    <p v-if="msg" class="alert" :class="ok ? 'alert-success' : 'alert-error'">{{ msg }}</p>
+    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
 
     <div v-if="modifyTarget" class="modal-backdrop" @click.self="closeModify">
       <div class="modal card" role="dialog" aria-labelledby="modify-title">
@@ -131,15 +131,14 @@ const modifyPassword = ref('')
 const modifyResult = ref<{ user: string; password: string } | null>(null)
 const deleteTarget = ref<DatabaseRow | null>(null)
 const busy = ref('')
-const msg = ref('')
-const ok = ref(false)
+const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 function openModify(db: DatabaseRow) {
   modifyTarget.value = db
   modifyPhase.value = 'confirm'
   modifyPassword.value = ''
   modifyResult.value = null
-  msg.value = ''
+  clearAlert()
 }
 
 function closeModify() {
@@ -153,7 +152,7 @@ async function confirmModify() {
   if (!db || modifyPhase.value !== 'confirm') return
 
   busy.value = db.name
-  msg.value = ''
+  clearAlert()
   try {
     const res = await $fetch<{ user: string; password: string }>(
       `/api/databases/${encodeURIComponent(db.name)}/modify`,
@@ -167,13 +166,11 @@ async function confirmModify() {
     )
     modifyPhase.value = 'done'
     modifyResult.value = { user: res.user, password: res.password }
-    ok.value = true
-    msg.value = `Password reset for ${db.name}`
+    clearAlert()
     await refresh()
   } catch (e: unknown) {
-    ok.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Failed to reset password'
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Failed to reset password', false)
   } finally {
     busy.value = ''
   }
@@ -181,7 +178,7 @@ async function confirmModify() {
 
 function openDelete(db: DatabaseRow) {
   deleteTarget.value = db
-  msg.value = ''
+  clearAlert()
 }
 
 function closeDelete() {
@@ -194,22 +191,23 @@ async function confirmDelete() {
   if (!db) return
 
   busy.value = db.name
-  msg.value = ''
+  clearAlert()
   try {
     const res = await $fetch<{ ok: boolean; name: string; droppedUser?: string | null }>(
       `/api/databases/${encodeURIComponent(db.name)}`,
       { method: 'DELETE', query: { user: db.user } }
     )
-    ok.value = true
-    msg.value = res.droppedUser
-      ? `Deleted database ${res.name} and user ${res.droppedUser}`
-      : `Deleted database ${res.name}`
+    showAlert(
+      res.droppedUser
+        ? `Deleted database ${res.name} and user ${res.droppedUser}`
+        : `Deleted database ${res.name}`,
+      true
+    )
     deleteTarget.value = null
     await refresh()
   } catch (e: unknown) {
-    ok.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Delete failed'
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Delete failed', false)
   } finally {
     busy.value = ''
   }
