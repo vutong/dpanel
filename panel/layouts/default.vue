@@ -1,18 +1,36 @@
 <template>
   <div class="layout">
     <aside v-if="showNav" class="sidebar">
-      <div class="brand">dpanel <span v-if="panelVersion" class="ver">v{{ panelVersion }}</span></div>
-      <nav>
-        <p class="nav-section">Website</p>
-        <NuxtLink to="/websites">List Website</NuxtLink>
-        <NuxtLink to="/websites/create">Create website</NuxtLink>
-        <p class="nav-section">MariaDB</p>
-        <NuxtLink to="/databases/create">Create database</NuxtLink>
-        <NuxtLink to="/databases">List databases</NuxtLink>
-        <NuxtLink to="/databases/delete">Delete database</NuxtLink>
-        <NuxtLink to="/databases/phpmyadmin">phpMyAdmin</NuxtLink>
+      <NuxtLink to="/" class="brand">
+        <AppIcon name="dashboard" :size="22" class="brand-icon" />
+        <span class="brand-text">
+          dpanel
+          <span v-if="panelVersion" class="ver">v{{ panelVersion }}</span>
+        </span>
+      </NuxtLink>
+
+      <nav class="nav">
+        <p class="nav-section">
+          <AppIcon name="globe" :size="14" class="section-icon" />
+          Website
+        </p>
+        <SidebarNavLink to="/websites" icon="list" label="List Website" />
+        <SidebarNavLink to="/websites/create" icon="plus" label="Create website" />
+
+        <p class="nav-section">
+          <AppIcon name="database" :size="14" class="section-icon" />
+          MariaDB
+        </p>
+        <SidebarNavLink to="/databases/create" icon="database-plus" label="Create database" />
+        <SidebarNavLink to="/databases" icon="database" label="List databases" />
+        <SidebarNavLink to="/databases/delete" icon="trash" label="Delete database" />
+        <SidebarNavLink to="/databases/phpmyadmin" icon="table" label="phpMyAdmin" />
       </nav>
-      <button class="btn btn-ghost logout" type="button" @click="logout">Sign out</button>
+
+      <button class="logout-btn" type="button" @click="logout">
+        <span class="logout-label">Sign out</span>
+        <AppIcon name="log-out" :size="18" class="logout-icon" />
+      </button>
     </aside>
     <main class="main">
       <slot />
@@ -36,33 +54,168 @@ async function logout() {
 </script>
 
 <style scoped>
-.layout { display: flex; min-height: 100vh; }
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
 .sidebar {
-  width: 220px;
+  width: 240px;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 1.25rem;
+  padding: 1.25rem 1rem;
   display: flex;
   flex-direction: column;
+  gap: 0.25rem;
 }
-.brand { font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--accent); }
-.brand .ver { font-size: 0.7rem; font-weight: 500; color: var(--muted); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--accent);
+  transition: background 0.15s;
+}
+
+.brand:hover {
+  background: var(--bg);
+  text-decoration: none;
+}
+
+.brand-icon {
+  color: var(--accent);
+}
+
+.brand-text {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.brand .ver {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 .nav-section {
-  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 1rem 0 0.4rem;
-  letter-spacing: 0.05em;
+  margin: 0.85rem 0 0.35rem 0.5rem;
+  letter-spacing: 0.06em;
+  font-weight: 600;
 }
-nav a {
-  display: block;
-  padding: 0.45rem 0.5rem;
-  border-radius: 6px;
+
+.nav-section:first-of-type {
+  margin-top: 0;
+}
+
+.section-icon {
+  opacity: 0.75;
+}
+
+:deep(.nav-link) {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
   color: var(--text);
   text-decoration: none;
   font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
 }
-nav a:hover, nav a.router-link-active { background: var(--bg); color: var(--accent); }
-.logout { margin-top: auto; width: 100%; }
-.main { flex: 1; padding: 2rem; max-width: 960px; }
+
+:deep(.nav-link:hover) {
+  background: var(--bg);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+:deep(.nav-link.router-link-active) {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+:deep(.nav-link .app-icon) {
+  opacity: 0.88;
+}
+
+:deep(.nav-link.router-link-active .app-icon) {
+  opacity: 1;
+}
+
+.nav-label {
+  line-height: 1.3;
+}
+
+.logout-btn {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+
+.logout-btn:hover {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12);
+}
+
+.logout-btn:active {
+  transform: translateY(1px);
+}
+
+.logout-label {
+  flex: 1;
+  text-align: left;
+}
+
+.logout-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.logout-btn:hover .logout-icon {
+  color: #f87171;
+}
+
+.main {
+  flex: 1;
+  padding: 2rem;
+  max-width: 960px;
+}
 </style>
