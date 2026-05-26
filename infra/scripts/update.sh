@@ -221,7 +221,12 @@ systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/nul
 
 if [[ "${SKIP_HEALTH_FIX}" -eq 0 && -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
   log "dpanel health --fix"
-  if ! bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix 2>&1 | tee -a "${INSTALL_LOG}"; then
+  # Show health output on terminal and append to update log
+  _health_cmd=(bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix)
+  if command -v stdbuf >/dev/null 2>&1; then
+    _health_cmd=(stdbuf -oL -eL "${_health_cmd[@]}")
+  fi
+  if ! "${_health_cmd[@]}" 2>&1 | tee -a "${INSTALL_LOG}"; then
     if stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE '^nginx running' \
       && stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -qE '^dpanel running'; then
       log "WARNING: optional health checks failed — nginx and panel are running."

@@ -34,10 +34,17 @@ log() {
   [[ "${JSON_ONLY}" -eq 0 ]] && echo "[dpanel] $*" | tee -a "${HEALTH_LOG}" >&2 || true
 }
 
+step() {
+  log "$1"
+}
+
 [[ -d "${STACK_ROOT}" ]] || { echo '{"ok":false,"error":"stack not found"}'; exit 2; }
 cd "${STACK_ROOT}"
 # shellcheck source=/dev/null
 [[ -f .env ]] && source .env
+
+[[ "${RECHECK}" -eq 1 ]] && step "Re-checking health after fixes..."
+[[ "${FIX}" -eq 1 && "${RECHECK}" -eq 0 ]] && step "Health check (auto-fix enabled)..."
 
 CORE_SERVICES="nginx dpanel mariadb php-fpm"
 OPTIONAL_SERVICES="redis phpmyadmin"
@@ -62,10 +69,10 @@ run_fix() {
   [[ "${FIX}" -eq 0 || -z "${cmd}" ]] && return 0
   log "Applying fix: ${cmd}"
   # shellcheck disable=SC2086
-  eval "${cmd}" >>"${HEALTH_LOG}" 2>&1 || true
+  eval "${cmd}" 2>&1 | tee -a "${HEALTH_LOG}" >&2 || true
 }
 
-# --- checks ---
+step "Checking stack environment..."
 [[ -f "${STACK_ROOT}/.env" ]] && report "stack_env" 1 ".env present" "" \
   || report "stack_env" 0 "missing .env" "re-run install"
 
@@ -76,11 +83,13 @@ else
   report "docker_daemon" 1 "Docker OK" ""
 fi
 
+step "Syncing site configs..."
 prune_orphan_site_artifacts 2>/dev/null || true
 sync_site_configs 2>/dev/null || true
 fix_legacy_nginx_vhosts 2>/dev/null || true
 quarantine_legacy_static_nuxt_vhosts 2>/dev/null || true
 
+step "Checking Docker services..."
 if ! stack_compose ps >/dev/null 2>&1; then
   report "compose" 0 "docker compose error" "dpanel nginx-reload"
   run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
@@ -105,7 +114,12 @@ else
   done
 fi
 
-if stack_compose run --rm --no-deps nginx nginx -t >/dev/null 2>&1; then
+step "Checking nginx..."
+nginx_t_ok=0
+if stack_compose run --rm --no-deps nginx nginx -t 2>&1 | tee -a "${HEALTH_LOG}" >&2; then
+  nginx_t_ok=1
+fi
+if [[ "${nginx_t_ok}" -eq 1 ]]; then
   report "nginx_config" 1 "nginx -t OK" ""
 else
   report "nginx_config" 0 "nginx config invalid" "dpanel nginx-reload"
@@ -123,24 +137,27 @@ else
   run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
 fi
 
+# Use /api/ping only — /api/health must not run this script (recursion hang).
 _panel_api_ok() {
   local out try
-  for try in 1 2 3 4 5; do
-    out="$(stack_compose exec -T dpanel wget -q -O- --timeout=8 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+  for try in 1 2 3; do
+    step "Checking panel API (attempt ${try}/3)..."
+    out="$(timeout 5 stack_compose exec -T dpanel wget -q -O- --timeout=3 http://127.0.0.1:3000/api/ping 2>/dev/null || true)"
     if printf '%s' "${out}" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
       return 0
     fi
-    [[ "${try}" -lt 5 ]] && sleep 3
+    [[ "${try}" -lt 3 ]] && sleep 2
   done
   return 1
 }
 if _panel_api_ok; then
   report "panel_api" 1 "panel API OK" "" "critical"
 else
-  report "panel_api" 0 "panel API down (still starting?)" "stack_compose restart dpanel" "critical"
+  report "panel_api" 0 "panel API not responding on /api/ping" "stack_compose restart dpanel" "critical"
   run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart dpanel"
 fi
 
+step "Checking MariaDB..."
 if stack_compose exec -T mariadb healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
   report "mariadb" 1 "MariaDB OK" ""
 else
@@ -148,6 +165,7 @@ else
   run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart mariadb"
 fi
 
+step "Checking panel tools..."
 if stack_compose exec -T dpanel sh -c 'command -v python3 >/dev/null' 2>/dev/null; then
   report "python3" 1 "python3 in panel container" ""
 else
@@ -159,7 +177,7 @@ disk_mb="$(df -BM "${STACK_ROOT}" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); pri
 if [[ "${disk_mb}" -gt 512 ]] 2>/dev/null; then
   report "disk" 1 "disk free ${disk_mb}MB" "" "warn"
 else
-  report "disk" 0 "low disk space" "" "warn"
+  report "disk" 0 "low disk space (${disk_mb}MB free)" "" "warn"
 fi
 
 VERSION="unknown"
@@ -169,22 +187,17 @@ elif grep -q '^DPANEL_VERSION=' "${STACK_ROOT}/.env" 2>/dev/null; then
   VERSION="$(grep '^DPANEL_VERSION=' "${STACK_ROOT}/.env" | cut -d= -f2-)"
 fi
 
-# After fixes, re-run once (keep human-readable logs for update)
 if [[ "${FIX}" -eq 1 && "${ISSUES}" -gt 0 && "${RECHECK}" -eq 0 ]]; then
-  log "Waiting for services after fixes..."
-  sleep 10
+  log "Waiting 8s for services after fixes..."
+  sleep 8
   exec bash "${BASH_SOURCE[0]}" --recheck
 fi
 
-OK=true
-[[ "${ISSUES}" -gt 0 ]] && OK=false
-
-# Build JSON
 JSON_FILE="$(mktemp)"
+first=1
 {
   echo -n '{"ok":'; [[ "${ISSUES}" -eq 0 ]] && echo -n 'true' || echo -n 'false'
   echo -n ',"service":"dpanel","version":"'${VERSION}'","issues":'${ISSUES}',"warnings":'${WARNINGS}',"checks":['
-  local first=1
   for line in "${REPORT_LINES[@]}"; do
     IFS='|' read -r id ok msg fix_hint _severity <<< "${line}"
     [[ "${first}" -eq 0 ]] && echo -n ','
@@ -214,11 +227,12 @@ if [[ "${JSON_ONLY}" -eq 0 ]]; then
       IFS='|' read -r id ok msg fix_hint severity <<< "${line}"
       [[ "${ok}" -eq 0 ]] && [[ "${severity}" == "warn" ]] && log "  [WARN] ${id}: ${msg}"
     done
-    log "Try: sudo dpanel health --fix"
+    [[ "${FIX}" -eq 0 ]] && log "Try: sudo dpanel health --fix"
   fi
+else
+  cat "${JSON_FILE}"
 fi
 
-cat "${JSON_FILE}"
 rm -f "${JSON_FILE}"
 
 exit $([[ "${ISSUES}" -eq 0 ]] && echo 0 || echo 1)
