@@ -38,7 +38,6 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 SLUG="$(site_slug "${DOMAIN}")"
-SVC="nuxt-${SLUG}"
 declare -a REMOVED=()
 HAD_NUXT=0
 
@@ -101,7 +100,6 @@ for conf in \
   fi
 done
 
-# JSON before slow work (rm -rf apps, compose stop, prune+compose up) — avoids panel timeout/502.
 REMOVED_JSON="$(printf '%s\n' "${REMOVED[@]}" | "${PYBIN}" -c "
 import json, sys
 items = [l.strip() for l in sys.stdin if l.strip()]
@@ -111,27 +109,7 @@ print(json.dumps(items))
 printf '{"ok":true,"domain":"%s","purged":true,"removed":%s}\n' \
   "${DOMAIN}" "${REMOVED_JSON}"
 
-APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
-mkdir -p "${STACK_ROOT}/logs/node"
-nohup bash -c "
-  sleep 0.3
-  export STACK_ROOT='${STACK_ROOT}'
-  cd \"\${STACK_ROOT}\"
-  # shellcheck source=_helpers.sh
-  source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
-  app_dir='${APP_DIR}'
-  if [[ -d \"\${app_dir}\" ]]; then
-    rm -rf \"\${app_dir}\"
-    echo \"[dpanel] Deleted \${app_dir}/\" >&2
-  fi
-  if [[ ${HAD_NUXT} -eq 1 ]]; then
-    site_finalize_async 'site-delete-${SLUG}' '${SVC}' delete
-  else
-    stack_compose up -d nginx 2>/dev/null || true
-    nginx_reload_stack 2>/dev/null || true
-    prune_orphan_site_artifacts --no-up 2>/dev/null || true
-  fi
-" >> "${STACK_ROOT}/logs/node/site-delete-${SLUG}.log" 2>&1 &
-disown 2>/dev/null || true
+# Slow work in background: rm apps/, docker stop Nuxt, nginx reload — never stack_compose up/stop (502 panel).
+site_delete_finish_background "${DOMAIN}" "${SLUG}" "${HAD_NUXT}"
 
-log "Done — ${DOMAIN} unregistered (files/containers finish in background — see logs/node/site-delete-${SLUG}.log)" >&2
+log "Done — ${DOMAIN} unregistered (background: logs/node/site-delete-${SLUG}.log)" >&2

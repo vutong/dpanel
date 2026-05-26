@@ -120,6 +120,59 @@ docker_stop_container_by_name() {
   docker rm -f "${name}" 2>/dev/null || true
 }
 
+# Serialize site create/delete Docker work (avoids concurrent compose → panel 502).
+_site_ops_lock_dir() {
+  echo "${STACK_ROOT}/data/panel/.site-ops.lock"
+}
+
+site_ops_lock_acquire() {
+  local lock dir="$(_site_ops_lock_dir)"
+  mkdir -p "$(dirname "${lock}")"
+  local i
+  for ((i = 0; i < 180; i++)); do
+    if mkdir "${lock}" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "[dpanel] WARNING: site ops lock busy — proceeding anyway" >&2
+  return 0
+}
+
+site_ops_lock_release() {
+  rmdir "$(_site_ops_lock_dir)" 2>/dev/null || true
+}
+
+site_op_status_file() {
+  local domain="$1"
+  mkdir -p "${STACK_ROOT}/data/panel/site-ops"
+  echo "${STACK_ROOT}/data/panel/site-ops/${domain}.json"
+}
+
+# Panel polls data/panel/site-ops/<domain>.json for pull/rebuild progress.
+site_op_status_write() {
+  local domain="$1" op="$2" status="$3" message="${4:-}"
+  ensure_python3 >/dev/null 2>&1 || return 0
+  local path
+  path="$(site_op_status_file "${domain}")"
+  export STATUS_PATH="${path}" DOMAIN="${domain}" OP="${op}" STATUS="${status}" MSG="${message}"
+  "${PYBIN}" <<'PY'
+import json, os
+from datetime import datetime, timezone
+
+path = os.environ["STATUS_PATH"]
+data = {
+    "domain": os.environ["DOMAIN"],
+    "op": os.environ["OP"],
+    "status": os.environ["STATUS"],
+    "message": os.environ.get("MSG") or "",
+    "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+PY
+}
+
 # compose.yml only (for nginx -t when compose.d should not affect the test).
 stack_compose_base() {
   local -a args=(-f "${STACK_ROOT}/compose.yml")
@@ -256,11 +309,10 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
-# After site create/delete from panel UI: reload nginx without full "compose up" (avoids restarting dpanel mid-request → 502).
+# After site create from panel: start Nuxt service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).
 site_finalize_async() {
   local log_name="${1:-site-ops}"
   local nuxt_svc="${2:-}"
-  local mode="${3:-}" # "delete" = stop site container + prune orphans (no full compose up)
   mkdir -p "${STACK_ROOT}/logs/node"
   nohup bash -c "
     sleep 0.5
@@ -268,19 +320,40 @@ site_finalize_async() {
     cd \"\${STACK_ROOT}\"
     # shellcheck source=_helpers.sh
     source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
-    if [[ \"${mode}\" == delete ]]; then
-      if [[ -n \"${nuxt_svc}\" ]]; then
-        slug=\"\${nuxt_svc#nuxt-}\"
-        docker_stop_container_by_name \"\$(_nuxt_container_name \"\${slug}\")\"
-        stack_compose stop \"${nuxt_svc}\" 2>/dev/null || true
-        stack_compose rm -f \"${nuxt_svc}\" 2>/dev/null || true
-      fi
-      prune_orphan_site_artifacts --no-up 2>/dev/null || true
-    else
-      [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
-    fi
-    stack_compose up -d nginx 2>/dev/null || true
+    site_ops_lock_acquire
+    [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
     nginx_reload_stack 2>/dev/null || true
+    site_ops_lock_release
+  " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
+  disown 2>/dev/null || true
+}
+
+# Background finish after site-delete.sh removed registry + configs (docker-only — no compose up/stop).
+site_delete_finish_background() {
+  local domain="$1"
+  local slug="$2"
+  local had_nuxt="${3:-0}"
+  local app_dir="${STACK_ROOT}/apps/${domain}"
+  local log_name="site-delete-${slug}"
+  mkdir -p "${STACK_ROOT}/logs/node"
+  nohup bash -c "
+    sleep 0.3
+    export STACK_ROOT='${STACK_ROOT}'
+    cd \"\${STACK_ROOT}\"
+    # shellcheck source=_helpers.sh
+    source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
+    site_ops_lock_acquire
+    if [[ -d '${app_dir}' ]]; then
+      rm -rf '${app_dir}'
+      echo '[dpanel] Deleted ${app_dir}/' >&2
+    fi
+    if [[ ${had_nuxt} -eq 1 ]]; then
+      docker_stop_container_by_name \"\$(_nuxt_container_name '${slug}')\"
+    fi
+    prune_orphan_site_artifacts --no-up --docker-only 2>/dev/null || true
+    nginx_reload_stack 2>/dev/null || true
+    site_ops_lock_release
+    echo '[dpanel] Site delete background done: ${domain}' >&2
   " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
   disown 2>/dev/null || true
 }
@@ -328,7 +401,7 @@ nginx_test_stack() {
     || stack_compose run --rm --no-deps nginx nginx -t
 }
 
-# Reload nginx in the running container (compose plugin not required).
+# Reload nginx in the running container (plain docker only — compose exec/restart can disturb dpanel).
 nginx_reload_stack() {
   local cid
   cid="$(_nginx_container_id)"
@@ -336,9 +409,7 @@ nginx_reload_stack() {
     docker exec "${cid}" nginx -s reload 2>/dev/null && return 0
     docker restart "${cid}" 2>/dev/null && return 0
   fi
-  _stack_compose_available || return 1
-  stack_compose exec -T nginx nginx -s reload 2>/dev/null \
-    || stack_compose restart nginx
+  return 1
 }
 
 # Legacy v1 nginx: proxy_pass http://nuxt-<slug>:3000 (resolved at boot → fails if container down).
@@ -404,10 +475,17 @@ quarantine_legacy_static_nuxt_vhosts() {
 }
 
 # Remove nginx/compose/container artifacts for domains not listed in sites.json.
-# --no-up: skip "compose up --remove-orphans" (panel site-delete uses this in background — full up restarts dpanel → 502).
+# --no-up: skip "compose up --remove-orphans" (panel site-delete — full up restarts dpanel → 502).
+# --docker-only: stop orphans via docker stop/rm, not "compose stop" (compose file may already be gone).
 prune_orphan_site_artifacts() {
-  local skip_up=0
-  [[ "${1:-}" == "--no-up" ]] && skip_up=1
+  local skip_up=0 docker_only=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-up) skip_up=1 ;;
+      --docker-only) docker_only=1 ;;
+    esac
+    shift
+  done
 
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
   # shellcheck source=/dev/null
@@ -470,9 +548,13 @@ print(' '.join(domains))
     slug="${f##*/nuxt-}"
     slug="${slug%.yml}"
     if ! _is_registered_slug "${slug}"; then
-      svc="nuxt-${slug}"
-      stack_compose stop "${svc}" 2>/dev/null || true
-      stack_compose rm -f "${svc}" 2>/dev/null || true
+      if [[ "${docker_only}" -eq 1 ]]; then
+        docker_stop_container_by_name "$(_nuxt_container_name "${slug}")"
+      else
+        svc="nuxt-${slug}"
+        stack_compose stop "${svc}" 2>/dev/null || true
+        stack_compose rm -f "${svc}" 2>/dev/null || true
+      fi
       rm -f "$f"
     fi
   done

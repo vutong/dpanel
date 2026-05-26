@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process'
+import { mkdirSync, openSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 const execFileAsync = promisify(execFile)
 
@@ -46,17 +47,31 @@ export function scriptErrorMessage(err: unknown): string {
   return (e.message || 'Script failed').replace(/^Command failed:.*\n?/i, '').trim() || 'Script failed'
 }
 
+function siteLogBasename(domain: string, op: string): string {
+  const slug = domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+  return `site-${op}-${slug}.log`
+}
+
 /** Start a bash script in the background (panel API returns immediately — no 502 from long work). */
 export function runScriptDetached(
   script: string,
   args: string[] = [],
-  extraEnv: Record<string, string> = {}
+  extraEnv: Record<string, string> = {},
+  logDomain?: string,
+  logOp?: string
 ): void {
+  let stdio: 'ignore' | ['ignore', number, number] = 'ignore'
+  if (logDomain && logOp) {
+    const logPath = join(stackRoot(), 'logs/node', siteLogBasename(logDomain, logOp))
+    mkdirSync(dirname(logPath), { recursive: true })
+    const fd = openSync(logPath, 'a')
+    stdio = ['ignore', fd, fd]
+  }
   const child = spawn('bash', [scriptPath(script), ...args], {
     cwd: stackRoot(),
     env: { ...process.env, STACK_ROOT: stackRoot(), ...extraEnv },
     detached: true,
-    stdio: 'ignore'
+    stdio
   })
   child.unref()
 }

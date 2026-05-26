@@ -34,16 +34,16 @@
                   v-if="s.githubUrl"
                   icon="git-pull"
                   title="Update from Git"
-                  :disabled="!!busy"
-                  :busy="busy === s.domain"
+                  :disabled="isSiteBusy(s.domain)"
+                  :busy="isSiteBusy(s.domain)"
                   @click="openUpdate(s)"
                 />
                 <IconButton
                   v-if="s.runtime === 'node'"
                   icon="wrench"
                   title="Rebuild (npm build)"
-                  :disabled="!!busy"
-                  :busy="busy === s.domain"
+                  :disabled="isSiteBusy(s.domain)"
+                  :busy="isSiteBusy(s.domain)"
                   @click="runRebuild(s)"
                 />
                 <IconButton
@@ -70,7 +70,7 @@
           Pull latest code for <strong>{{ updateTarget.domain }}</strong>
           <span v-if="updateTarget.githubUrl" class="repo-url">{{ updateTarget.githubUrl }}</span>
         </p>
-        <div class="field">
+        <div v-if="updatePhase === 'confirm'" class="field">
           <label class="label">GitHub token (PAT)</label>
           <input
             v-model="updateToken"
@@ -84,12 +84,28 @@
             (<code>ghp_...</code> with <code>repo</code> scope).
           </p>
         </div>
+        <p v-else class="alert alert-info delete-running">
+          Pull is running in the background.
+        </p>
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" :disabled="!!busy" @click="closeUpdate">
+          <button
+            v-if="updatePhase === 'confirm'"
+            type="button"
+            class="btn btn-ghost"
+            @click="closeUpdate"
+          >
             Cancel
           </button>
-          <button type="button" class="btn btn-primary" :disabled="!!busy" @click="confirmUpdate">
-            {{ busy === updateTarget.domain ? 'Pulling…' : 'Pull from Git' }}
+          <button v-else type="button" class="btn btn-primary" @click="closeUpdate">
+            Close
+          </button>
+          <button
+            v-if="updatePhase === 'confirm'"
+            type="button"
+            class="btn btn-primary"
+            @click="confirmUpdate"
+          >
+            Pull from Git
           </button>
         </div>
       </div>
@@ -151,6 +167,12 @@
 
 <script setup lang="ts">
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
+type SiteOpStatus = {
+  domain?: string
+  op?: string
+  status: 'none' | 'running' | 'ok' | 'error'
+  message?: string
+}
 
 const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
@@ -162,10 +184,72 @@ const displaySites = computed(() =>
 const deleteTarget = ref<Site | null>(null)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const updateTarget = ref<Site | null>(null)
+const updatePhase = ref<'confirm' | 'background'>('confirm')
 const updateToken = ref('')
+const opsRunning = ref<Set<string>>(new Set())
+const pollTimers = new Map<string, ReturnType<typeof setInterval>>()
 const busy = ref('')
 const msg = ref('')
 const ok = ref(false)
+
+onUnmounted(() => {
+  for (const t of pollTimers.values()) clearInterval(t)
+  pollTimers.clear()
+})
+
+function isSiteBusy(domain: string) {
+  return opsRunning.value.has(domain)
+}
+
+function stopOpPoll(domain: string) {
+  const t = pollTimers.get(domain)
+  if (t) clearInterval(t)
+  pollTimers.delete(domain)
+  const next = new Set(opsRunning.value)
+  next.delete(domain)
+  opsRunning.value = next
+}
+
+function startOpPoll(domain: string) {
+  if (pollTimers.has(domain)) return
+  opsRunning.value = new Set([...opsRunning.value, domain])
+  let attempts = 0
+  const maxAttempts = 240
+
+  const poll = async () => {
+    attempts += 1
+    if (attempts > maxAttempts) {
+      stopOpPoll(domain)
+      ok.value = false
+      msg.value = `${domain}: operation timed out — check logs/node on the server`
+      return
+    }
+    try {
+      const s = await $fetch<SiteOpStatus>(
+        `/api/websites/${encodeURIComponent(domain)}/operation`
+      )
+      if (s.status === 'running' || s.status === 'none') return
+      stopOpPoll(domain)
+      if (s.status === 'ok') {
+        ok.value = true
+        msg.value = s.message || `Done: ${domain}`
+        if (updateTarget.value?.domain === domain) {
+          updateTarget.value = null
+          updatePhase.value = 'confirm'
+        }
+      } else if (s.status === 'error') {
+        ok.value = false
+        msg.value = s.message || `Failed: ${domain}`
+      }
+    } catch {
+      /* keep polling */
+    }
+  }
+
+  void poll()
+  const timer = setInterval(() => void poll(), 2500)
+  pollTimers.set(domain, timer)
+}
 
 function slug(domain: string) {
   return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
@@ -173,54 +257,55 @@ function slug(domain: string) {
 
 function openUpdate(site: Site) {
   updateTarget.value = site
+  updatePhase.value = 'confirm'
   updateToken.value = ''
   msg.value = ''
 }
 
 function closeUpdate() {
-  if (busy.value) return
   updateTarget.value = null
+  updatePhase.value = 'confirm'
 }
 
-async function confirmUpdate() {
+function confirmUpdate() {
   const site = updateTarget.value
-  if (!site) return
+  if (!site || updatePhase.value !== 'confirm') return
 
-  busy.value = site.domain
+  const domain = site.domain
+  updatePhase.value = 'background'
   msg.value = ''
-  try {
-    await $fetch(`/api/websites/${encodeURIComponent(site.domain)}/update`, {
-      method: 'POST',
-      body: { githubToken: updateToken.value.trim() || undefined }
+
+  void $fetch(`/api/websites/${encodeURIComponent(domain)}/update`, {
+    method: 'POST',
+    body: { githubToken: updateToken.value.trim() || undefined }
+  })
+    .then(() => startOpPoll(domain))
+    .catch((e: unknown) => {
+      updatePhase.value = 'confirm'
+      ok.value = false
+      const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+      msg.value = err.data?.statusMessage || err.statusMessage || 'Could not start pull'
     })
-    ok.value = true
-    msg.value = `Updated ${site.domain} from Git`
-    updateTarget.value = null
-    await refresh()
-  } catch (e: unknown) {
-    ok.value = false
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Git update failed'
-  } finally {
-    busy.value = ''
-  }
 }
 
-async function runRebuild(site: Site) {
-  if (site.runtime !== 'node') return
-  busy.value = site.domain
-  msg.value = ''
-  try {
-    await $fetch(`/api/websites/${encodeURIComponent(site.domain)}/rebuild`, { method: 'POST' })
-    ok.value = true
-    msg.value = `Rebuilt ${site.domain} (npm build + container restart)`
-  } catch (e: unknown) {
-    ok.value = false
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Rebuild failed'
-  } finally {
-    busy.value = ''
-  }
+function runRebuild(site: Site) {
+  if (site.runtime !== 'node' || isSiteBusy(site.domain)) return
+
+  const domain = site.domain
+  ok.value = true
+  msg.value = 'Rebuild is running in the background.'
+  startOpPoll(domain)
+
+  window.setTimeout(() => {
+    void $fetch(`/api/websites/${encodeURIComponent(domain)}/rebuild`, { method: 'POST' }).catch(
+      (e: unknown) => {
+        stopOpPoll(domain)
+        ok.value = false
+        const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+        msg.value = err.data?.statusMessage || err.statusMessage || 'Could not start rebuild'
+      }
+    )
+  }, 0)
 }
 
 function openDelete(site: Site) {

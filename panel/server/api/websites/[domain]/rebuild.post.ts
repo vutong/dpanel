@@ -1,5 +1,7 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { parseScriptJson, runScript } from '../../../utils/stack'
+import { runScriptDetached, stackRoot } from '../../../utils/stack'
+import { access } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -9,11 +11,20 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
   }
 
+  const script = join(stackRoot(), 'infra', 'scripts', 'site-rebuild.sh')
   try {
-    const out = await runScript('site-rebuild.sh', [domain], 600_000)
-    return parseScriptJson(out)
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Failed to rebuild site'
-    throw createError({ statusCode: 500, statusMessage: msg })
+    await access(script)
+  } catch {
+    throw createError({ statusCode: 500, statusMessage: 'site-rebuild.sh not found — run: sudo dpanel update' })
+  }
+
+  runScriptDetached('site-rebuild.sh', [domain], {}, domain, 'rebuild')
+
+  return {
+    ok: true,
+    accepted: true,
+    background: true,
+    domain,
+    op: 'rebuild'
   }
 })

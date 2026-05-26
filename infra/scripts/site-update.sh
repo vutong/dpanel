@@ -12,10 +12,23 @@ source "${STACK_ROOT}/infra/scripts/_github.sh"
 DOMAIN="${1:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
-die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
+die() {
+  site_op_status_write "${DOMAIN}" "update" "error" "$*" 2>/dev/null || true
+  echo "{\"ok\":false,\"error\":\"$*\"}" >&2
+  exit 1
+}
 
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
+
+SLUG="$(site_slug "${DOMAIN}")"
+LOG="${STACK_ROOT}/logs/node/site-update-${SLUG}.log"
+
+mkdir -p "${STACK_ROOT}/logs/node"
+exec >>"${LOG}" 2>&1
+echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') site-update ${DOMAIN}"
+
+site_op_status_write "${DOMAIN}" "update" "running" "Pulling from Git…"
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
@@ -57,4 +70,5 @@ else
   fi
 fi
 
+site_op_status_write "${DOMAIN}" "update" "ok" "Pull complete"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\",\"action\":\"update\"}"
