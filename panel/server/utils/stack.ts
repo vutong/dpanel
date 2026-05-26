@@ -54,6 +54,14 @@ function siteLogBasename(domain: string, op: string): string {
 
 export type SiteOpKind = 'update' | 'rebuild'
 
+export function domainSlug(domain: string): string {
+  return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+}
+
+export function siteOpLogPath(domain: string, op: SiteOpKind): string {
+  return join(stackRoot(), 'logs', 'node', `site-${op}-${domainSlug(domain)}.log`)
+}
+
 /** Reset site-ops status before a background script starts (avoids stale poll results). */
 export function writeSiteOpStatus(
   domain: string,

@@ -19,20 +19,22 @@ log() { echo "[dpanel] $*" >&2; }
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
 
+ensure_python3 || die "python3 required — run: sudo dpanel update"
+
 SLUG="$(site_slug "${DOMAIN}")"
 SVC="nuxt-${SLUG}"
 LOG="${STACK_ROOT}/logs/node/site-rebuild-${SLUG}.log"
 
 mkdir -p "${STACK_ROOT}/logs/node"
+: >>"${LOG}"
 exec >>"${LOG}" 2>&1
 echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') site-rebuild ${DOMAIN}"
 
-site_op_status_write "${DOMAIN}" "rebuild" "running" "Building…"
+site_op_status_write "${DOMAIN}" "rebuild" "running" "Building…" || true
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
 
-ensure_python3 || die "python3 required"
 export SITES_FILE DOMAIN
 RUNTIME="$("${PYBIN}" -c "
 import json, os, sys
@@ -55,7 +57,8 @@ trap site_ops_lock_release EXIT
 
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
 nuxt_container_build "${DOMAIN}" \
-  || die "npm build failed — see logs/node/site-rebuild-${SLUG}.log"
+  || die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
 
-site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete"
+nginx_reload_stack 2>/dev/null || true
+site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete — site should be online"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"service\":\"${SVC}\",\"action\":\"rebuild\"}"

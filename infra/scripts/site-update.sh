@@ -21,10 +21,13 @@ die() {
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
 
+ensure_python3 || die "python3 required — run: sudo dpanel update"
+
 SLUG="$(site_slug "${DOMAIN}")"
 LOG="${STACK_ROOT}/logs/node/site-update-${SLUG}.log"
 
 mkdir -p "${STACK_ROOT}/logs/node"
+: >>"${LOG}"
 exec >>"${LOG}" 2>&1
 echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') site-update ${DOMAIN}"
 
@@ -33,7 +36,6 @@ site_op_status_write "${DOMAIN}" "update" "running" "Pulling from Git…"
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
 
-ensure_python3 || die "python3 required"
 export SITES_FILE DOMAIN
 read -r GITHUB_URL RUNTIME < <("${PYBIN}" -c "
 import json, os, sys

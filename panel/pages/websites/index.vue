@@ -63,6 +63,14 @@
 
     <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
 
+    <SiteOpStreamModal
+      :open="!!streamOp"
+      :domain="streamOp?.domain ?? ''"
+      :op="streamOp?.op ?? 'rebuild'"
+      @close="onStreamClose"
+      @done="onStreamDone"
+    />
+
     <div v-if="updateTarget" class="modal-backdrop" @click.self="closeUpdate">
       <div class="modal card" role="dialog" aria-labelledby="update-title">
         <h2 id="update-title">Update from Git</h2>
@@ -70,7 +78,7 @@
           Pull latest code for <strong>{{ updateTarget.domain }}</strong>
           <span v-if="updateTarget.githubUrl" class="repo-url">{{ updateTarget.githubUrl }}</span>
         </p>
-        <div v-if="updatePhase === 'confirm'" class="field">
+        <div class="field">
           <label class="label">GitHub token (PAT)</label>
           <input
             v-model="updateToken"
@@ -84,29 +92,9 @@
             (<code>ghp_...</code> with <code>repo</code> scope).
           </p>
         </div>
-        <p v-else class="alert alert-info delete-running">
-          Pull is running in the background.
-        </p>
         <div class="modal-actions">
-          <button
-            v-if="updatePhase === 'confirm'"
-            type="button"
-            class="btn btn-ghost"
-            @click="closeUpdate"
-          >
-            Cancel
-          </button>
-          <button v-else type="button" class="btn btn-primary" @click="closeUpdate">
-            Close
-          </button>
-          <button
-            v-if="updatePhase === 'confirm'"
-            type="button"
-            class="btn btn-primary"
-            @click="confirmUpdate"
-          >
-            Pull from Git
-          </button>
+          <button type="button" class="btn btn-ghost" @click="closeUpdate">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="confirmUpdate">Pull from Git</button>
         </div>
       </div>
     </div>
@@ -168,12 +156,6 @@
 <script setup lang="ts">
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
 type SiteOpKind = 'update' | 'rebuild'
-type SiteOpStatus = {
-  domain?: string
-  op?: string
-  status: 'none' | 'running' | 'ok' | 'error'
-  message?: string
-}
 
 const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
@@ -185,83 +167,40 @@ const displaySites = computed(() =>
 const deleteTarget = ref<Site | null>(null)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const updateTarget = ref<Site | null>(null)
-const updatePhase = ref<'confirm' | 'background'>('confirm')
 const updateToken = ref('')
+const streamOp = ref<{ domain: string; op: SiteOpKind } | null>(null)
 const opsRunning = ref<Set<string>>(new Set())
-const pollTimers = new Map<string, ReturnType<typeof setInterval>>()
-/** Bumps when a poll is cancelled — ignores in-flight responses from the previous operation. */
-const opPollGen = new Map<string, number>()
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
-
-onUnmounted(() => {
-  for (const t of pollTimers.values()) clearInterval(t)
-  pollTimers.clear()
-})
 
 function isSiteBusy(domain: string) {
   return opsRunning.value.has(domain)
 }
 
-function stopOpPoll(domain: string) {
-  opPollGen.set(domain, (opPollGen.get(domain) ?? 0) + 1)
-  const t = pollTimers.get(domain)
-  if (t) clearInterval(t)
-  pollTimers.delete(domain)
+function markOpRunning(domain: string) {
+  opsRunning.value = new Set([...opsRunning.value, domain])
+}
+
+function markOpIdle(domain: string) {
   const next = new Set(opsRunning.value)
   next.delete(domain)
   opsRunning.value = next
 }
 
-function opDoneMessage(expectedOp: SiteOpKind, domain: string, fromServer?: string) {
-  if (fromServer?.trim()) return fromServer.trim()
-  return expectedOp === 'update'
-    ? `${domain}: Git pull complete`
-    : `${domain}: Rebuild complete`
+function openStream(domain: string, op: SiteOpKind) {
+  markOpRunning(domain)
+  streamOp.value = { domain, op }
 }
 
-function startOpPoll(domain: string, expectedOp: SiteOpKind) {
-  stopOpPoll(domain)
-  const gen = (opPollGen.get(domain) ?? 0) + 1
-  opPollGen.set(domain, gen)
-  opsRunning.value = new Set([...opsRunning.value, domain])
-  let attempts = 0
-  const maxAttempts = 240
+function onStreamClose() {
+  if (streamOp.value) markOpIdle(streamOp.value.domain)
+  streamOp.value = null
+}
 
-  const poll = async () => {
-    if (opPollGen.get(domain) !== gen) return
-    attempts += 1
-    if (attempts > maxAttempts) {
-      if (opPollGen.get(domain) !== gen) return
-      stopOpPoll(domain)
-      showAlert(`${domain}: operation timed out — check logs/node on the server`, false)
-      return
-    }
-    try {
-      const s = await $fetch<SiteOpStatus>(
-        `/api/websites/${encodeURIComponent(domain)}/operation`
-      )
-      if (opPollGen.get(domain) !== gen) return
-      if (s.op && s.op !== expectedOp) return
-      if (s.status === 'running' || s.status === 'none') return
-      stopOpPoll(domain)
-      if (s.status === 'ok') {
-        showAlert(opDoneMessage(expectedOp, domain, s.message), true)
-        if (expectedOp === 'update' && updateTarget.value?.domain === domain) {
-          updateTarget.value = null
-          updatePhase.value = 'confirm'
-        }
-      } else if (s.status === 'error') {
-        showAlert(s.message || `${domain}: ${expectedOp} failed`, false)
-      }
-    } catch {
-      /* keep polling */
-    }
-  }
-
-  void poll()
-  const timer = setInterval(() => void poll(), 2500)
-  pollTimers.set(domain, timer)
+function onStreamDone(payload: { ok: boolean; message: string }) {
+  if (streamOp.value) markOpIdle(streamOp.value.domain)
+  streamOp.value = null
+  showAlert(payload.message, payload.ok, payload.ok ? 8000 : 0)
 }
 
 function slug(domain: string) {
@@ -270,37 +209,32 @@ function slug(domain: string) {
 
 function openUpdate(site: Site) {
   updateTarget.value = site
-  updatePhase.value = 'confirm'
   updateToken.value = ''
   clearAlert()
 }
 
 function closeUpdate() {
   updateTarget.value = null
-  updatePhase.value = 'confirm'
 }
 
-function confirmUpdate() {
+async function confirmUpdate() {
   const site = updateTarget.value
-  if (!site || updatePhase.value !== 'confirm') return
+  if (!site) return
 
   const domain = site.domain
-  updatePhase.value = 'background'
   clearAlert()
 
-  void $fetch(`/api/websites/${encodeURIComponent(domain)}/update`, {
-    method: 'POST',
-    body: { githubToken: updateToken.value.trim() || undefined }
-  })
-    .then(() => {
-      showAlert(`${domain}: pulling from Git…`, true)
-      startOpPoll(domain, 'update')
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(domain)}/update`, {
+      method: 'POST',
+      body: { githubToken: updateToken.value.trim() || undefined }
     })
-    .catch((e: unknown) => {
-      updatePhase.value = 'confirm'
-      const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-      showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start pull', false)
-    })
+    closeUpdate()
+    openStream(domain, 'update')
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start pull', false)
+  }
 }
 
 async function runRebuild(site: Site) {
@@ -308,12 +242,10 @@ async function runRebuild(site: Site) {
 
   const domain = site.domain
   clearAlert()
-  stopOpPoll(domain)
 
   try {
     await $fetch(`/api/websites/${encodeURIComponent(domain)}/rebuild`, { method: 'POST' })
-    showAlert(`${domain}: rebuild running in the background…`, true)
-    startOpPoll(domain, 'rebuild')
+    openStream(domain, 'rebuild')
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start rebuild', false)

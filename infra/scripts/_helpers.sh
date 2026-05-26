@@ -152,7 +152,10 @@ site_op_status_file() {
 # Panel polls data/panel/site-ops/<domain>.json for pull/rebuild progress.
 site_op_status_write() {
   local domain="$1" op="$2" status="$3" message="${4:-}"
-  ensure_python3 >/dev/null 2>&1 || return 0
+  ensure_python3 >/dev/null 2>&1 || {
+    echo "[dpanel] WARNING: site_op_status_write skipped (python3 unavailable)" >&2
+    return 1
+  }
   local path
   path="$(site_op_status_file "${domain}")"
   export STATUS_PATH="${path}" DOMAIN="${domain}" OP="${op}" STATUS="${status}" MSG="${message}"
@@ -244,6 +247,9 @@ server {
         set \$nuxt_upstream nuxt-${slug}:3000;
         proxy_pass http://\$nuxt_upstream;
         proxy_http_version 1.1;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -320,8 +326,8 @@ nuxt_container_build() {
   app_dir="${STACK_ROOT}/apps/${domain}"
 
   [[ -f "${app_dir}/package.json" ]] || {
-    echo "[dpanel] Skip build — no package.json in apps/${domain}/" >&2
-    return 0
+    echo "[dpanel] No package.json in apps/${domain}/ — deploy code first" >&2
+    return 1
   }
 
   cd "${STACK_ROOT}"
@@ -333,15 +339,30 @@ nuxt_container_build() {
     sleep 2
   done
   [[ -n "${nuxt_cid}" ]] || {
-    echo "[dpanel] Nuxt container not running (${cname})" >&2
+    echo "[dpanel] Nuxt container not running (${cname}) — check: docker ps -a | grep nuxt-${slug}" >&2
     return 1
   }
 
-  echo "[dpanel] npm install & build for ${domain}…" >&2
+  echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
   docker exec "${nuxt_cid}" sh -c 'npm ci 2>/dev/null || npm install; npm run build' \
     || return 1
-  docker restart "${nuxt_cid}" 2>/dev/null || true
-  return 0
+
+  if [[ ! -f "${app_dir}/.output/server/index.mjs" ]]; then
+    echo "[dpanel] Build finished but missing .output/server/index.mjs — check package.json build script" >&2
+    return 1
+  fi
+
+  echo "[dpanel] Restarting ${cname}…" >&2
+  docker restart "${nuxt_cid}" 2>/dev/null || return 1
+  for ((i = 0; i < 20; i++)); do
+    if docker exec "${nuxt_cid}" wget -q -O- --timeout=2 http://127.0.0.1:3000/ >/dev/null 2>&1; then
+      echo "[dpanel] App responding on :3000" >&2
+      return 0
+    fi
+    sleep 2
+  done
+  echo "[dpanel] Container up but nothing listening on :3000 — see logs above" >&2
+  return 1
 }
 
 # After site create from panel: start Nuxt service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).
