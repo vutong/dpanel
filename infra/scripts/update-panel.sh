@@ -3,7 +3,7 @@
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
-INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-install.log}"
+INSTALL_LOG="${INSTALL_LOG:-/var/log/dpanel-update.log}"
 
 log() { echo "[dpanel] $*" | tee -a "${INSTALL_LOG}" >&2; }
 
@@ -18,10 +18,9 @@ PANEL_DOMAIN="${PANEL_DOMAIN:?PANEL_DOMAIN not set in .env}"
 PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
 
-log "Building panel (npm install)..."
-# npm install (not npm ci) — tolerant when lockfile on VPS lags behind package.json after git pull
-_panel_docker_build "npm install && npm run build" || {
-  log "Panel build failed"
+chmod +x "${STACK_ROOT}/infra/scripts/build-panel.sh"
+bash "${STACK_ROOT}/infra/scripts/build-panel.sh" "${PANEL_SRC}" || {
+  log "Panel build failed — see output above or ${INSTALL_LOG}"
   exit 1
 }
 

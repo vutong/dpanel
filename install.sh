@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.34"
+INSTALLER_VERSION="1.0.35"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -50,6 +50,11 @@ log_detail() {
 die() {
   log "ERROR: $*"
   log "Log file: ${INSTALL_LOG}"
+  if [[ -f "${INSTALL_LOG}" ]]; then
+    echo "[dpanel] --- last 50 lines of ${INSTALL_LOG} ---" >&2
+    tail -50 "${INSTALL_LOG}" >&2 || true
+    echo "[dpanel] --- end ---" >&2
+  fi
   exit 1
 }
 
@@ -435,11 +440,8 @@ fi
 step "Build panel"
 PANEL_SRC="${STACK_ROOT}/panel"
 APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
-_nuxt_build() {
-  docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c "$1"
-}
-run_cmd "npm install && build" _nuxt_build "npm install && npm run build"
-[[ -d "${PANEL_SRC}/.output" ]] || die "Nuxt build failed"
+chmod +x "${STACK_ROOT}/infra/scripts/build-panel.sh"
+run_cmd "Build panel (Docker)" bash "${STACK_ROOT}/infra/scripts/build-panel.sh" "${PANEL_SRC}"
 
 rm -rf "${APP_DIR}"
 mkdir -p "${APP_DIR}"

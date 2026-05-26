@@ -33,11 +33,11 @@
 </template>
 
 <script setup lang="ts">
-const { loading } = usePageInit()
+const { loading: pageLoading } = usePageInit()
 const name = ref('')
 const user = ref('')
 const password = ref('')
-const loading = ref(false)
+const submitting = ref(false)
 const message = ref('')
 const ok = ref(false)
 const created = ref<{ name: string; user: string; password: string } | null>(null)
