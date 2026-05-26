@@ -1,6 +1,6 @@
 <template>
-  <NuxtLink :to="to" class="nav-link">
-    <AppIcon :name="icon" :size="18" />
+  <NuxtLink :to="to" class="nav-link nav-link--sub">
+    <AppIcon :name="icon" :size="16" />
     <span class="nav-label">{{ label }}</span>
   </NuxtLink>
 </template>
