@@ -104,13 +104,21 @@ async function submit() {
       data?: { statusMessage?: string; message?: string }
       statusMessage?: string
       message?: string
+      statusCode?: number
     }
-    message.value =
+    const raw =
       err.data?.statusMessage ||
       err.data?.message ||
       err.statusMessage ||
       err.message ||
-      'Failed to create website'
+      ''
+    if (err.statusCode === 502 || /bad gateway/i.test(raw)) {
+      message.value =
+        'Gateway error — the site may still have been created. Wait a few seconds and check Websites, or run: sudo dpanel nginx-reload'
+      await navigateTo('/websites')
+    } else {
+      message.value = raw || 'Failed to create website'
+    }
   } finally {
     submitting.value = false
   }

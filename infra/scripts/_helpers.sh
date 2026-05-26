@@ -256,6 +256,24 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
+# After site create/delete from panel UI: reload nginx without full "compose up" (avoids restarting dpanel mid-request → 502).
+site_finalize_async() {
+  local log_name="${1:-site-ops}"
+  local nuxt_svc="${2:-}"
+  mkdir -p "${STACK_ROOT}/logs/node"
+  nohup bash -c "
+    sleep 0.5
+    export STACK_ROOT='${STACK_ROOT}'
+    cd \"\${STACK_ROOT}\"
+    # shellcheck source=_helpers.sh
+    source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
+    [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
+    stack_compose up -d nginx 2>/dev/null || true
+    nginx_reload_stack 2>/dev/null || true
+  " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
+  disown 2>/dev/null || true
+}
+
 # Wait until dpanel container healthcheck is healthy (or /api/ping responds).
 wait_for_dpanel_ready() {
   local max_wait="${1:-90}"

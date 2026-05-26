@@ -123,16 +123,4 @@ log "Done — ${DOMAIN} removed (nginx reload runs in background)"
 printf '{"ok":true,"domain":"%s","purged":true,"removed":%s}\n' \
   "${DOMAIN}" "${REMOVED_JSON}"
 
-# Finish nginx/compose after JSON stdout so the panel API responds before proxy disruption (avoids 502).
-mkdir -p "${STACK_ROOT}/logs/node"
-nohup bash -c "
-  sleep 0.3
-  STACK_ROOT='${STACK_ROOT}'
-  # shellcheck source=_helpers.sh
-  source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
-  nginx_reload_stack 2>/dev/null || true
-  if ! nginx_test_stack 1 2>/dev/null; then
-    bash \"\${STACK_ROOT}/infra/scripts/nginx-reload.sh\" || true
-  fi
-  stack_compose up -d --remove-orphans 2>/dev/null || true
-" >> "${STACK_ROOT}/logs/node/site-delete.log" 2>&1 &
+site_finalize_async "site-delete-${SLUG}"

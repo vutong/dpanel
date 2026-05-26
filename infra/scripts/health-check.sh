@@ -90,6 +90,26 @@ check_core_services() {
   done
 }
 
+check_disk_space() {
+  local disk_mb
+  disk_mb="$(df -BM "${STACK_ROOT}" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}' || echo 0)"
+  if [[ "${disk_mb}" -gt 512 ]] 2>/dev/null; then
+    report "disk" 1 "disk free ${disk_mb}MB" "" "warn"
+  else
+    report "disk" 0 "low disk space (${disk_mb}MB free)" "" "warn"
+  fi
+}
+
+check_panel_tools() {
+  if stack_compose exec -T dpanel sh -c 'command -v python3 >/dev/null' 2>/dev/null; then
+    report "python3" 1 "python3 in panel container" ""
+  else
+    report "python3" 0 "python3 missing in panel" "stack_compose exec dpanel apk add --no-cache python3"
+    run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose exec dpanel apk add --no-cache python3"
+  fi
+  check_disk_space
+}
+
 check_optional_services() {
   local svc state
   for svc in ${OPTIONAL_SERVICES}; do
@@ -194,20 +214,7 @@ else
 
   if [[ "${FROM_UPDATE}" -eq 0 ]]; then
     step "Checking panel tools..."
-    if stack_compose exec -T dpanel sh -c 'command -v python3 >/dev/null' 2>/dev/null; then
-      report "python3" 1 "python3 in panel container" ""
-    else
-      report "python3" 0 "python3 missing in panel" "stack_compose exec dpanel apk add --no-cache python3"
-      run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose exec dpanel apk add --no-cache python3"
-    fi
-
-    local disk_mb
-    disk_mb="$(df -BM "${STACK_ROOT}" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}' || echo 0)"
-    if [[ "${disk_mb}" -gt 512 ]] 2>/dev/null; then
-      report "disk" 1 "disk free ${disk_mb}MB" "" "warn"
-    else
-      report "disk" 0 "low disk space (${disk_mb}MB free)" "" "warn"
-    fi
+    check_panel_tools
   fi
 fi
 

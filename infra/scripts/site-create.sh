@@ -22,6 +22,8 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
+SLUG="$(site_slug "${DOMAIN}")"
+NUXT_SVC=""
 mkdir -p "$APP_DIR"
 
 if [[ -n "$GITHUB_URL" ]]; then
@@ -43,14 +45,11 @@ fi
 if [[ "$RUNTIME" == "node" ]]; then
   write_nuxt_compose_fragment "${DOMAIN}"
   write_nginx_node_site "${DOMAIN}"
-  cd "$STACK_ROOT"
-  SLUG="$(site_slug "${DOMAIN}")"
-  stack_compose up -d "nuxt-${SLUG}" 2>/dev/null || true
+  NUXT_SVC="nuxt-${SLUG}"
 else
   write_nginx_php_site "${DOMAIN}"
 fi
 
-# Update sites.json
 ensure_python3 || die "python3 required — run: sudo apt-get install -y python3"
 export SITES_FILE DOMAIN RUNTIME GITHUB_URL
 "${PYBIN}" <<'PY'
@@ -78,10 +77,8 @@ with open(path, "w") as f:
     json.dump(sites, f, indent=2)
 PY
 
-if ! bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2; then
-  echo "[dpanel] Warning: nginx-reload had errors — trying direct reload..." >&2
-  nginx_reload_stack 2>/dev/null \
-    || echo "[dpanel] Site created; run on VPS: sudo dpanel nginx-reload" >&2
-fi
-
+# JSON first — panel API must respond before async Docker work (full nginx-reload restarts dpanel → 502).
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\"}"
+
+site_finalize_async "site-create-${SLUG}" "${NUXT_SVC}"
+echo "[dpanel] Site ${DOMAIN} registered — nginx/Nuxt apply in background (see logs/node/site-create-${SLUG}.log)" >&2
