@@ -66,6 +66,7 @@ else
   report "docker_daemon" 1 "Docker OK" ""
 fi
 
+prune_orphan_site_artifacts 2>/dev/null || true
 sync_site_configs 2>/dev/null || true
 
 if ! stack_compose ps >/dev/null 2>&1; then

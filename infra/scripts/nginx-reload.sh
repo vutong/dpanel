@@ -24,6 +24,9 @@ fi
 mkdir -p "${STACK_ROOT}/infra/nginx/conf.d"
 touch "${STACK_ROOT}/logs/nginx/access.log" "${STACK_ROOT}/logs/nginx/error.log"
 
+log "Removing orphan site artifacts (not in sites.json)..."
+prune_orphan_site_artifacts
+
 log "Syncing site configs from sites.json..."
 sync_site_configs
 

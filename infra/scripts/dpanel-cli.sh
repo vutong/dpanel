@@ -43,6 +43,10 @@ Services
   logs [service] [lines]     Follow logs (default: dpanel, 100 lines)
   restart [service]        Restart one or all services
 
+Websites
+  site-remove <domain> [--purge]
+                             Remove site (nginx, compose.d, container; --purge deletes app files)
+
 Security
   setpass <password>         Change panel login password
 
@@ -113,6 +117,9 @@ case "${CMD}" in
       chmod +x "${hc}"
     fi
     exec bash "${hc}" "${@:2}"
+    ;;
+  site-remove|site-delete)
+    exec bash "${STACK_ROOT}/infra/scripts/site-delete.sh" "${@:2}"
     ;;
   setpass)
     exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"

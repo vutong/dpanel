@@ -88,6 +88,7 @@ dpanel/
     │       └── config/99-custom.ini
     └── scripts/
         ├── site-create.sh
+        ├── site-delete.sh
         ├── site-list.sh
         ├── db-list.sh
         ├── db-create.sh
