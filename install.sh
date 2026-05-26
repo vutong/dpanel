@@ -438,12 +438,7 @@ APP_DIR="${STACK_ROOT}/apps/${PANEL_DOMAIN}"
 _nuxt_build() {
   docker run --rm -v "${PANEL_SRC}:/app" -w /app node:22-alpine sh -c "$1"
 }
-if ! run_cmd_try "npm ci && build" _nuxt_build "npm ci && npm run build"; then
-  log "npm ci failed, using npm install"
-fi
-if [[ ! -d "${PANEL_SRC}/.output" ]]; then
-  run_cmd "npm install && build" _nuxt_build "npm install && npm run build"
-fi
+run_cmd "npm install && build" _nuxt_build "npm install && npm run build"
 [[ -d "${PANEL_SRC}/.output" ]] || die "Nuxt build failed"
 
 rm -rf "${APP_DIR}"
