@@ -14,7 +14,7 @@
             <th>Domain</th>
             <th>Runtime</th>
             <th>GitHub</th>
-            <th>Created</th>
+            <th class="created-col">Created</th>
             <th class="col-actions">Actions</th>
           </tr>
         </thead>
@@ -27,7 +27,7 @@
               </span>
             </td>
             <td class="github-cell">{{ s.githubUrl || '—' }}</td>
-            <td>{{ formatDate(s.createdAt) }}</td>
+            <td class="created-col">{{ formatDate(s.createdAt) }}</td>
             <td class="col-actions">
               <div class="action-btns">
                 <IconButton
@@ -339,6 +339,11 @@ function formatDate(iso?: string) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.85rem;
+}
+.created-col {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 .repo-url {
   display: block;
