@@ -62,14 +62,14 @@ dpanel setpass 'Your_new_password'
 
 ```bash
 dpanel update-check     # installed vs latest on GitHub
-sudo dpanel update      # pull main, sync stack, rebuild panel & Docker
+sudo dpanel update      # pull, rebuild, nginx-reload, health --fix (one command)
 ```
 
 Keeps `.env`, `data/`, `apps/` (sites), `logs/`, `compose.d/`. Log: `/var/log/dpanel-update.log`.
 
 | Command | Purpose |
 |---------|---------|
-| `dpanel update` | Full update from `DPANEL_REPO` / `DPANEL_BRANCH` (in `.env`) |
+| `dpanel update` | Full update: sync, rebuild, **nginx-reload**, health `--fix`, **nginx-reload** again |
 | `dpanel update --check` | Version check only |
 | `dpanel update --no-build` | Sync files + restart containers, skip Nuxt rebuild |
 | `dpanel update-panel` | Rebuild panel UI only (local `panel/` already changed) |
@@ -85,7 +85,7 @@ dpanel credentials
 dpanel logs dpanel
 ```
 
-`dpanel update` ends with `health --fix` automatically (skip with `--no-health-fix`).
+`dpanel update` runs `nginx-reload` twice (after `docker up` and after `health --fix`). Skip with `--no-nginx-reload` / `--no-health-fix`.
 
 ## SSL
 

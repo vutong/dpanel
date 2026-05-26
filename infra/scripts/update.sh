@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pull latest dpanel from GitHub, sync stack (keep data/sites/.env), rebuild, restart.
 #
-#   dpanel update              Full update
+#   dpanel update              Full update (includes nginx-reload + health --fix)
 #   dpanel update --check      Compare local vs remote version only
 #   dpanel update --no-build   Sync infra/compose only, skip Nuxt rebuild
 #
@@ -16,19 +16,24 @@ RAW_REPO_BASE="${DPANEL_RAW_BASE:-https://raw.githubusercontent.com/vutong/dpane
 CHECK_ONLY=0
 SKIP_BUILD=0
 SKIP_HEALTH_FIX=0
+SKIP_NGINX_RELOAD=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
     --no-build) SKIP_BUILD=1; shift ;;
     --no-health-fix) SKIP_HEALTH_FIX=1; shift ;;
+    --no-nginx-reload) SKIP_NGINX_RELOAD=1; shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: dpanel update [--check] [--no-build] [--no-health-fix]
+Usage: dpanel update [--check] [--no-build] [--no-health-fix] [--no-nginx-reload]
 
-  --check          Show installed vs latest version (no changes)
-  --no-build       Sync files and containers only; skip Nuxt rebuild
-  --no-health-fix  Skip automatic health --fix at end of update
+  Full update always runs: sync → rebuild → docker up → nginx-reload → health --fix → nginx-reload
+
+  --check            Show installed vs latest version (no changes)
+  --no-build         Sync files and containers only; skip Nuxt rebuild
+  --no-health-fix    Skip automatic health --fix at end of update
+  --no-nginx-reload  Skip nginx-reload (not recommended)
 EOF
       exit 0
       ;;
@@ -188,6 +193,12 @@ NEW_VER="$(grep -E '^INSTALLER_VERSION=' "${STACK_ROOT}/install.sh" | head -1 | 
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 ensure_python3 >> "${INSTALL_LOG}" 2>&1 || log "Warning: python3 not available — some scripts may fail"
 
+run_nginx_reload() {
+  [[ "${SKIP_NGINX_RELOAD}" -eq 0 ]] || return 0
+  log "dpanel nginx-reload"
+  bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx-reload failed"
+}
+
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   log "Rebuilding panel..."
   bash "${STACK_ROOT}/infra/scripts/update-panel.sh" >> "${INSTALL_LOG}" 2>&1 \
@@ -202,21 +213,20 @@ stack_compose build >> "${INSTALL_LOG}" 2>&1 || die "docker compose build failed
 stack_compose up -d --remove-orphans >> "${INSTALL_LOG}" 2>&1 || die "docker compose up failed"
 
 export STACK_ROOT
-log "Configuring nginx..."
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx-reload failed"
+run_nginx_reload
 
 [[ -n "${NEW_VER}" ]] && set_env_version "${NEW_VER}"
 
 systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
 
-log "Update complete — version ${NEW_VER:-${REMOTE_VER:-?}}"
-log "Panel: http://${PANEL_DOMAIN}"
-
 if [[ "${SKIP_HEALTH_FIX}" -eq 0 && -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
-  log "Running health check (with auto-fix)..."
+  log "dpanel health --fix"
   if ! bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix; then
     die "Health check still failing — run: sudo dpanel health"
   fi
-else
-  log "Tip: run sudo dpanel health --fix"
 fi
+
+run_nginx_reload
+
+log "Update complete — version ${NEW_VER:-${REMOTE_VER:-?}}"
+log "Panel: http://${PANEL_DOMAIN}"
