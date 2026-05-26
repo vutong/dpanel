@@ -18,7 +18,15 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'dpanel',
-      meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }]
+      meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
+      script: [
+        {
+          innerHTML:
+            "(function(){try{var t=localStorage.getItem('dpanel-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}})();",
+          tagPosition: 'head',
+          key: 'dpanel-theme-init'
+        }
+      ]
     }
   }
 })

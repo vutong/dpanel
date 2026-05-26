@@ -65,6 +65,25 @@
       <polyline points="16 17 21 12 16 7" />
       <line x1="21" y1="12" x2="9" y2="12" />
     </template>
+    <!-- sun -->
+    <template v-else-if="name === 'sun'">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </template>
+    <!-- moon -->
+    <template v-else-if="name === 'moon'">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </template>
+    <!-- mail -->
+    <template v-else-if="name === 'mail'">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-8.97 5.7a2 2 0 0 1-2.06 0L2 7" />
+    </template>
+    <!-- lock -->
+    <template v-else-if="name === 'lock'">
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </template>
     <!-- layout-dashboard -->
     <template v-else-if="name === 'dashboard'">
       <rect x="3" y="3" width="7" height="9" rx="1" />

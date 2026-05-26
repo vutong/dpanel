@@ -1,13 +1,16 @@
 <template>
   <div class="layout">
     <aside v-if="showNav" class="sidebar">
-      <NuxtLink to="/" class="brand">
-        <AppIcon name="dashboard" :size="22" class="brand-icon" />
-        <span class="brand-text">
-          dpanel
-          <span v-if="panelVersion" class="ver">v{{ panelVersion }}</span>
-        </span>
-      </NuxtLink>
+      <div class="sidebar-head">
+        <div class="brand">
+          <AppIcon name="dashboard" :size="22" class="brand-icon" />
+          <span class="brand-text">
+            dpanel
+            <span v-if="panelVersion" class="ver">v{{ panelVersion }}</span>
+          </span>
+        </div>
+        <ThemeToggle />
+      </div>
 
       <nav class="nav">
         <SidebarNavLink to="/" icon="dashboard" label="Dashboard" :sub="false" />
@@ -59,57 +62,63 @@ async function logout() {
 .layout {
   display: flex;
   min-height: 100vh;
+  background: var(--bg);
 }
 
 .sidebar {
-  width: 240px;
+  width: 248px;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 1.25rem 1rem;
+  padding: 1.15rem 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.2rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1.15rem;
+  padding: 0 0.15rem;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  margin-bottom: 1.25rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 8px;
-  text-decoration: none;
-  color: var(--accent);
-  transition: background 0.15s;
-}
-
-.brand:hover {
-  background: var(--bg);
-  text-decoration: none;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .brand-icon {
   color: var(--accent);
+  flex-shrink: 0;
 }
 
 .brand-text {
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 700;
   line-height: 1.2;
+  color: var(--text);
+  letter-spacing: -0.02em;
 }
 
 .brand .ver {
   display: block;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 500;
   color: var(--muted);
+  margin-top: 0.1rem;
 }
 
 .nav {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.12rem;
 }
 
 .nav-section {
@@ -119,7 +128,7 @@ async function logout() {
   font-size: 0.68rem;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0.85rem 0 0.35rem 0.5rem;
+  margin: 0.8rem 0 0.3rem 0.5rem;
   letter-spacing: 0.06em;
   font-weight: 600;
 }
@@ -143,8 +152,8 @@ async function logout() {
 :deep(.nav-link--main) {
   gap: 0.65rem;
   padding: 0.5rem 0.65rem;
-  margin-bottom: 0.35rem;
-  border-radius: 8px;
+  margin-bottom: 0.3rem;
+  border-radius: 9px;
   color: var(--text);
   font-size: 0.9rem;
   font-weight: 500;
@@ -152,42 +161,34 @@ async function logout() {
 
 :deep(.nav-link--sub) {
   gap: 0.55rem;
-  padding: 0.4rem 0.55rem 0.4rem 0.75rem;
-  border-radius: 7px;
+  padding: 0.38rem 0.55rem 0.38rem 0.72rem;
+  border-radius: 8px;
   color: var(--text);
   font-size: 0.8rem;
 }
 
 :deep(.nav-link--main:hover),
 :deep(.nav-link--sub:hover) {
-  background: var(--bg);
+  background: var(--accent-muted);
   color: var(--accent);
   text-decoration: none;
 }
 
 :deep(.nav-link--main.router-link-active),
 :deep(.nav-link--sub.router-link-active) {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--accent-muted);
   color: var(--accent);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :deep(.nav-link--main .app-icon),
 :deep(.nav-link--sub .app-icon) {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 :deep(.nav-link--main.router-link-active .app-icon),
 :deep(.nav-link--sub.router-link-active .app-icon) {
   opacity: 1;
-}
-
-:deep(.nav-link--main .nav-label) {
-  line-height: 1.3;
-}
-
-:deep(.nav-link--sub .nav-label) {
-  line-height: 1.25;
 }
 
 .logout-btn {
@@ -197,26 +198,24 @@ async function logout() {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: 8px;
+  padding: 0.68rem 0.85rem;
+  border-radius: 9px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+  background: var(--surface-elevated);
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 500;
   cursor: pointer;
   transition:
     border-color 0.15s,
     color 0.15s,
-    background 0.15s,
-    box-shadow 0.15s;
+    background 0.15s;
 }
 
 .logout-btn:hover {
-  border-color: rgba(239, 68, 68, 0.45);
-  color: #fecaca;
-  background: rgba(239, 68, 68, 0.1);
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12);
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-muted);
 }
 
 .logout-btn:active {
@@ -228,18 +227,10 @@ async function logout() {
   text-align: left;
 }
 
-.logout-icon {
-  flex-shrink: 0;
-  opacity: 0.9;
-}
-
-.logout-btn:hover .logout-icon {
-  color: #f87171;
-}
-
 .main {
   flex: 1;
-  padding: 2rem;
-  max-width: 960px;
+  padding: 2rem 2.25rem;
+  max-width: 980px;
+  width: 100%;
 }
 </style>
