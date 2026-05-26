@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: site-delete.sh <domain> [--purge]
 # Removes site from registry and all stack artifacts (nginx, compose.d, container).
-# --purge also deletes apps/<domain> and data/uploads/<domain>
+# --purge also deletes apps/<domain>/ (uploads live inside the app tree, not data/uploads/)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -82,7 +82,6 @@ rm -f "${STACK_ROOT}/infra/nginx/conf.d/disabled/${DOMAIN}.conf"
 
 if [[ "${PURGE}" -eq 1 ]]; then
   rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
-  rm -rf "${STACK_ROOT}/data/uploads/${DOMAIN}"
 fi
 
 prune_orphan_site_artifacts 2>/dev/null || true

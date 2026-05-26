@@ -55,7 +55,9 @@ const ok = ref(false)
 
 async function removeSite(domain: string) {
   if (!confirm(`Remove ${domain}? (nginx, Docker service, and panel entry)`)) return
-  const deleteFiles = confirm(`Also delete files in apps/${domain} and data/uploads/${domain}?`)
+  const deleteFiles = confirm(
+    `Also delete apps/${domain}/ entirely? (includes uploads managed by the app, e.g. wp-content/uploads)`
+  )
   removing.value = domain
   msg.value = ''
   try {
