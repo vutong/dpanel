@@ -94,8 +94,17 @@ async function submit() {
     message.value = 'Website created successfully.'
     await navigateTo('/websites')
   } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    message.value = err.data?.statusMessage || err.statusMessage || 'Failed to create website'
+    const err = e as {
+      data?: { statusMessage?: string; message?: string }
+      statusMessage?: string
+      message?: string
+    }
+    message.value =
+      err.data?.statusMessage ||
+      err.data?.message ||
+      err.statusMessage ||
+      err.message ||
+      'Failed to create website'
   } finally {
     loading.value = false
   }

@@ -13,30 +13,68 @@ export function scriptPath(name: string): string {
   return join(stackRoot(), 'infra', 'scripts', name)
 }
 
+/** Extract human-readable error from bash script stderr/stdout (incl. JSON die lines). */
+export function scriptErrorMessage(err: unknown): string {
+  if (!err || typeof err !== 'object') {
+    return 'Script failed'
+  }
+  const e = err as {
+    message?: string
+    stderr?: string | Buffer
+    stdout?: string | Buffer
+  }
+  const blob = [String(e.stdout || ''), String(e.stderr || '')].filter(Boolean).join('\n')
+  const jsonLines = blob
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('{'))
+  const last = jsonLines[jsonLines.length - 1]
+  if (last) {
+    try {
+      const j = JSON.parse(last) as { error?: string; ok?: boolean }
+      if (j.error) return j.error
+    } catch {
+      /* ignore */
+    }
+  }
+  const lines = blob
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('['))
+  const tail = lines.slice(-8).join(' — ')
+  if (tail) return tail.slice(0, 2000)
+  return (e.message || 'Script failed').replace(/^Command failed:.*\n?/i, '').trim() || 'Script failed'
+}
+
 export async function runScript(
   script: string,
   args: string[] = [],
   timeoutMs = 120_000,
   extraEnv: Record<string, string> = {}
 ): Promise<string> {
-  const { stdout, stderr } = await execFileAsync(
-    'bash',
-    [scriptPath(script), ...args],
-    {
+  try {
+    const { stdout, stderr } = await execFileAsync('bash', [scriptPath(script), ...args], {
       env: { ...process.env, STACK_ROOT: stackRoot(), ...extraEnv },
       timeout: timeoutMs,
       maxBuffer: 4 * 1024 * 1024
-    }
-  )
-  if (stderr && !stdout) {
-    throw new Error(stderr.trim())
+    })
+    const out = (stdout || '').trim()
+    const err = (stderr || '').trim()
+    if (out) return out
+    if (err) return err
+    return ''
+  } catch (e: unknown) {
+    throw new Error(scriptErrorMessage(e))
   }
-  return (stdout || stderr).trim()
 }
 
 /** Parse last JSON object line from bash script stdout (ignores log lines). */
 export function parseScriptJson<T extends Record<string, unknown>>(stdout: string): T {
-  const lines = stdout.trim().split('\n').map((l) => l.trim()).filter((l) => l.startsWith('{'))
+  const lines = stdout
+    .trim()
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('{'))
   const last = lines[lines.length - 1]
   if (!last) {
     throw new Error('Script did not return JSON')

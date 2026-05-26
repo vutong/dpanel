@@ -33,7 +33,10 @@ export default defineEventHandler(async (event) => {
     const out = await runScript('site-create.sh', args, 300_000, extraEnv)
     return parseScriptJson(out)
   } catch (e: unknown) {
-    let msg = e instanceof Error ? e.message : 'Failed to create website'
+    let msg =
+      (e && typeof e === 'object' && 'statusMessage' in e && String((e as { statusMessage?: string }).statusMessage)) ||
+      (e instanceof Error ? e.message : '') ||
+      'Failed to create website'
     msg = msg.replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
     msg = msg.replace(/\bghp_[A-Za-z0-9]+\b/g, 'ghp_***')
     msg = msg.replace(/\bgho_[A-Za-z0-9]+\b/g, 'gho_***')

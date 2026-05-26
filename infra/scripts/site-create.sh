@@ -25,6 +25,8 @@ APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
 mkdir -p "$APP_DIR"
 
 if [[ -n "$GITHUB_URL" ]]; then
+  [[ -f "${STACK_ROOT}/infra/scripts/_github.sh" ]] \
+    || die "Missing infra/scripts/_github.sh — run: sudo dpanel update"
   export GITHUB_TOKEN
   gh_err="$(mktemp)"
   if ! github_preflight 2>"${gh_err}"; then
@@ -76,6 +78,10 @@ with open(path, "w") as f:
     json.dump(sites, f, indent=2)
 PY
 
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2
+if ! bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2; then
+  echo "[dpanel] Warning: nginx-reload had errors — trying direct reload..." >&2
+  nginx_reload_stack 2>/dev/null \
+    || echo "[dpanel] Site created; run on VPS: sudo dpanel nginx-reload" >&2
+fi
 
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\"}"
