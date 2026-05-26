@@ -57,6 +57,7 @@ dpanel setpass 'Your_new_password'
 - Panel: `http://<panel-domain>` or `http://<server-ip>:8080`
 - Summary file: `/opt/stack/CREDENTIALS.txt`
 - Default password: `12345678` → `dpanel setpass 'new-password'`
+- **MariaDB:** panel settings live in JSON files, not MySQL. MariaDB is for your PHP apps — create databases in the panel. New installs do not create a default `dpanel` database. Older VPS may still have an empty one; delete it in phpMyAdmin if you do not use it.
 
 ## Update (when repo changes)
 

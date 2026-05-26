@@ -65,9 +65,6 @@ services:
     env_file: .env
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
-      MARIADB_DATABASE: ${MARIADB_DATABASE}
-      MARIADB_USER: ${MARIADB_USER}
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
     volumes:
       - ./data/mariadb/volume:/var/lib/mysql
       - ./logs/mariadb:/var/log/mysql

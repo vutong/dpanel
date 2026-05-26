@@ -195,5 +195,6 @@ dpanel/
 - Site Node: service `nuxt-<slug>` trong `compose.d/`.
 - **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).
 - Mật khẩu nhạy cảm chỉ trong `.env` và `data/panel/auth.json`.
+- **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB chỉ cho site PHP + menu tạo DB; **không** tạo database/user mặc định `dpanel` khi cài mới.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu.

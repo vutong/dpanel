@@ -11,7 +11,7 @@
       <div class="field">
         <label class="label">Runtime</label>
         <select v-model="runtime" class="select" required>
-          <option disabled value="">Choice.....</option>
+          <option disabled value="">Select runtime</option>
           <option value="node">Node (Nuxt SSR)</option>
           <option value="php">PHP (Laravel / WordPress)</option>
         </select>

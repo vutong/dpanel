@@ -193,6 +193,11 @@ NEW_VER="$(grep -E '^INSTALLER_VERSION=' "${STACK_ROOT}/install.sh" | head -1 | 
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 ensure_python3 >> "${INSTALL_LOG}" 2>&1 || log "Warning: python3 not available — some scripts may fail"
 
+# MariaDB: only root — no default dpanel database/user (panel uses JSON files).
+if [[ -f "${STACK_ROOT}/.env" ]]; then
+  sed -i '/^MARIADB_DATABASE=/d; /^MARIADB_USER=/d; /^MARIADB_PASSWORD=/d' "${STACK_ROOT}/.env" 2>/dev/null || true
+fi
+
 run_nginx_reload() {
   [[ "${SKIP_NGINX_RELOAD}" -eq 0 ]] || return 0
   log "dpanel nginx-reload"

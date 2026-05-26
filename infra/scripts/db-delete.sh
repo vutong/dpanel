@@ -31,7 +31,7 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 [[ -n "$DB_NAME" ]] || die "Missing database name"
 [[ "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] || die "Invalid database name"
 
-for protected in mysql information_schema performance_schema sys dpanel; do
+for protected in mysql information_schema performance_schema sys; do
   [[ "$DB_NAME" == "$protected" ]] && die "Cannot delete system database: ${DB_NAME}"
 done
 
