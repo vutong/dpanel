@@ -26,9 +26,10 @@ if [[ -n "$GITHUB_URL" ]]; then
   export GIT_TERMINAL_PROMPT=0
 
   _github_owner_repo() {
-    if [[ "$GITHUB_URL" =~ github\.com[:/]([^/]+)/([^/.]+) ]]; then
+    # Repo names may contain dots (e.g. app.dutabi.com) — do not stop at "."
+    if [[ "$GITHUB_URL" =~ github\.com[:/]([^/]+)/([^/#?]+) ]]; then
       GITHUB_OWNER="${BASH_REMATCH[1]}"
-      GITHUB_REPO="${BASH_REMATCH[2]}"
+      GITHUB_REPO="${BASH_REMATCH[2]%.git}"
       return 0
     fi
     return 1
