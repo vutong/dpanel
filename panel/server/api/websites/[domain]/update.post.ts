@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { runScriptDetached, stackRoot } from '../../../utils/stack'
+import { runScriptDetached, stackRoot, writeSiteOpStatus } from '../../../utils/stack'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -23,6 +23,7 @@ export default defineEventHandler(async (event) => {
   const extraEnv: Record<string, string> = {}
   if (githubToken) extraEnv.GITHUB_TOKEN = githubToken
 
+  writeSiteOpStatus(domain, 'update', 'running', 'Pulling from Git…')
   runScriptDetached('site-update.sh', [domain], extraEnv, domain, 'update')
 
   return {

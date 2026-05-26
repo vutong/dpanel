@@ -14,8 +14,9 @@ if [ -f package.json ]; then
   if [ -f .output/server/index.mjs ]; then
     exec node .output/server/index.mjs
   fi
-  echo "[dpanel] No .output build — run install.sh on the VPS."
+  echo "[dpanel] No .output build yet — use Rebuild in the panel or: dpanel site-rebuild <domain>"
+  echo "[dpanel] Container waiting (nginx will return 502 until build completes)."
 fi
 
-echo "[dpanel] /app is empty — run: sudo bash install.sh"
+echo "[dpanel] /app is empty — deploy code then Rebuild in the panel"
 exec sleep infinity

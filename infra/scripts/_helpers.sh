@@ -309,6 +309,41 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
+# npm install + build inside the per-site Nuxt container, then restart (caller should hold site_ops_lock).
+nuxt_container_build() {
+  local domain="$1"
+  local slug svc cname nuxt_cid app_dir
+  [[ -n "${domain}" ]] || return 1
+  slug="$(site_slug "${domain}")"
+  svc="nuxt-${slug}"
+  cname="$(_nuxt_container_name "${slug}")"
+  app_dir="${STACK_ROOT}/apps/${domain}"
+
+  [[ -f "${app_dir}/package.json" ]] || {
+    echo "[dpanel] Skip build — no package.json in apps/${domain}/" >&2
+    return 0
+  }
+
+  cd "${STACK_ROOT}"
+  stack_compose up -d "${svc}" 2>/dev/null || true
+  local i
+  for ((i = 0; i < 30; i++)); do
+    nuxt_cid="$(docker ps -q -f "name=^${cname}$" -f "status=running" 2>/dev/null | head -1)"
+    [[ -n "${nuxt_cid}" ]] && break
+    sleep 2
+  done
+  [[ -n "${nuxt_cid}" ]] || {
+    echo "[dpanel] Nuxt container not running (${cname})" >&2
+    return 1
+  }
+
+  echo "[dpanel] npm install & build for ${domain}…" >&2
+  docker exec "${nuxt_cid}" sh -c 'npm ci 2>/dev/null || npm install; npm run build' \
+    || return 1
+  docker restart "${nuxt_cid}" 2>/dev/null || true
+  return 0
+}
+
 # After site create from panel: start Nuxt service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).
 site_finalize_async() {
   local log_name="${1:-site-ops}"

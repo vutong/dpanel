@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, openSync } from 'node:fs'
+import { mkdirSync, openSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -50,6 +50,35 @@ export function scriptErrorMessage(err: unknown): string {
 function siteLogBasename(domain: string, op: string): string {
   const slug = domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
   return `site-${op}-${slug}.log`
+}
+
+export type SiteOpKind = 'update' | 'rebuild'
+
+/** Reset site-ops status before a background script starts (avoids stale poll results). */
+export function writeSiteOpStatus(
+  domain: string,
+  op: SiteOpKind,
+  status: 'running' | 'ok' | 'error',
+  message = ''
+): void {
+  const dir = join(stackRoot(), 'data', 'panel', 'site-ops')
+  mkdirSync(dir, { recursive: true })
+  const path = join(dir, `${domain}.json`)
+  writeFileSync(
+    path,
+    JSON.stringify(
+      {
+        domain,
+        op,
+        status,
+        message,
+        updatedAt: new Date().toISOString()
+      },
+      null,
+      2
+    ),
+    'utf8'
+  )
 }
 
 /** Start a bash script in the background (panel API returns immediately — no 502 from long work). */

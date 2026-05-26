@@ -71,4 +71,5 @@ else
 fi
 
 site_op_status_write "${DOMAIN}" "update" "ok" "Pull complete"
+
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\",\"action\":\"update\"}"

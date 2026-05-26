@@ -53,27 +53,9 @@ cd "${STACK_ROOT}"
 site_ops_lock_acquire
 trap site_ops_lock_release EXIT
 
-project="$(_stack_project_name)"
-cname="$(_nuxt_container_name "${SLUG}")"
-nuxt_cid="$(docker ps -q -f "name=^${cname}$" -f "status=running" 2>/dev/null | head -1)"
-
-if [[ -z "${nuxt_cid}" ]]; then
-  site_op_status_write "${DOMAIN}" "rebuild" "running" "Starting container…"
-  if _stack_compose_available; then
-    stack_compose up -d "${SVC}" 2>/dev/null || true
-    sleep 2
-    nuxt_cid="$(docker ps -q -f "name=^${cname}$" -f "status=running" 2>/dev/null | head -1)"
-  fi
-fi
-
-[[ -n "${nuxt_cid}" ]] || die "Nuxt container not running — create the site again or check logs/node/site-rebuild-${SLUG}.log"
-
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
-docker exec "${nuxt_cid}" sh -c 'npm ci 2>/dev/null || npm install; npm run build' \
+nuxt_container_build "${DOMAIN}" \
   || die "npm build failed — see logs/node/site-rebuild-${SLUG}.log"
-
-site_op_status_write "${DOMAIN}" "rebuild" "running" "Restarting app…"
-docker restart "${nuxt_cid}" 2>/dev/null || true
 
 site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"service\":\"${SVC}\",\"action\":\"rebuild\"}"

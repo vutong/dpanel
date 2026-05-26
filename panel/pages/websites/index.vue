@@ -167,6 +167,7 @@
 
 <script setup lang="ts">
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
+type SiteOpKind = 'update' | 'rebuild'
 type SiteOpStatus = {
   domain?: string
   op?: string
@@ -188,6 +189,8 @@ const updatePhase = ref<'confirm' | 'background'>('confirm')
 const updateToken = ref('')
 const opsRunning = ref<Set<string>>(new Set())
 const pollTimers = new Map<string, ReturnType<typeof setInterval>>()
+/** Bumps when a poll is cancelled — ignores in-flight responses from the previous operation. */
+const opPollGen = new Map<string, number>()
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
@@ -201,6 +204,7 @@ function isSiteBusy(domain: string) {
 }
 
 function stopOpPoll(domain: string) {
+  opPollGen.set(domain, (opPollGen.get(domain) ?? 0) + 1)
   const t = pollTimers.get(domain)
   if (t) clearInterval(t)
   pollTimers.delete(domain)
@@ -209,15 +213,26 @@ function stopOpPoll(domain: string) {
   opsRunning.value = next
 }
 
-function startOpPoll(domain: string) {
-  if (pollTimers.has(domain)) return
+function opDoneMessage(expectedOp: SiteOpKind, domain: string, fromServer?: string) {
+  if (fromServer?.trim()) return fromServer.trim()
+  return expectedOp === 'update'
+    ? `${domain}: Git pull complete`
+    : `${domain}: Rebuild complete`
+}
+
+function startOpPoll(domain: string, expectedOp: SiteOpKind) {
+  stopOpPoll(domain)
+  const gen = (opPollGen.get(domain) ?? 0) + 1
+  opPollGen.set(domain, gen)
   opsRunning.value = new Set([...opsRunning.value, domain])
   let attempts = 0
   const maxAttempts = 240
 
   const poll = async () => {
+    if (opPollGen.get(domain) !== gen) return
     attempts += 1
     if (attempts > maxAttempts) {
+      if (opPollGen.get(domain) !== gen) return
       stopOpPoll(domain)
       showAlert(`${domain}: operation timed out — check logs/node on the server`, false)
       return
@@ -226,16 +241,18 @@ function startOpPoll(domain: string) {
       const s = await $fetch<SiteOpStatus>(
         `/api/websites/${encodeURIComponent(domain)}/operation`
       )
+      if (opPollGen.get(domain) !== gen) return
+      if (s.op && s.op !== expectedOp) return
       if (s.status === 'running' || s.status === 'none') return
       stopOpPoll(domain)
       if (s.status === 'ok') {
-        showAlert(s.message || `Done: ${domain}`, true)
-        if (updateTarget.value?.domain === domain) {
+        showAlert(opDoneMessage(expectedOp, domain, s.message), true)
+        if (expectedOp === 'update' && updateTarget.value?.domain === domain) {
           updateTarget.value = null
           updatePhase.value = 'confirm'
         }
       } else if (s.status === 'error') {
-        showAlert(s.message || `Failed: ${domain}`, false)
+        showAlert(s.message || `${domain}: ${expectedOp} failed`, false)
       }
     } catch {
       /* keep polling */
@@ -275,7 +292,10 @@ function confirmUpdate() {
     method: 'POST',
     body: { githubToken: updateToken.value.trim() || undefined }
   })
-    .then(() => startOpPoll(domain))
+    .then(() => {
+      showAlert(`${domain}: pulling from Git…`, true)
+      startOpPoll(domain, 'update')
+    })
     .catch((e: unknown) => {
       updatePhase.value = 'confirm'
       const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -283,22 +303,21 @@ function confirmUpdate() {
     })
 }
 
-function runRebuild(site: Site) {
+async function runRebuild(site: Site) {
   if (site.runtime !== 'node' || isSiteBusy(site.domain)) return
 
   const domain = site.domain
-  showAlert('Rebuild is running in the background.', true)
-  startOpPoll(domain)
+  clearAlert()
+  stopOpPoll(domain)
 
-  window.setTimeout(() => {
-    void $fetch(`/api/websites/${encodeURIComponent(domain)}/rebuild`, { method: 'POST' }).catch(
-      (e: unknown) => {
-        stopOpPoll(domain)
-        const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-        showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start rebuild', false)
-      }
-    )
-  }, 0)
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(domain)}/rebuild`, { method: 'POST' })
+    showAlert(`${domain}: rebuild running in the background…`, true)
+    startOpPoll(domain, 'rebuild')
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start rebuild', false)
+  }
 }
 
 function openDelete(site: Site) {

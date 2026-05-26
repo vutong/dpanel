@@ -97,7 +97,10 @@ async function submit() {
       }
     })
     ok.value = true
-    message.value = 'Website created successfully.'
+    message.value =
+      runtime.value === 'node'
+        ? 'Website created. Deploy code if needed, then use Rebuild to build and run the Nuxt app.'
+        : 'Website created successfully.'
     await navigateTo('/websites')
   } catch (e: unknown) {
     const err = e as {
