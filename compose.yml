@@ -36,7 +36,7 @@ services:
       - ./logs/node:/var/log/node
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/ping"]
       interval: 15s
       timeout: 5s
       retries: 8

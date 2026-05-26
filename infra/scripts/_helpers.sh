@@ -153,6 +153,37 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
+# Wait until dpanel container healthcheck is healthy (or /api/ping responds).
+wait_for_dpanel_ready() {
+  local max_wait="${1:-90}"
+  local i cid status out
+  for ((i = 1; i <= max_wait; i++)); do
+    cid="$(stack_compose ps -q dpanel 2>/dev/null | head -1)"
+    if [[ -n "${cid}" ]]; then
+      status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null || echo none)"
+      if [[ "${status}" == "healthy" ]]; then
+        return 0
+      fi
+      out="$(stack_compose exec -T dpanel wget -q -O- --timeout=2 http://127.0.0.1:3000/api/ping 2>/dev/null || true)"
+      if printf '%s' "${out}" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+# nginx -t via one-off container (quiet on success — docker-entrypoint noise is normal).
+nginx_test_stack() {
+  local quiet="${1:-1}"
+  if [[ "${quiet}" -eq 1 ]]; then
+    stack_compose run --rm --no-deps nginx nginx -t >/dev/null 2>&1
+    return $?
+  fi
+  stack_compose run --rm --no-deps nginx nginx -t
+}
+
 # Legacy v1 nginx: proxy_pass http://nuxt-<slug>:3000 (resolved at boot → fails if container down).
 is_legacy_nuxt_vhost() {
   local f="$1"

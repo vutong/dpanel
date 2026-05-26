@@ -72,7 +72,9 @@ EOF
 rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf" "${STACK_ROOT}/infra/nginx/conf.d/99-mariadb.conf"
 
 log "Testing nginx configuration..."
-if ! stack_compose run --rm --no-deps nginx nginx -t 2>&1; then
+if ! nginx_test_stack 1; then
+  log "nginx configuration errors:"
+  nginx_test_stack 0 2>&1 | tail -15 || true
   log "Invalid config in ${STACK_ROOT}/infra/nginx/conf.d/"
   log "Quarantining broken site configs (keeping 00-panel.conf)..."
   mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
@@ -81,7 +83,8 @@ if ! stack_compose run --rm --no-deps nginx nginx -t 2>&1; then
     [[ "$(basename "$f")" == "00-panel.conf" ]] && continue
     mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/" 2>/dev/null || true
   done
-  if ! stack_compose run --rm --no-deps nginx nginx -t 2>&1; then
+  if ! nginx_test_stack 1; then
+    nginx_test_stack 0 2>&1 | tail -15 || true
     log "Tip: fix sites in panel or restore configs from conf.d/disabled/"
     die "nginx config still invalid — run: dpanel nginx-reload after fixing sites"
   fi

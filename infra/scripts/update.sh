@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: dpanel update [--check] [--no-build] [--no-health-fix] [--no-nginx-reload]
 
-  Full update always runs: sync → rebuild → docker up → nginx-reload → health --fix → nginx-reload
+  Full update: sync → rebuild → docker up → health --fix → nginx-reload (once)
 
   --check            Show installed vs latest version (no changes)
   --no-build         Sync files and containers only; skip Nuxt rebuild
@@ -213,16 +213,17 @@ stack_compose build >> "${INSTALL_LOG}" 2>&1 || die "docker compose build failed
 stack_compose up -d --remove-orphans >> "${INSTALL_LOG}" 2>&1 || die "docker compose up failed"
 
 export STACK_ROOT
-run_nginx_reload
+log "Waiting for panel container..."
+wait_for_dpanel_ready 90 >> "${INSTALL_LOG}" 2>&1 || log "Panel still warming up — health will retry"
 
 [[ -n "${NEW_VER}" ]] && set_env_version "${NEW_VER}"
 
 systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
 
 if [[ "${SKIP_HEALTH_FIX}" -eq 0 && -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
-  log "dpanel health --fix"
-  # Show health output on terminal and append to update log
-  _health_cmd=(bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix)
+  log "dpanel health --fix (quick — nginx-reload runs once after)"
+  export DPANEL_HEALTH_FROM_UPDATE=1
+  _health_cmd=(bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix --from-update)
   if command -v stdbuf >/dev/null 2>&1; then
     _health_cmd=(stdbuf -oL -eL "${_health_cmd[@]}")
   fi

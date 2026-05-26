@@ -34,7 +34,7 @@ System
 
 Update
   update [--check] [--no-build] [--no-health-fix] [--no-nginx-reload]
-                             One command: sync, rebuild, nginx-reload, health --fix, nginx-reload
+                             One command: sync, rebuild, health --fix, nginx-reload
   update-check               Compare installed vs latest version
   update-panel               Rebuild panel UI only (no git pull)
   deploy                     docker compose build && up -d

@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.24"
+INSTALLER_VERSION="1.0.25"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -288,7 +288,7 @@ wait_for_healthy_stack() {
   step "Health check"
   local i
   for i in $(seq 1 40); do
-    if docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
+    if docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/ping 2>/dev/null | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
       log "Panel healthy"
       return 0
     fi
