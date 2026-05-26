@@ -1,7 +1,7 @@
 <template>
   <div class="layout">
     <aside v-if="showNav" class="sidebar">
-      <div class="brand">dpanel <span class="ver">v1.0</span></div>
+      <div class="brand">dpanel <span v-if="panelVersion" class="ver">v{{ panelVersion }}</span></div>
       <nav>
         <p class="nav-section">Website</p>
         <NuxtLink to="/websites">List Website</NuxtLink>
@@ -22,6 +22,11 @@
 <script setup lang="ts">
 const route = useRoute()
 const showNav = computed(() => route.path !== '/login')
+
+const { data: health } = await useFetch<{ version?: string }>('/api/health', {
+  key: 'dpanel-health-version'
+})
+const panelVersion = computed(() => health.value?.version || '')
 
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' })

@@ -1,5 +1,7 @@
-export default defineEventHandler(() => ({
+import { getStackVersion } from '../utils/version'
+
+export default defineEventHandler(async () => ({
   ok: true,
   service: 'dpanel',
-  version: '1.0.0'
+  version: await getStackVersion()
 }))
