@@ -44,8 +44,8 @@ Services
   restart [service]        Restart one or all services
 
 Websites
-  site-remove <domain> [--purge]
-                             Remove site (nginx, compose.d, container; --purge deletes app files)
+  site-remove <domain>
+                             Remove site completely (nginx, apps/, compose.d, container)
 
 Security
   setpass <password>         Change panel login password

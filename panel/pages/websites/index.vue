@@ -5,7 +5,7 @@
       <NuxtLink to="/websites/create" class="btn btn-primary">+ Create website</NuxtLink>
     </div>
 
-    <div v-if="pending" class="muted">Loading...</div>
+    <PageLoader v-if="pending" label="Loading websites…" />
     <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
     <div v-else class="card table-wrap">
       <table class="table">
@@ -30,32 +30,30 @@
             <td>{{ formatDate(s.createdAt) }}</td>
             <td class="col-actions">
               <div class="action-btns">
-                <button
+                <IconButton
                   v-if="s.githubUrl"
-                  type="button"
-                  class="btn btn-secondary btn-sm"
+                  icon="git-pull"
+                  title="Update from Git"
                   :disabled="!!busy"
+                  :busy="busy === s.domain"
                   @click="openUpdate(s)"
-                >
-                  Update
-                </button>
-                <button
+                />
+                <IconButton
                   v-if="s.runtime === 'node'"
-                  type="button"
-                  class="btn btn-secondary btn-sm"
+                  icon="wrench"
+                  title="Rebuild (npm build)"
                   :disabled="!!busy"
+                  :busy="busy === s.domain"
                   @click="runRebuild(s)"
-                >
-                  Rebuild
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-danger btn-sm"
+                />
+                <IconButton
+                  icon="trash"
+                  title="Delete website"
+                  variant="danger"
                   :disabled="!!busy"
+                  :busy="busy === s.domain"
                   @click="openDelete(s)"
-                >
-                  Delete
-                </button>
+                />
               </div>
             </td>
           </tr>
@@ -105,20 +103,14 @@
         </p>
         <ul class="delete-list">
           <li>Panel registry (<code>sites.json</code>)</li>
-          <li>Nginx vhost (<code>infra/nginx/conf.d/{{ deleteTarget.domain }}.conf</code>)</li>
+          <li>Nginx vhost (<code>conf.d/</code> and <code>conf.d/disabled/</code>)</li>
+          <li><code>apps/{{ deleteTarget.domain }}/</code> (application files)</li>
           <li v-if="deleteTarget.runtime === 'node'">
-            Docker service <code>nuxt-{{ slug(deleteTarget.domain) }}</code> and
+            Docker <code>nuxt-{{ slug(deleteTarget.domain) }}</code> and
             <code>compose.d/nuxt-{{ slug(deleteTarget.domain) }}.yml</code>
           </li>
-          <li v-else>PHP site nginx config (app files served from <code>apps/{{ deleteTarget.domain }}/</code>)</li>
         </ul>
-        <label class="purge-label">
-          <input v-model="purgeFiles" type="checkbox" />
-          Also delete <code>apps/{{ deleteTarget.domain }}/</code> (all application files and uploads inside the project)
-        </label>
-        <p v-if="!purgeFiles" class="hint">
-          If unchecked, code remains on disk — you can redeploy the same domain later.
-        </p>
+        <p class="hint">This permanently removes all related files and cannot be undone.</p>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" :disabled="!!busy" @click="closeDelete">
             Cancel
@@ -136,13 +128,12 @@
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
 type DeleteResult = { ok: boolean; domain?: string; purged?: boolean; removed?: string[] }
 
-const { data, pending, refresh } = await useFetch<{ sites: Site[] }>('/api/websites')
+const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
 
 const deleteTarget = ref<Site | null>(null)
 const updateTarget = ref<Site | null>(null)
 const updateToken = ref('')
-const purgeFiles = ref(false)
 const busy = ref('')
 const msg = ref('')
 const ok = ref(false)
@@ -205,7 +196,6 @@ async function runRebuild(site: Site) {
 
 function openDelete(site: Site) {
   deleteTarget.value = site
-  purgeFiles.value = false
 }
 
 function closeDelete() {
@@ -222,23 +212,37 @@ async function confirmDelete() {
   try {
     const result = await $fetch<DeleteResult>(
       `/api/websites/${encodeURIComponent(site.domain)}`,
-      {
-        method: 'DELETE',
-        query: purgeFiles.value ? { purge: '1' } : {}
-      }
+      { method: 'DELETE' }
     )
     ok.value = true
     const n = result.removed?.length ?? 0
     msg.value =
       n > 0
-        ? `Deleted ${site.domain} (${n} stack item${n === 1 ? '' : 's'} removed${result.purged ? ', files purged' : ''})`
+        ? `Deleted ${site.domain} (${n} item${n === 1 ? '' : 's'} removed)`
         : `Deleted ${site.domain}`
     deleteTarget.value = null
     await refresh()
   } catch (e: unknown) {
     ok.value = false
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    msg.value = err.data?.statusMessage || err.statusMessage || 'Delete failed'
+    const err = e as {
+      data?: { statusMessage?: string; message?: string }
+      statusMessage?: string
+      message?: string
+      statusCode?: number
+    }
+    const raw =
+      err.data?.statusMessage ||
+      err.data?.message ||
+      err.statusMessage ||
+      err.message ||
+      ''
+    if (err.statusCode === 502 || /bad gateway/i.test(raw)) {
+      msg.value =
+        'Gateway error while waiting — the site may still be deleting. Refresh the list in a few seconds.'
+      await refresh()
+    } else {
+      msg.value = raw || 'Delete failed'
+    }
   } finally {
     busy.value = ''
   }
@@ -314,14 +318,6 @@ function formatDate(iso?: string) {
 .delete-list code {
   font-size: 0.8rem;
   color: var(--muted);
-}
-.purge-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  cursor: pointer;
-  margin-bottom: 0.5rem;
 }
 .hint {
   font-size: 0.8rem;

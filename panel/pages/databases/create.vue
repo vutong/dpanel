@@ -1,5 +1,7 @@
 <template>
   <div>
+    <PageLoader v-if="pageLoading" label="Loading…" />
+    <template v-else>
     <h1>Create database</h1>
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
     <form class="card form" @submit.prevent="submit">
@@ -15,7 +17,9 @@
         <label class="label">Password (optional, auto-generated if empty)</label>
         <input v-model="password" class="input" type="password" />
       </div>
-      <button class="btn btn-primary" type="submit" :disabled="loading">Create database</button>
+      <button class="btn btn-primary" type="submit" :disabled="submitting">
+        {{ submitting ? 'Creating…' : 'Create database' }}
+      </button>
     </form>
     <div v-if="created" class="card creds">
       <h2>Connection details</h2>
@@ -24,10 +28,12 @@
       <p><strong>Password:</strong> <code>{{ created.password }}</code></p>
       <p class="muted">Save these credentials — the password will not be shown again after you leave this page.</p>
     </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
+const { loading } = usePageInit()
 const name = ref('')
 const user = ref('')
 const password = ref('')
@@ -38,7 +44,7 @@ const created = ref<{ name: string; user: string; password: string } | null>(nul
 
 async function submit() {
   message.value = ''
-  loading.value = true
+  submitting.value = true
   created.value = null
   try {
     const res = await $fetch<{ name: string; user: string; password: string }>('/api/databases', {
@@ -57,7 +63,7 @@ async function submit() {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     message.value = err.data?.statusMessage || err.statusMessage || 'Error'
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 </script>

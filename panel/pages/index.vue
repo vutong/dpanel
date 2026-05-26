@@ -1,33 +1,37 @@
 <template>
   <div>
-    <h1>Overview</h1>
-    <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
-    <div class="grid">
-      <NuxtLink to="/websites" class="card stat-card">
-        <div class="stat-icon">
-          <AppIcon name="globe" :size="22" />
-        </div>
-        <div>
-          <h2>Websites</h2>
-          <p class="stat-value">{{ siteCount }} <span class="stat-unit">site(s)</span></p>
-        </div>
-      </NuxtLink>
-      <NuxtLink to="/databases" class="card stat-card">
-        <div class="stat-icon stat-icon-db">
-          <AppIcon name="database" :size="22" />
-        </div>
-        <div>
-          <h2>MariaDB</h2>
-          <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
-        </div>
-      </NuxtLink>
-    </div>
+    <PageLoader v-if="loading" label="Loading overview…" />
+    <template v-else>
+      <h1>Overview</h1>
+      <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
+      <div class="grid">
+        <NuxtLink to="/websites" class="card stat-card">
+          <div class="stat-icon">
+            <AppIcon name="globe" :size="22" />
+          </div>
+          <div>
+            <h2>Websites</h2>
+            <p class="stat-value">{{ siteCount }} <span class="stat-unit">site(s)</span></p>
+          </div>
+        </NuxtLink>
+        <NuxtLink to="/databases" class="card stat-card">
+          <div class="stat-icon stat-icon-db">
+            <AppIcon name="database" :size="22" />
+          </div>
+          <div>
+            <h2>MariaDB</h2>
+            <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
+          </div>
+        </NuxtLink>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-const { data: sites } = await useFetch('/api/websites')
-const { data: dbs } = await useFetch('/api/databases')
+const { data: sites, pending: sitesPending } = useFetch('/api/websites')
+const { data: dbs, pending: dbsPending } = useFetch('/api/databases')
+const loading = computed(() => sitesPending.value || dbsPending.value)
 const siteCount = computed(() => sites.value?.sites?.length ?? 0)
 const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
 </script>

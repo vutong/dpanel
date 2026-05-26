@@ -2,7 +2,7 @@
   <div>
     <h1>List databases</h1>
     <p class="muted intro">Create or delete databases from the MariaDB menu in the sidebar.</p>
-    <div v-if="pending" class="muted">Loading...</div>
+    <PageLoader v-if="pending" label="Loading databases…" />
     <div v-else-if="!databases.length" class="card muted">No user databases yet.</div>
     <div v-else class="card">
       <table class="table">
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-const { data, pending } = await useFetch<{ databases: string[] }>('/api/databases')
+const { data, pending } = useFetch<{ databases: string[] }>('/api/databases')
 const databases = computed(() => data.value?.databases ?? [])
 </script>
 

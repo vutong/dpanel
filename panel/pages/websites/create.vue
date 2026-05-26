@@ -1,5 +1,7 @@
 <template>
   <div>
+    <PageLoader v-if="pageLoading" label="Loading…" />
+    <template v-else>
     <h1>Create website</h1>
     <p class="muted">Enter domain and runtime. Optionally clone application code from GitHub.</p>
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
@@ -49,36 +51,40 @@
           </p>
         </div>
       </template>
-      <button class="btn btn-primary" type="submit" :disabled="loading">
-        {{ loading ? 'Creating...' : 'Create & deploy' }}
+      <button class="btn btn-primary" type="submit" :disabled="submitting">
+        {{ submitting ? 'Creating...' : 'Create & deploy' }}
       </button>
     </form>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
+const { loading: pageLoading } = usePageInit()
 const domain = ref('')
 const runtime = ref('')
 const cloneGithub = ref(false)
 const githubUrl = ref('')
 const githubToken = ref('')
-const loading = ref(false)
+const submitting = ref(false)
 const message = ref('')
 const ok = ref(false)
 
 async function submit() {
   message.value = ''
-  loading.value = true
+  submitting.value = true
   ok.value = false
   try {
     if (!runtime.value) {
       message.value = 'Please select a runtime'
+      submitting.value = false
       return
     }
     const url = cloneGithub.value ? githubUrl.value.trim() : ''
     const token = cloneGithub.value ? githubToken.value.trim() : ''
     if (cloneGithub.value && !url) {
       message.value = 'Repository URL is required when cloning from GitHub'
+      submitting.value = false
       return
     }
     await $fetch('/api/websites', {
@@ -106,7 +112,7 @@ async function submit() {
       err.message ||
       'Failed to create website'
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 </script>

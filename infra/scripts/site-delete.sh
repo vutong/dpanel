@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Usage: site-delete.sh <domain> [--purge]
-# Full removal: sites.json, nginx vhost, compose.d, Nuxt container, optional apps/<domain>/
+# Usage: site-delete.sh <domain>
+# Full removal: sites.json, nginx, compose.d, container, apps/<domain>/ (no leftovers)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -8,15 +8,15 @@ STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 
 DOMAIN="${1:-}"
-PURGE=0
 shift 2>/dev/null || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --purge) PURGE=1 ;;
+    --purge) ;; # legacy flag, always purges app files
     -h|--help)
-      echo "Usage: site-delete.sh <domain> [--purge]" >&2
+      echo "Usage: site-delete.sh <domain>" >&2
       exit 0
       ;;
+    *) die "Unknown option: $1" ;;
   esac
   shift
 done
@@ -57,7 +57,7 @@ with open(os.environ['SITES_FILE']) as f:
 " 2>/dev/null || true)"
 fi
 
-log "Removing website: ${DOMAIN} (runtime=${RUNTIME:-unknown}, purge=${PURGE})"
+log "Removing website: ${DOMAIN} (runtime=${RUNTIME:-unknown}, full purge)"
 
 if [[ -f "${SITES_FILE}" ]]; then
   if ! "${PYBIN}" <<'PY'; then
@@ -104,27 +104,14 @@ for conf in \
   fi
 done
 
-if [[ "${PURGE}" -eq 1 ]]; then
-  if [[ -d "${STACK_ROOT}/apps/${DOMAIN}" ]]; then
-    rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
-    REMOVED+=("apps:${DOMAIN}")
-    log "Deleted apps/${DOMAIN}/"
-  fi
-else
-  log "Kept apps/${DOMAIN}/ (use --purge to delete application files)"
+if [[ -d "${STACK_ROOT}/apps/${DOMAIN}" ]]; then
+  rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
+  REMOVED+=("apps:${DOMAIN}")
+  log "Deleted apps/${DOMAIN}/"
 fi
 
 log "Pruning orphan artifacts..."
 prune_orphan_site_artifacts 2>/dev/null || true
-
-log "Reloading nginx..."
-if ! bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2; then
-  log "Warning: nginx-reload had errors — site files are already removed; trying direct nginx reload..."
-  nginx_reload_stack 2>/dev/null || log "On VPS host run: sudo dpanel nginx-reload"
-fi
-
-log "Applying compose stack..."
-stack_compose up -d --remove-orphans 2>/dev/null || true
 
 REMOVED_JSON="$(printf '%s\n' "${REMOVED[@]}" | "${PYBIN}" -c "
 import json, sys
@@ -132,6 +119,20 @@ items = [l.strip() for l in sys.stdin if l.strip()]
 print(json.dumps(items))
 ")"
 
-log "Done — ${DOMAIN} removed"
-printf '{"ok":true,"domain":"%s","purged":%s,"removed":%s}\n' \
-  "${DOMAIN}" "${PURGE}" "${REMOVED_JSON}"
+log "Done — ${DOMAIN} removed (nginx reload runs in background)"
+printf '{"ok":true,"domain":"%s","purged":true,"removed":%s}\n' \
+  "${DOMAIN}" "${REMOVED_JSON}"
+
+# Finish nginx/compose after JSON stdout so the panel API responds before proxy disruption (avoids 502).
+mkdir -p "${STACK_ROOT}/logs/node"
+nohup bash -c "
+  sleep 0.3
+  STACK_ROOT='${STACK_ROOT}'
+  # shellcheck source=_helpers.sh
+  source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
+  nginx_reload_stack 2>/dev/null || true
+  if ! nginx_test_stack 1 2>/dev/null; then
+    bash \"\${STACK_ROOT}/infra/scripts/nginx-reload.sh\" || true
+  fi
+  stack_compose up -d --remove-orphans 2>/dev/null || true
+" >> "${STACK_ROOT}/logs/node/site-delete.log" 2>&1 &

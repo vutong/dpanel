@@ -50,7 +50,7 @@
 const route = useRoute()
 const showNav = computed(() => route.path !== '/login')
 
-const { data: health } = await useFetch<{ version?: string }>('/api/health', {
+const { data: health } = useFetch<{ version?: string }>('/api/health', {
   key: 'dpanel-health-version'
 })
 const panelVersion = computed(() => health.value?.version || '')

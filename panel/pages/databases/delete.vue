@@ -5,7 +5,7 @@
 
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
 
-    <div v-if="pending" class="muted">Loading databases...</div>
+    <PageLoader v-if="pageLoading" label="Loading databases…" />
     <div v-else-if="!databases.length" class="card muted">
       No user databases to delete.
       <NuxtLink to="/databases/create">Create a database</NuxtLink>
@@ -40,7 +40,9 @@
 </template>
 
 <script setup lang="ts">
-const { data, pending, refresh } = await useFetch<{ databases: string[] }>('/api/databases')
+const { loading: initLoading } = usePageInit()
+const { data, pending, refresh } = useFetch<{ databases: string[] }>('/api/databases')
+const pageLoading = computed(() => initLoading.value || pending.value)
 const databases = computed(() => data.value?.databases ?? [])
 
 const selected = ref('')

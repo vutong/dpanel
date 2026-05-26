@@ -1,60 +1,68 @@
 <template>
   <div class="login-page">
-    <div class="login-top">
-      <ThemeToggle />
-    </div>
+    <PageLoader v-if="!ready" label="Loading…" class="login-loader" />
 
-    <div class="login-card card">
-      <div class="login-brand">
-        <div class="login-logo">
-          <AppIcon name="dashboard" :size="28" />
-        </div>
-        <div>
-          <h1>dpanel</h1>
-          <p class="login-tagline">VPS control panel</p>
-        </div>
+    <template v-else>
+      <div class="login-top">
+        <ThemeToggle />
       </div>
 
-      <p class="login-subtitle">Sign in to manage websites and MariaDB</p>
-
-      <div v-if="error" class="alert alert-error">{{ error }}</div>
-
-      <form class="login-form" @submit.prevent="submit">
-        <div class="field">
-          <label class="label" for="email">Email</label>
-          <div class="input-wrap">
-            <AppIcon name="mail" :size="18" class="input-icon" />
-            <input
-              id="email"
-              v-model="email"
-              class="input input-with-icon"
-              type="email"
-              required
-              autocomplete="username"
-              placeholder="admin@example.com"
-            />
+      <div class="login-card card">
+        <div class="login-brand">
+          <div class="login-logo">
+            <AppIcon name="dashboard" :size="28" />
+          </div>
+          <div>
+            <h1>dpanel</h1>
+            <p class="login-tagline">VPS control panel</p>
           </div>
         </div>
-        <div class="field">
-          <label class="label" for="password">Password</label>
-          <div class="input-wrap">
-            <AppIcon name="lock" :size="18" class="input-icon" />
-            <input
-              id="password"
-              v-model="password"
-              class="input input-with-icon"
-              type="password"
-              required
-              autocomplete="current-password"
-              placeholder="••••••••"
-            />
+
+        <p class="login-subtitle">Sign in to manage websites and MariaDB</p>
+
+        <div v-if="error" class="alert alert-error">{{ error }}</div>
+
+        <form class="login-form" @submit.prevent="submit">
+          <div class="field">
+            <label class="label" for="email">Email</label>
+            <div class="input-wrap">
+              <AppIcon name="mail" :size="18" class="input-icon" />
+              <input
+                id="email"
+                v-model="email"
+                class="input input-with-icon"
+                type="email"
+                required
+                autocomplete="username"
+                placeholder="admin@example.com"
+              />
+            </div>
           </div>
-        </div>
-        <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
-          {{ loading ? 'Signing in…' : 'Sign in' }}
-        </button>
-      </form>
-    </div>
+          <div class="field">
+            <label class="label" for="password">Password</label>
+            <div class="input-wrap">
+              <AppIcon name="lock" :size="18" class="input-icon" />
+              <input
+                id="password"
+                v-model="password"
+                class="input input-with-icon"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="••••••••"
+              />
+            </div>
+          </div>
+          <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
+            <span v-if="loading" class="login-btn-inner">
+              <span class="login-btn-spinner" aria-hidden="true" />
+              Signing in…
+            </span>
+            <span v-else>Sign in</span>
+          </button>
+        </form>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -62,12 +70,25 @@
 definePageMeta({ layout: false })
 
 const { initTheme } = useTheme()
-onMounted(() => initTheme())
-
+const ready = ref(false)
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+
+onMounted(async () => {
+  initTheme()
+  try {
+    const me = await $fetch<{ authenticated?: boolean }>('/api/auth/me')
+    if (me?.authenticated) {
+      await navigateTo('/')
+      return
+    }
+  } catch {
+    /* show login form */
+  }
+  ready.value = true
+})
 
 async function submit() {
   error.value = ''
@@ -98,6 +119,10 @@ async function submit() {
   background: var(--bg);
   background-image: var(--login-glow);
   position: relative;
+}
+
+.login-loader {
+  min-height: 100vh;
 }
 
 .login-page::before {
@@ -190,5 +215,27 @@ async function submit() {
   padding-top: 0.7rem;
   padding-bottom: 0.7rem;
   font-size: 0.95rem;
+}
+
+.login-btn-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-btn-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: login-spin 0.7s linear infinite;
+}
+
+@keyframes login-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
