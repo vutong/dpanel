@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Shared helpers for /opt/stack/infra/scripts (source, do not execute directly).
 
+STACK_ROOT="${STACK_ROOT:-/opt/stack}"
+
 ensure_python3() {
   if command -v python3 >/dev/null 2>&1; then
     PYBIN="$(command -v python3)"
@@ -27,4 +29,126 @@ ensure_python3() {
   fi
   PYBIN="$(command -v python3)"
   [[ -n "${PYBIN}" ]]
+}
+
+# docker compose with compose.yml + all compose.d/*.yml (per-site Nuxt services).
+stack_compose() {
+  local -a args=(-f "${STACK_ROOT}/compose.yml")
+  local f
+  shopt -s nullglob
+  for f in "${STACK_ROOT}"/compose.d/*.yml; do
+    args+=(-f "$f")
+  done
+  shopt -u nullglob
+  docker compose "${args[@]}" "$@"
+}
+
+site_slug() {
+  echo "$1" | tr '.' '-' | tr -cd 'a-zA-Z0-9-'
+}
+
+write_nuxt_compose_fragment() {
+  local domain="$1"
+  local slug
+  slug="$(site_slug "$domain")"
+  local frag="${STACK_ROOT}/compose.d/nuxt-${slug}.yml"
+  mkdir -p "${STACK_ROOT}/compose.d"
+  # shellcheck source=/dev/null
+  [[ -f "${STACK_ROOT}/.env" ]] && source "${STACK_ROOT}/.env"
+  cat > "${frag}" <<EOF
+services:
+  nuxt-${slug}:
+    build:
+      context: ./infra/docker/node
+      dockerfile: Dockerfile
+    container_name: ${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-dpanel}}-nuxt-${slug}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+    volumes:
+      - ./apps/${domain}:/app
+    networks:
+      - stack
+EOF
+}
+
+write_nginx_node_site() {
+  local domain="$1"
+  local slug
+  slug="$(site_slug "$domain")"
+  cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
+server {
+    listen 80;
+    server_name ${domain};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    location / {
+        set \$nuxt_upstream nuxt-${slug}:3000;
+        proxy_pass http://\$nuxt_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOF
+}
+
+write_nginx_php_site() {
+  local domain="$1"
+  cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
+server {
+    listen 80;
+    server_name ${domain};
+    root /var/www/apps/${domain}/public;
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \\.php\$ {
+        fastcgi_pass php-fpm:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+EOF
+}
+
+# Regenerate site nginx + compose.d from panel registry (fixes stale upstream configs).
+sync_site_configs() {
+  local sites_file="${STACK_ROOT}/data/panel/sites.json"
+  [[ -f "${sites_file}" ]] || return 0
+  ensure_python3 >/dev/null 2>&1 || return 0
+
+  export SITES_FILE="${sites_file}"
+  while IFS='|' read -r domain runtime; do
+    [[ -n "${domain}" ]] || continue
+    if [[ "${runtime}" == "node" ]]; then
+      write_nuxt_compose_fragment "${domain}"
+      write_nginx_node_site "${domain}"
+    elif [[ "${runtime}" == "php" ]]; then
+      write_nginx_php_site "${domain}"
+    fi
+  done < <("${PYBIN}" -c "
+import json, os
+with open(os.environ['SITES_FILE']) as f:
+    for s in json.load(f):
+        d = s.get('domain') or ''
+        r = s.get('runtime') or ''
+        if d:
+            print(f'{d}|{r}')
+" 2>/dev/null)
+}
+
+stack_compose_up_sites() {
+  cd "${STACK_ROOT}"
+  stack_compose up -d --remove-orphans 2>/dev/null || true
 }

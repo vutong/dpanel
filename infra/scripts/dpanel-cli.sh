@@ -7,6 +7,9 @@ CMD="${1:-help}"
 
 cd "${STACK_ROOT}" 2>/dev/null || { echo "[dpanel] Stack not found at ${STACK_ROOT}" >&2; exit 1; }
 
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh" 2>/dev/null || true
+
 show_help() {
   local ver="unknown"
   if [[ -f "${STACK_ROOT}/data/panel/version.json" ]]; then
@@ -70,13 +73,13 @@ case "${CMD}" in
     show_help
     ;;
   status)
-    docker compose ps
+    stack_compose ps
     ;;
   logs)
-    docker compose logs -f "${2:-dpanel}" --tail "${3:-100}"
+    stack_compose logs -f "${2:-dpanel}" --tail "${3:-100}"
     ;;
   restart)
-    docker compose restart "${2:-}"
+    stack_compose restart "${2:-}"
     ;;
   nginx-reload|fix-nginx)
     exec bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh"

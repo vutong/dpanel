@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.16"
+INSTALLER_VERSION="1.0.17"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -461,8 +461,10 @@ export STACK_ROOT
 
 step "Start containers"
 cd "${STACK_ROOT}"
-run_cmd "docker compose build" docker compose build
-run_cmd "docker compose up" docker compose up -d --remove-orphans
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+run_cmd "docker compose build" stack_compose build
+run_cmd "docker compose up" stack_compose up -d --remove-orphans
 
 step "Configure nginx"
 bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx configuration failed"

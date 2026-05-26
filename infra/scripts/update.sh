@@ -128,58 +128,65 @@ if [[ -n "${REMOTE_VER}" && -n "${LOCAL_VER}" && "${LOCAL_VER}" == "${REMOTE_VER
   log "Continuing (rebuild/restart requested)"
 fi
 
-log "Update start — local ${LOCAL_VER:-?} → remote ${REMOTE_VER:-?}"
-log "Repo: ${DPANEL_REPO} (${DPANEL_BRANCH})"
-log "Log: ${INSTALL_LOG}"
+# Phase 1: download + rsync, then re-exec so build/nginx use the new scripts on disk.
+if [[ "${DPANEL_UPDATE_REEXEC:-}" != 1 ]]; then
+  log "Update start — local ${LOCAL_VER:-?} → remote ${REMOTE_VER:-?}"
+  log "Repo: ${DPANEL_REPO} (${DPANEL_BRANCH})"
+  log "Log: ${INSTALL_LOG}"
 
-CLONE_TMP="$(mktemp -d)"
-cleanup() { rm -rf "${CLONE_TMP}"; }
-trap cleanup EXIT
+  CLONE_TMP="$(mktemp -d)"
+  cleanup() { rm -rf "${CLONE_TMP}"; }
+  trap cleanup EXIT
 
-export GIT_TERMINAL_PROMPT=0
-log "Downloading source..."
-git clone --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}" >> "${INSTALL_LOG}" 2>&1 \
-  || die "git clone failed — check ${INSTALL_LOG}"
+  export GIT_TERMINAL_PROMPT=0
+  log "Downloading source..."
+  git clone --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}" >> "${INSTALL_LOG}" 2>&1 \
+    || die "git clone failed — check ${INSTALL_LOG}"
 
-NEW_VER="$(grep -E '^INSTALLER_VERSION=' "${CLONE_TMP}/install.sh" | head -1 | sed 's/^INSTALLER_VERSION="\(.*\)"$/\1/' || echo "${REMOTE_VER}")"
+  systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
 
-systemctl stop unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
+  log "Syncing stack (keeping .env, data/, apps/, logs/, compose.d/)..."
+  rsync -a \
+    --exclude '.git' \
+    --exclude 'node_modules' \
+    --exclude '.output' \
+    --exclude '.nuxt' \
+    --exclude '.env' \
+    --exclude 'data/' \
+    --exclude 'apps/' \
+    --exclude 'logs/' \
+    --exclude 'compose.d/' \
+    --exclude 'CREDENTIALS.txt' \
+    "${CLONE_TMP}/" "${STACK_ROOT}/"
 
-log "Syncing stack (keeping .env, data/, apps/, logs/, compose.d/)..."
-rsync -a \
-  --exclude '.git' \
-  --exclude 'node_modules' \
-  --exclude '.output' \
-  --exclude '.nuxt' \
-  --exclude '.env' \
-  --exclude 'data/' \
-  --exclude 'apps/' \
-  --exclude 'logs/' \
-  --exclude 'compose.d/' \
-  --exclude 'CREDENTIALS.txt' \
-  "${CLONE_TMP}/" "${STACK_ROOT}/"
+  chmod +x "${STACK_ROOT}/infra/scripts/"*.sh
+  ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
 
-chmod +x "${STACK_ROOT}/infra/scripts/"*.sh
-ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
+  mkdir -p "${STACK_ROOT}/data/panel" "${STACK_ROOT}/infra/nginx/conf.d" "${STACK_ROOT}/compose.d"
+  [[ -f "${STACK_ROOT}/data/panel/sites.json" ]] || echo '[]' > "${STACK_ROOT}/data/panel/sites.json"
+
+  if grep -q '^DPANEL_REPO=' "${STACK_ROOT}/.env"; then
+    sed -i "s|^DPANEL_REPO=.*|DPANEL_REPO=${DPANEL_REPO}|" "${STACK_ROOT}/.env"
+  else
+    echo "DPANEL_REPO=${DPANEL_REPO}" >> "${STACK_ROOT}/.env"
+  fi
+  if grep -q '^DPANEL_BRANCH=' "${STACK_ROOT}/.env"; then
+    sed -i "s/^DPANEL_BRANCH=.*/DPANEL_BRANCH=${DPANEL_BRANCH}/" "${STACK_ROOT}/.env"
+  else
+    echo "DPANEL_BRANCH=${DPANEL_BRANCH}" >> "${STACK_ROOT}/.env"
+  fi
+
+  trap - EXIT
+  rm -rf "${CLONE_TMP}"
+  export DPANEL_UPDATE_REEXEC=1
+  exec bash "${STACK_ROOT}/infra/scripts/update.sh" "$@"
+fi
+
+NEW_VER="$(grep -E '^INSTALLER_VERSION=' "${STACK_ROOT}/install.sh" | head -1 | sed 's/^INSTALLER_VERSION="\(.*\)"$/\1/' || echo "${REMOTE_VER}")"
 
 # shellcheck source=_helpers.sh
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 ensure_python3 >> "${INSTALL_LOG}" 2>&1 || log "Warning: python3 not available — some scripts may fail"
-
-# Preserve auth/sites; ensure panel metadata dirs exist
-mkdir -p "${STACK_ROOT}/data/panel" "${STACK_ROOT}/infra/nginx/conf.d" "${STACK_ROOT}/compose.d"
-[[ -f "${STACK_ROOT}/data/panel/sites.json" ]] || echo '[]' > "${STACK_ROOT}/data/panel/sites.json"
-
-if grep -q '^DPANEL_REPO=' "${STACK_ROOT}/.env"; then
-  sed -i "s|^DPANEL_REPO=.*|DPANEL_REPO=${DPANEL_REPO}|" "${STACK_ROOT}/.env"
-else
-  echo "DPANEL_REPO=${DPANEL_REPO}" >> "${STACK_ROOT}/.env"
-fi
-if grep -q '^DPANEL_BRANCH=' "${STACK_ROOT}/.env"; then
-  sed -i "s/^DPANEL_BRANCH=.*/DPANEL_BRANCH=${DPANEL_BRANCH}/" "${STACK_ROOT}/.env"
-else
-  echo "DPANEL_BRANCH=${DPANEL_BRANCH}" >> "${STACK_ROOT}/.env"
-fi
 
 if [[ "${SKIP_BUILD}" -eq 0 ]]; then
   log "Rebuilding panel..."
@@ -189,10 +196,10 @@ else
   log "Skipping panel rebuild (--no-build)"
 fi
 
-log "Rebuilding Docker services..."
+log "Rebuilding Docker services (including compose.d sites)..."
 cd "${STACK_ROOT}"
-docker compose build >> "${INSTALL_LOG}" 2>&1 || die "docker compose build failed"
-docker compose up -d --remove-orphans >> "${INSTALL_LOG}" 2>&1 || die "docker compose up failed"
+stack_compose build >> "${INSTALL_LOG}" 2>&1 || die "docker compose build failed"
+stack_compose up -d --remove-orphans >> "${INSTALL_LOG}" 2>&1 || die "docker compose up failed"
 
 export STACK_ROOT
 log "Configuring nginx..."

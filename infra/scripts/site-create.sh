@@ -20,8 +20,6 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
-NGINX_CONF="${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf"
-
 mkdir -p "$APP_DIR"
 
 if [[ -n "$GITHUB_URL" ]]; then
@@ -115,66 +113,13 @@ else
 fi
 
 if [[ "$RUNTIME" == "node" ]]; then
-  SLUG="$(echo "$DOMAIN" | tr '.' '-' | tr -cd 'a-zA-Z0-9-')"
-  COMPOSE_FRAG="${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml"
-  mkdir -p "${STACK_ROOT}/compose.d"
-  cat > "$COMPOSE_FRAG" <<EOF
-services:
-  nuxt-${SLUG}:
-    build:
-      context: ./infra/docker/node
-      dockerfile: Dockerfile
-    container_name: ${PROJECT_NAME:-dpanel}-nuxt-${SLUG}
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      NUXT_HOST: 0.0.0.0
-      NUXT_PORT: 3000
-    volumes:
-      - ./apps/${DOMAIN}:/app
-    networks:
-      - stack
-EOF
+  write_nuxt_compose_fragment "${DOMAIN}"
+  write_nginx_node_site "${DOMAIN}"
   cd "$STACK_ROOT"
-  docker compose -f compose.yml -f "compose.d/nuxt-${SLUG}.yml" up -d "nuxt-${SLUG}" 2>/dev/null || true
-
-  cat > "$NGINX_CONF" <<EOF
-server {
-    listen 80;
-    server_name ${DOMAIN};
-
-    location / {
-        proxy_pass http://nuxt-${SLUG}:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-EOF
+  SLUG="$(site_slug "${DOMAIN}")"
+  stack_compose up -d "nuxt-${SLUG}" 2>/dev/null || true
 else
-  cat > "$NGINX_CONF" <<EOF
-server {
-    listen 80;
-    server_name ${DOMAIN};
-    root /var/www/apps/${DOMAIN}/public;
-    index index.php index.html;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \\.php\$ {
-        fastcgi_pass php-fpm:9000;
-        fastcgi_index index.php;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        include fastcgi_params;
-    }
-}
-EOF
+  write_nginx_php_site "${DOMAIN}"
 fi
 
 # Update sites.json

@@ -23,7 +23,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # shellcheck source=_helpers.sh
-source "${STACK_ROOT}/infra/scripts/_helpers.sh" 2>/dev/null || true
+source "${STACK_ROOT}/infra/scripts/_helpers.sh" 2>/dev/null || {
+  echo '{"ok":false,"error":"helpers missing"}'
+  exit 2
+}
 
 log() {
   [[ "${JSON_ONLY}" -eq 0 ]] && echo "[dpanel] $*" | tee -a "${HEALTH_LOG}" >&2 || true
@@ -63,22 +66,24 @@ else
   report "docker_daemon" 1 "Docker OK" ""
 fi
 
-if ! docker compose ps >/dev/null 2>&1; then
-  report "compose" 0 "docker compose error" "docker compose up -d"
-  run_fix "docker compose up -d"
+sync_site_configs 2>/dev/null || true
+
+if ! stack_compose ps >/dev/null 2>&1; then
+  report "compose" 0 "docker compose error" "dpanel nginx-reload"
+  run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
 else
   for svc in ${REQUIRED_SERVICES}; do
-    state="$(docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="${svc}" '$1==s {print $2; exit}')"
+    state="$(stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="${svc}" '$1==s {print $2; exit}')"
     if [[ "${state}" == "running" ]]; then
       report "service_${svc}" 1 "${svc} running" ""
     else
-      report "service_${svc}" 0 "${svc} is ${state:-down}" "docker compose up -d ${svc}"
-      run_fix "docker compose up -d ${svc}"
+      report "service_${svc}" 0 "${svc} is ${state:-down}" "stack_compose up -d ${svc}"
+      run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose up -d ${svc}"
     fi
   done
 fi
 
-if docker compose run --rm --no-deps nginx nginx -t >/dev/null 2>&1; then
+if stack_compose run --rm --no-deps nginx nginx -t >/dev/null 2>&1; then
   report "nginx_config" 1 "nginx -t OK" ""
 else
   report "nginx_config" 0 "nginx config invalid" "dpanel nginx-reload"
@@ -87,7 +92,7 @@ fi
 
 ports_ok=1
 for p in 80 8080; do
-  docker compose port nginx "${p}" 2>/dev/null | grep -qE ':[0-9]+' || ports_ok=0
+  stack_compose port nginx "${p}" 2>/dev/null | grep -qE ':[0-9]+' || ports_ok=0
 done
 if [[ "${ports_ok}" -eq 1 ]]; then
   report "nginx_ports" 1 "ports 80/8080 published" ""
@@ -96,25 +101,25 @@ else
   run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
 fi
 
-if docker compose exec -T dpanel wget -q -O- --timeout=5 http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
+if stack_compose exec -T dpanel wget -q -O- --timeout=5 http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
   report "panel_api" 1 "panel API OK" ""
 else
-  report "panel_api" 0 "panel API down" "docker compose restart dpanel"
-  run_fix "docker compose restart dpanel"
+  report "panel_api" 0 "panel API down" "stack_compose restart dpanel"
+  run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart dpanel"
 fi
 
-if docker compose exec -T mariadb healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
+if stack_compose exec -T mariadb healthcheck.sh --connect --innodb_initialized >/dev/null 2>&1; then
   report "mariadb" 1 "MariaDB OK" ""
 else
-  report "mariadb" 0 "MariaDB not ready" "docker compose restart mariadb"
-  run_fix "docker compose restart mariadb"
+  report "mariadb" 0 "MariaDB not ready" "stack_compose restart mariadb"
+  run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart mariadb"
 fi
 
-if docker compose exec -T dpanel sh -c 'command -v python3 >/dev/null' 2>/dev/null; then
+if stack_compose exec -T dpanel sh -c 'command -v python3 >/dev/null' 2>/dev/null; then
   report "python3" 1 "python3 in panel container" ""
 else
-  report "python3" 0 "python3 missing in panel" "docker compose exec dpanel apk add --no-cache python3"
-  run_fix "docker compose exec dpanel apk add --no-cache python3"
+  report "python3" 0 "python3 missing in panel" "stack_compose exec dpanel apk add --no-cache python3"
+  run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose exec dpanel apk add --no-cache python3"
 fi
 
 disk_mb="$(df -BM "${STACK_ROOT}" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}' || echo 0)"

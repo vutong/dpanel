@@ -7,6 +7,8 @@ log() { echo "[dpanel] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
 cd "$STACK_ROOT"
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 # shellcheck source=/dev/null
 [[ -f .env ]] && source .env
 
@@ -21,6 +23,12 @@ fi
 
 mkdir -p "${STACK_ROOT}/infra/nginx/conf.d"
 touch "${STACK_ROOT}/logs/nginx/access.log" "${STACK_ROOT}/logs/nginx/error.log"
+
+log "Syncing site configs from sites.json..."
+sync_site_configs
+
+log "Starting site containers (compose.d)..."
+stack_compose_up_sites
 
 cat > "${STACK_ROOT}/infra/nginx/conf.d/00-panel.conf" <<EOF
 server {
@@ -55,39 +63,48 @@ EOF
 rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf" "${STACK_ROOT}/infra/nginx/conf.d/99-mariadb.conf"
 
 log "Testing nginx configuration..."
-if ! docker compose run --rm --no-deps nginx nginx -t 2>&1; then
+if ! stack_compose run --rm --no-deps nginx nginx -t 2>&1; then
   log "Invalid config in ${STACK_ROOT}/infra/nginx/conf.d/"
-  log "Tip: move broken site configs aside, e.g.:"
-  log "  mkdir -p /tmp/nginx-bak && mv ${STACK_ROOT}/infra/nginx/conf.d/*.conf /tmp/nginx-bak/ 2>/dev/null; keep 00-panel.conf"
-  die "Fix nginx config files then run: dpanel nginx-reload"
+  log "Quarantining broken site configs (keeping 00-panel.conf)..."
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+  for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
+    [[ -f "$f" ]] || continue
+    [[ "$(basename "$f")" == "00-panel.conf" ]] && continue
+    mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/" 2>/dev/null || true
+  done
+  if ! stack_compose run --rm --no-deps nginx nginx -t 2>&1; then
+    log "Tip: fix sites in panel or restore configs from conf.d/disabled/"
+    die "nginx config still invalid — run: dpanel nginx-reload after fixing sites"
+  fi
+  log "Panel nginx OK — disabled site vhosts moved to conf.d/disabled/"
 fi
 
 _nginx_running() {
-  docker compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E '^nginx running' >/dev/null
+  stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E '^nginx running' >/dev/null
 }
 
 if ! _nginx_running; then
   log "nginx is not running — starting stack..."
-  docker compose up -d
+  stack_compose up -d
   sleep 3
 fi
 
 if ! _nginx_running; then
   log "nginx still not running. Last logs:"
-  docker compose logs nginx --tail 30 2>&1 || true
+  stack_compose logs nginx --tail 30 2>&1 || true
   die "nginx failed to start — check logs above"
 fi
 
 if [[ "$MODE" != "panel-only" ]]; then
-  docker compose exec -T nginx nginx -s reload 2>/dev/null \
-    || docker compose restart nginx
+  stack_compose exec -T nginx nginx -s reload 2>/dev/null \
+    || stack_compose restart nginx
   sleep 2
 fi
 
 if ss -tln 2>/dev/null | grep -qE ':80 |:8080 '; then
   log "nginx listening on port 80 / 8080"
 else
-  log "Warning: ports 80/8080 not visible on host — run: docker compose ps && docker compose logs nginx"
+  log "Warning: ports 80/8080 not visible on host — run: dpanel status && dpanel logs nginx"
 fi
 
 log "Done — panel: http://${PANEL_DOMAIN} or http://$(hostname -I | awk '{print $1}'):8080"

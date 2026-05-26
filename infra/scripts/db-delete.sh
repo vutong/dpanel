@@ -12,10 +12,12 @@ for protected in mysql information_schema performance_schema sys dpanel; do
 done
 
 cd "$STACK_ROOT"
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 # shellcheck source=/dev/null
 source .env
 
-docker compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
+stack_compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
   "DROP DATABASE IF EXISTS \`${DB_NAME}\`;" 2>/dev/null \
   || die "Failed to delete database"
 
