@@ -79,10 +79,13 @@ First run on an old install (before `update.sh` existed): `dpanel update` downlo
 
 ```bash
 dpanel status
-dpanel health
+dpanel health              # full check: docker, nginx, ports, DB, panel API
+sudo dpanel health --fix   # auto-fix common issues (nginx down, etc.)
 dpanel credentials
 dpanel logs dpanel
 ```
+
+`dpanel update` ends with `health --fix` automatically (skip with `--no-health-fix`).
 
 ## SSL
 

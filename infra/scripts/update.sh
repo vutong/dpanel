@@ -15,17 +15,20 @@ RAW_REPO_BASE="${DPANEL_RAW_BASE:-https://raw.githubusercontent.com/vutong/dpane
 
 CHECK_ONLY=0
 SKIP_BUILD=0
+SKIP_HEALTH_FIX=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) CHECK_ONLY=1; shift ;;
     --no-build) SKIP_BUILD=1; shift ;;
+    --no-health-fix) SKIP_HEALTH_FIX=1; shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: dpanel update [--check] [--no-build]
+Usage: dpanel update [--check] [--no-build] [--no-health-fix]
 
-  --check     Show installed vs latest version (no changes)
-  --no-build  Sync files and containers only; skip Nuxt rebuild
+  --check          Show installed vs latest version (no changes)
+  --no-build       Sync files and containers only; skip Nuxt rebuild
+  --no-health-fix  Skip automatic health --fix at end of update
 EOF
       exit 0
       ;;
@@ -192,7 +195,8 @@ docker compose build >> "${INSTALL_LOG}" 2>&1 || die "docker compose build faile
 docker compose up -d --remove-orphans >> "${INSTALL_LOG}" 2>&1 || die "docker compose up failed"
 
 export STACK_ROOT
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" 2>/dev/null || true
+log "Configuring nginx..."
+bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx-reload failed"
 
 [[ -n "${NEW_VER}" ]] && set_env_version "${NEW_VER}"
 
@@ -200,3 +204,12 @@ systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/nul
 
 log "Update complete — version ${NEW_VER:-${REMOTE_VER:-?}}"
 log "Panel: http://${PANEL_DOMAIN}"
+
+if [[ "${SKIP_HEALTH_FIX}" -eq 0 && -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
+  log "Running health check (with auto-fix)..."
+  if ! bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix; then
+    die "Health check still failing — run: sudo dpanel health"
+  fi
+else
+  log "Tip: run sudo dpanel health --fix"
+fi

@@ -26,12 +26,12 @@ System
   help, -h, --help           Show this help
   version                    Installed version (JSON)
   status                     Docker Compose service status
-  health                     Panel API health check
+  health [--fix]             Full stack health (services, nginx, DB, ports)
   credentials, cred          Install summary (CREDENTIALS.txt)
 
 Update
-  update [--check] [--no-build]
-                             Pull latest from GitHub, sync, rebuild, restart
+  update [--check] [--no-build] [--no-health-fix]
+                             Pull latest, sync, rebuild, nginx-reload, health --fix
   update-check               Compare installed vs latest version
   update-panel               Rebuild panel UI only (no git pull)
   deploy                     docker compose build && up -d
@@ -102,20 +102,14 @@ case "${CMD}" in
       echo "No CREDENTIALS.txt — see ${STACK_ROOT}/.env"
     fi
     ;;
-  health)
-    local out
-    out="$(docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/health 2>/dev/null \
-      || curl -fsS "http://127.0.0.1:3000/api/health" 2>/dev/null \
-      || true)"
-    if [[ -z "${out}" ]]; then
-      echo "[dpanel] Health check failed — run: dpanel logs dpanel"
-      exit 1
+  health|doctor)
+    local hc="${STACK_ROOT}/infra/scripts/health-check.sh"
+    if [[ ! -f "${hc}" ]]; then
+      curl -fsSL "${DPANEL_RAW_URL:-https://raw.githubusercontent.com/vutong/dpanel/main}/infra/scripts/health-check.sh" \
+        -o "${hc}"
+      chmod +x "${hc}"
     fi
-    if command -v python3 >/dev/null 2>&1; then
-      printf '%s\n' "${out}" | python3 -m json.tool 2>/dev/null || printf '%s\n' "${out}"
-    else
-      printf '%s\n' "${out}"
-    fi
+    exec bash "${hc}" "${@:2}"
     ;;
   setpass)
     exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"

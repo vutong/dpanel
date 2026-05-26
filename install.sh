@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.15"
+INSTALLER_VERSION="1.0.16"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -468,6 +468,10 @@ step "Configure nginx"
 bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx configuration failed"
 
 wait_for_healthy_stack
+
+if [[ -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
+  bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix || log "Warning: post-install health check reported issues — run: dpanel health --fix"
+fi
 
 systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/null || true
 
