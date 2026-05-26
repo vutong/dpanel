@@ -251,6 +251,16 @@ h2 {
   font-size: 0.88rem;
 }
 
+.alert-info {
+  background: var(--accent-muted);
+  border: 1px solid var(--accent);
+  color: var(--text);
+}
+
+html[data-theme='dark'] .alert-info {
+  border-color: rgba(79, 143, 247, 0.45);
+}
+
 .alert-error {
   background: var(--danger-muted);
   border: 1px solid var(--danger);

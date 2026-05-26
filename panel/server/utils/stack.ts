@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -44,6 +44,21 @@ export function scriptErrorMessage(err: unknown): string {
   const tail = lines.slice(-8).join(' — ')
   if (tail) return tail.slice(0, 2000)
   return (e.message || 'Script failed').replace(/^Command failed:.*\n?/i, '').trim() || 'Script failed'
+}
+
+/** Start a bash script in the background (panel API returns immediately — no 502 from long work). */
+export function runScriptDetached(
+  script: string,
+  args: string[] = [],
+  extraEnv: Record<string, string> = {}
+): void {
+  const child = spawn('bash', [scriptPath(script), ...args], {
+    cwd: stackRoot(),
+    env: { ...process.env, STACK_ROOT: stackRoot(), ...extraEnv },
+    detached: true,
+    stdio: 'ignore'
+  })
+  child.unref()
 }
 
 export async function runScript(

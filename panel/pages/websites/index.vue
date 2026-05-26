@@ -6,7 +6,7 @@
     </div>
 
     <PageLoader v-if="pending" label="Loading websites…" />
-    <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
+    <div v-else-if="!displaySites.length" class="card muted">No websites yet. Create your first site.</div>
     <div v-else class="card table-wrap">
       <table class="table">
         <thead>
@@ -19,7 +19,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in sites" :key="s.domain">
+          <tr v-for="s in displaySites" :key="s.domain">
             <td><strong>{{ s.domain }}</strong></td>
             <td>
               <span :class="s.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
@@ -101,7 +101,7 @@
         <p class="muted">
           Remove <strong>{{ deleteTarget.domain }}</strong> from the panel and stack.
         </p>
-        <ul class="delete-list">
+        <ul v-if="deletePhase === 'confirm'" class="delete-list">
           <li>Panel registry (<code>sites.json</code>)</li>
           <li>Nginx vhost (<code>conf.d/</code> and <code>conf.d/disabled/</code>)</li>
           <li><code>apps/{{ deleteTarget.domain }}/</code> (application files)</li>
@@ -110,13 +110,38 @@
             <code>compose.d/nuxt-{{ slug(deleteTarget.domain) }}.yml</code>
           </li>
         </ul>
-        <p class="hint">This permanently removes all related files and cannot be undone.</p>
+        <p v-if="deletePhase === 'confirm'" class="hint">
+          This permanently removes all related files and cannot be undone.
+        </p>
+        <p v-else class="alert alert-info delete-running">
+          Quá trình xoá đang diễn ra tự động. Bạn có thể đóng hộp thoại này — site đã được ẩn khỏi danh sách.
+        </p>
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" :disabled="!!busy" @click="closeDelete">
+          <button
+            v-if="deletePhase === 'confirm'"
+            type="button"
+            class="btn btn-ghost"
+            :disabled="!!busy"
+            @click="closeDelete"
+          >
             Cancel
           </button>
-          <button type="button" class="btn btn-danger" :disabled="!!busy" @click="confirmDelete">
-            {{ busy === deleteTarget.domain ? 'Deleting…' : 'Delete website' }}
+          <button
+            v-else
+            type="button"
+            class="btn btn-primary"
+            @click="closeDelete"
+          >
+            Close
+          </button>
+          <button
+            v-if="deletePhase === 'confirm'"
+            type="button"
+            class="btn btn-danger"
+            :disabled="!!busy"
+            @click="confirmDelete"
+          >
+            Delete website
           </button>
         </div>
       </div>
@@ -126,12 +151,16 @@
 
 <script setup lang="ts">
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
-type DeleteResult = { ok: boolean; domain?: string; purged?: boolean; removed?: string[] }
 
 const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
+const hiddenDomains = ref<Set<string>>(new Set())
+const displaySites = computed(() =>
+  sites.value.filter((s) => !hiddenDomains.value.has(s.domain))
+)
 
 const deleteTarget = ref<Site | null>(null)
+const deletePhase = ref<'confirm' | 'background'>('confirm')
 const updateTarget = ref<Site | null>(null)
 const updateToken = ref('')
 const busy = ref('')
@@ -196,56 +225,54 @@ async function runRebuild(site: Site) {
 
 function openDelete(site: Site) {
   deleteTarget.value = site
+  deletePhase.value = 'confirm'
+  msg.value = ''
 }
 
 function closeDelete() {
-  if (busy.value) return
   deleteTarget.value = null
+  deletePhase.value = 'confirm'
 }
 
-async function confirmDelete() {
+function confirmDelete() {
   const site = deleteTarget.value
-  if (!site) return
+  if (!site || deletePhase.value !== 'confirm') return
 
-  busy.value = site.domain
+  const domain = site.domain
+  const nextHidden = new Set(hiddenDomains.value)
+  nextHidden.add(domain)
+  hiddenDomains.value = nextHidden
+
+  deletePhase.value = 'background'
+  ok.value = true
   msg.value = ''
-  try {
-    const result = await $fetch<DeleteResult>(
-      `/api/websites/${encodeURIComponent(site.domain)}`,
-      { method: 'DELETE' }
-    )
-    ok.value = true
-    const n = result.removed?.length ?? 0
-    msg.value =
-      n > 0
-        ? `Deleted ${site.domain} (${n} item${n === 1 ? '' : 's'} removed)`
-        : `Deleted ${site.domain}`
-    deleteTarget.value = null
-    await refresh()
-  } catch (e: unknown) {
-    ok.value = false
-    const err = e as {
-      data?: { statusMessage?: string; message?: string }
-      statusMessage?: string
-      message?: string
-      statusCode?: number
-    }
-    const raw =
-      err.data?.statusMessage ||
-      err.data?.message ||
-      err.statusMessage ||
-      err.message ||
-      ''
-    if (err.statusCode === 502 || /bad gateway/i.test(raw)) {
-      msg.value =
-        'Gateway error while waiting — the site may still be deleting. Refresh the list in a few seconds.'
-      await refresh()
-    } else {
-      msg.value = raw || 'Delete failed'
-    }
-  } finally {
-    busy.value = ''
-  }
+
+  void $fetch(`/api/websites/${encodeURIComponent(domain)}`, { method: 'DELETE' })
+    .catch((e: unknown) => {
+      const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+      const raw = err.data?.statusMessage || err.statusMessage || ''
+      ok.value = false
+      msg.value = raw || `Could not start delete for ${domain}`
+    })
+    .finally(() => {
+      window.setTimeout(() => {
+        void refresh().then(() => {
+          if (sites.value.some((s) => s.domain === domain)) {
+            const restored = new Set(hiddenDomains.value)
+            restored.delete(domain)
+            hiddenDomains.value = restored
+            if (!msg.value || ok.value) {
+              ok.value = false
+              msg.value = `${domain} is still listed — try Delete again or: sudo dpanel site-remove ${domain}`
+            }
+          } else {
+            const done = new Set(hiddenDomains.value)
+            done.delete(domain)
+            hiddenDomains.value = done
+          }
+        })
+      }, 2500)
+    })
 }
 
 function formatDate(iso?: string) {
@@ -270,12 +297,14 @@ function formatDate(iso?: string) {
 .col-actions {
   text-align: right;
   white-space: nowrap;
+  overflow: visible;
 }
 .action-btns {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   justify-content: flex-end;
+  overflow: visible;
 }
 .github-cell {
   max-width: min(280px, 28vw);
@@ -330,5 +359,10 @@ function formatDate(iso?: string) {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+.delete-running {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 </style>

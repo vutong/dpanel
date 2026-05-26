@@ -260,6 +260,7 @@ stack_compose_up_sites() {
 site_finalize_async() {
   local log_name="${1:-site-ops}"
   local nuxt_svc="${2:-}"
+  local mode="${3:-}" # "delete" = stop site container + prune orphans (no full compose up)
   mkdir -p "${STACK_ROOT}/logs/node"
   nohup bash -c "
     sleep 0.5
@@ -267,7 +268,17 @@ site_finalize_async() {
     cd \"\${STACK_ROOT}\"
     # shellcheck source=_helpers.sh
     source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
-    [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
+    if [[ \"${mode}\" == delete ]]; then
+      if [[ -n \"${nuxt_svc}\" ]]; then
+        slug=\"\${nuxt_svc#nuxt-}\"
+        docker_stop_container_by_name \"\$(_nuxt_container_name \"\${slug}\")\"
+        stack_compose stop \"${nuxt_svc}\" 2>/dev/null || true
+        stack_compose rm -f \"${nuxt_svc}\" 2>/dev/null || true
+      fi
+      prune_orphan_site_artifacts --no-up 2>/dev/null || true
+    else
+      [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
+    fi
     stack_compose up -d nginx 2>/dev/null || true
     nginx_reload_stack 2>/dev/null || true
   " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
@@ -393,7 +404,11 @@ quarantine_legacy_static_nuxt_vhosts() {
 }
 
 # Remove nginx/compose/container artifacts for domains not listed in sites.json.
+# --no-up: skip "compose up --remove-orphans" (panel site-delete uses this in background — full up restarts dpanel → 502).
 prune_orphan_site_artifacts() {
+  local skip_up=0
+  [[ "${1:-}" == "--no-up" ]] && skip_up=1
+
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
   # shellcheck source=/dev/null
   [[ -f "${STACK_ROOT}/.env" ]] && source "${STACK_ROOT}/.env"
@@ -463,6 +478,7 @@ print(' '.join(domains))
   done
   shopt -u nullglob
 
+  [[ "${skip_up}" -eq 1 ]] && return 0
   cd "${STACK_ROOT}"
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }

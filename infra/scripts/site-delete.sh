@@ -40,6 +40,7 @@ SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 SLUG="$(site_slug "${DOMAIN}")"
 SVC="nuxt-${SLUG}"
 declare -a REMOVED=()
+HAD_NUXT=0
 
 ensure_python3 || die "python3 required"
 export SITES_FILE DOMAIN="${DOMAIN}"
@@ -81,11 +82,7 @@ else
 fi
 
 if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
-  log "Stopping Docker service ${SVC}..."
-  stack_compose stop "${SVC}" 2>/dev/null || true
-  stack_compose rm -f "${SVC}" 2>/dev/null || true
-  docker_stop_container_by_name "$(_nuxt_container_name "${SLUG}")"
-  REMOVED+=("container:${SVC}")
+  HAD_NUXT=1
 fi
 
 if [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
@@ -104,23 +101,37 @@ for conf in \
   fi
 done
 
-if [[ -d "${STACK_ROOT}/apps/${DOMAIN}" ]]; then
-  rm -rf "${STACK_ROOT}/apps/${DOMAIN}"
-  REMOVED+=("apps:${DOMAIN}")
-  log "Deleted apps/${DOMAIN}/"
-fi
-
-log "Pruning orphan artifacts..."
-prune_orphan_site_artifacts 2>/dev/null || true
-
+# JSON before slow work (rm -rf apps, compose stop, prune+compose up) — avoids panel timeout/502.
 REMOVED_JSON="$(printf '%s\n' "${REMOVED[@]}" | "${PYBIN}" -c "
 import json, sys
 items = [l.strip() for l in sys.stdin if l.strip()]
 print(json.dumps(items))
 ")"
 
-log "Done — ${DOMAIN} removed (nginx reload runs in background)"
 printf '{"ok":true,"domain":"%s","purged":true,"removed":%s}\n' \
   "${DOMAIN}" "${REMOVED_JSON}"
 
-site_finalize_async "site-delete-${SLUG}"
+APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
+mkdir -p "${STACK_ROOT}/logs/node"
+nohup bash -c "
+  sleep 0.3
+  export STACK_ROOT='${STACK_ROOT}'
+  cd \"\${STACK_ROOT}\"
+  # shellcheck source=_helpers.sh
+  source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
+  app_dir='${APP_DIR}'
+  if [[ -d \"\${app_dir}\" ]]; then
+    rm -rf \"\${app_dir}\"
+    echo \"[dpanel] Deleted \${app_dir}/\" >&2
+  fi
+  if [[ ${HAD_NUXT} -eq 1 ]]; then
+    site_finalize_async 'site-delete-${SLUG}' '${SVC}' delete
+  else
+    stack_compose up -d nginx 2>/dev/null || true
+    nginx_reload_stack 2>/dev/null || true
+    prune_orphan_site_artifacts --no-up 2>/dev/null || true
+  fi
+" >> "${STACK_ROOT}/logs/node/site-delete-${SLUG}.log" 2>&1 &
+disown 2>/dev/null || true
+
+log "Done — ${DOMAIN} unregistered (files/containers finish in background — see logs/node/site-delete-${SLUG}.log)" >&2

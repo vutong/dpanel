@@ -3,7 +3,7 @@
     type="button"
     class="icon-btn"
     :class="[`icon-btn--${variant}`, { 'icon-btn--busy': busy }]"
-    :title="title"
+    :data-tip="title"
     :aria-label="title"
     :disabled="disabled || busy"
     @click="$emit('click', $event)"
@@ -35,6 +35,7 @@ defineEmits<{ click: [event: MouseEvent] }>()
 
 <style scoped>
 .icon-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -50,6 +51,36 @@ defineEmits<{ click: [event: MouseEvent] }>()
     background 0.15s,
     border-color 0.15s,
     color 0.15s;
+}
+
+/* Instant tooltip (native title has ~1s browser delay). */
+.icon-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 0.45rem);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 200;
+  transition: none;
+}
+
+.icon-btn[data-tip]:hover::after,
+.icon-btn[data-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 .icon-btn:hover:not(:disabled) {
