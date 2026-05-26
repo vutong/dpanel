@@ -1,5 +1,5 @@
 import { requireAuth } from '../../utils/auth-guard'
-import { runScript } from '../../utils/stack'
+import { parseScriptJson, runScript } from '../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const out = await runScript('db-create.sh', args)
-    return JSON.parse(out)
+    return parseScriptJson(out)
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to create database'
     throw createError({ statusCode: 500, statusMessage: msg })

@@ -7,8 +7,9 @@
         <NuxtLink to="/websites">List Website</NuxtLink>
         <NuxtLink to="/websites/create">Create website</NuxtLink>
         <p class="nav-section">MariaDB</p>
-        <NuxtLink to="/databases">List databases</NuxtLink>
         <NuxtLink to="/databases/create">Create database</NuxtLink>
+        <NuxtLink to="/databases">List databases</NuxtLink>
+        <NuxtLink to="/databases/delete">Delete database</NuxtLink>
         <NuxtLink to="/databases/phpmyadmin">phpMyAdmin</NuxtLink>
       </nav>
       <button class="btn btn-ghost logout" type="button" @click="logout">Sign out</button>
