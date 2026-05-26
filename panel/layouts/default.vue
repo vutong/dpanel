@@ -32,7 +32,6 @@
         </p>
         <SidebarNavLink to="/databases/create" icon="database-plus" label="Create database" />
         <SidebarNavLink to="/databases" icon="database" label="List databases" />
-        <SidebarNavLink to="/databases/delete" icon="trash" label="Delete database" />
         <SidebarNavLink to="/databases/phpmyadmin" icon="table" label="phpMyAdmin" />
       </nav>
 

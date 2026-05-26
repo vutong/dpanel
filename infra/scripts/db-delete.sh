@@ -38,6 +38,8 @@ done
 cd "${STACK_ROOT}"
 # shellcheck source=_helpers.sh
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+# shellcheck source=_db_registry.sh
+source "${STACK_ROOT}/infra/scripts/_db_registry.sh"
 # shellcheck source=/dev/null
 [[ -f .env ]] && source .env
 
@@ -65,6 +67,8 @@ if [[ "${DROP_USER}" -eq 1 && -n "${DB_USER}" ]]; then
     fi
   fi
 fi
+
+db_registry_remove "${DB_NAME}" 2>/dev/null || true
 
 printf '{"ok":true,"name":"%s","droppedUser":%s}\n' \
   "${DB_NAME}" \

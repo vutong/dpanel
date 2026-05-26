@@ -14,6 +14,8 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 cd "$STACK_ROOT"
 # shellcheck source=_helpers.sh
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+# shellcheck source=_db_registry.sh
+source "${STACK_ROOT}/infra/scripts/_db_registry.sh"
 # shellcheck source=/dev/null
 source .env
 
@@ -26,5 +28,7 @@ stack_compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
    GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'%';
    FLUSH PRIVILEGES;" 2>/dev/null \
   || die "Failed to create database"
+
+db_registry_upsert "${DB_NAME}" "${DB_USER}" 2>/dev/null || true
 
 python3 -c "import json; print(json.dumps({'ok':True,'name':'${DB_NAME}','user':'${DB_USER}','password':'${DB_PASS}'}))"
