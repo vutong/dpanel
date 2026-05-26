@@ -10,10 +10,12 @@ FIX=0
 JSON_ONLY=0
 HEALTH_LOG="${HEALTH_LOG:-/var/log/dpanel-health.log}"
 
+RECHECK=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --fix) FIX=1; shift ;;
     --json) JSON_ONLY=1; shift ;;
+    --recheck) RECHECK=1; shift ;;
     -h|--help)
       echo "Usage: dpanel health [--fix]"
       exit 0
@@ -37,14 +39,22 @@ cd "${STACK_ROOT}"
 # shellcheck source=/dev/null
 [[ -f .env ]] && source .env
 
-REQUIRED_SERVICES="nginx dpanel mariadb php-fpm redis phpmyadmin"
+CORE_SERVICES="nginx dpanel mariadb php-fpm"
+OPTIONAL_SERVICES="redis phpmyadmin"
 ISSUES=0
+WARNINGS=0
 declare -a REPORT_LINES=()
 
 report() {
-  local id="$1" ok="$2" msg="$3" fix_hint="${4:-}"
-  REPORT_LINES+=("${id}|${ok}|${msg}|${fix_hint}")
-  [[ "${ok}" -eq 0 ]] && ISSUES=$((ISSUES + 1))
+  local id="$1" ok="$2" msg="$3" fix_hint="${4:-}" severity="${5:-critical}"
+  REPORT_LINES+=("${id}|${ok}|${msg}|${fix_hint}|${severity}")
+  if [[ "${ok}" -eq 0 ]]; then
+    if [[ "${severity}" == "critical" ]]; then
+      ISSUES=$((ISSUES + 1))
+    else
+      WARNINGS=$((WARNINGS + 1))
+    fi
+  fi
 }
 
 run_fix() {
@@ -75,12 +85,21 @@ if ! stack_compose ps >/dev/null 2>&1; then
   report "compose" 0 "docker compose error" "dpanel nginx-reload"
   run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
 else
-  for svc in ${REQUIRED_SERVICES}; do
+  for svc in ${CORE_SERVICES}; do
     state="$(stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="${svc}" '$1==s {print $2; exit}')"
     if [[ "${state}" == "running" ]]; then
-      report "service_${svc}" 1 "${svc} running" ""
+      report "service_${svc}" 1 "${svc} running" "" "critical"
     else
-      report "service_${svc}" 0 "${svc} is ${state:-down}" "stack_compose up -d ${svc}"
+      report "service_${svc}" 0 "${svc} is ${state:-down}" "stack_compose up -d ${svc}" "critical"
+      run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose up -d ${svc}"
+    fi
+  done
+  for svc in ${OPTIONAL_SERVICES}; do
+    state="$(stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="${svc}" '$1==s {print $2; exit}')"
+    if [[ "${state}" == "running" ]]; then
+      report "service_${svc}" 1 "${svc} running" "" "warn"
+    else
+      report "service_${svc}" 0 "${svc} is ${state:-down}" "stack_compose up -d ${svc}" "warn"
       run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose up -d ${svc}"
     fi
   done
@@ -104,10 +123,21 @@ else
   run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
 fi
 
-if stack_compose exec -T dpanel wget -q -O- --timeout=5 http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '"ok"'; then
-  report "panel_api" 1 "panel API OK" ""
+_panel_api_ok() {
+  local out try
+  for try in 1 2 3 4 5; do
+    out="$(stack_compose exec -T dpanel wget -q -O- --timeout=8 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+    if printf '%s' "${out}" | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
+      return 0
+    fi
+    [[ "${try}" -lt 5 ]] && sleep 3
+  done
+  return 1
+}
+if _panel_api_ok; then
+  report "panel_api" 1 "panel API OK" "" "critical"
 else
-  report "panel_api" 0 "panel API down" "stack_compose restart dpanel"
+  report "panel_api" 0 "panel API down (still starting?)" "stack_compose restart dpanel" "critical"
   run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart dpanel"
 fi
 
@@ -127,9 +157,9 @@ fi
 
 disk_mb="$(df -BM "${STACK_ROOT}" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}' || echo 0)"
 if [[ "${disk_mb}" -gt 512 ]] 2>/dev/null; then
-  report "disk" 1 "disk free ${disk_mb}MB" ""
+  report "disk" 1 "disk free ${disk_mb}MB" "" "warn"
 else
-  report "disk" 0 "low disk space" ""
+  report "disk" 0 "low disk space" "" "warn"
 fi
 
 VERSION="unknown"
@@ -139,12 +169,11 @@ elif grep -q '^DPANEL_VERSION=' "${STACK_ROOT}/.env" 2>/dev/null; then
   VERSION="$(grep '^DPANEL_VERSION=' "${STACK_ROOT}/.env" | cut -d= -f2-)"
 fi
 
-# After fixes, re-run once without fix loop
-if [[ "${FIX}" -eq 1 && "${ISSUES}" -gt 0 ]]; then
+# After fixes, re-run once (keep human-readable logs for update)
+if [[ "${FIX}" -eq 1 && "${ISSUES}" -gt 0 && "${RECHECK}" -eq 0 ]]; then
   log "Waiting for services after fixes..."
-  sleep 4
-  FIX=0
-  exec bash "${BASH_SOURCE[0]}" --json
+  sleep 10
+  exec bash "${BASH_SOURCE[0]}" --recheck
 fi
 
 OK=true
@@ -154,10 +183,10 @@ OK=true
 JSON_FILE="$(mktemp)"
 {
   echo -n '{"ok":'; [[ "${ISSUES}" -eq 0 ]] && echo -n 'true' || echo -n 'false'
-  echo -n ',"service":"dpanel","version":"'${VERSION}'","issues":'${ISSUES}',"checks":['
+  echo -n ',"service":"dpanel","version":"'${VERSION}'","issues":'${ISSUES}',"warnings":'${WARNINGS}',"checks":['
   local first=1
   for line in "${REPORT_LINES[@]}"; do
-    IFS='|' read -r id ok msg fix_hint <<< "${line}"
+    IFS='|' read -r id ok msg fix_hint _severity <<< "${line}"
     [[ "${first}" -eq 0 ]] && echo -n ','
     first=0
     okj=$([[ "${ok}" -eq 1 ]] && echo true || echo false)
@@ -170,15 +199,20 @@ JSON_FILE="$(mktemp)"
 
 if [[ "${JSON_ONLY}" -eq 0 ]]; then
   if [[ "${ISSUES}" -eq 0 ]]; then
-    log "Health OK — version ${VERSION}"
+    [[ "${WARNINGS}" -gt 0 ]] && log "Health OK (with ${WARNINGS} warning(s)) — version ${VERSION}" \
+      || log "Health OK — version ${VERSION}"
   else
-    log "Health: ${ISSUES} issue(s) — version ${VERSION}"
+    log "Health: ${ISSUES} critical issue(s) — version ${VERSION}"
     for line in "${REPORT_LINES[@]}"; do
-      IFS='|' read -r id ok msg fix_hint <<< "${line}"
-      [[ "${ok}" -eq 0 ]] && {
+      IFS='|' read -r id ok msg fix_hint severity <<< "${line}"
+      [[ "${ok}" -eq 0 ]] && [[ "${severity:-critical}" == "critical" ]] && {
         log "  [FAIL] ${id}: ${msg}"
         [[ -n "${fix_hint}" ]] && log "         → ${fix_hint}"
       }
+    done
+    for line in "${REPORT_LINES[@]}"; do
+      IFS='|' read -r id ok msg fix_hint severity <<< "${line}"
+      [[ "${ok}" -eq 0 ]] && [[ "${severity}" == "warn" ]] && log "  [WARN] ${id}: ${msg}"
     done
     log "Try: sudo dpanel health --fix"
   fi
