@@ -3,6 +3,9 @@
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh" 2>/dev/null || true
+
 AUTH_FILE="${STACK_ROOT}/data/panel/auth.json"
 NEW_PASS="${1:-}"
 
@@ -28,7 +31,8 @@ command -v htpasswd >/dev/null 2>&1 || {
 
 HASH="$(htpasswd -nbBC 10 dpanel "${NEW_PASS}" | cut -d: -f2)"
 
-python3 - "${AUTH_FILE}" "${HASH}" <<'PY'
+ensure_python3 || { echo "python3 required — run: sudo apt-get install -y python3" >&2; exit 1; }
+"${PYBIN}" - "${AUTH_FILE}" "${HASH}" <<'PY'
 import json
 import sys
 

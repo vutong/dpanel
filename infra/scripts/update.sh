@@ -159,6 +159,10 @@ rsync -a \
 chmod +x "${STACK_ROOT}/infra/scripts/"*.sh
 ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
 
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+ensure_python3 >> "${INSTALL_LOG}" 2>&1 || log "Warning: python3 not available — some scripts may fail"
+
 # Preserve auth/sites; ensure panel metadata dirs exist
 mkdir -p "${STACK_ROOT}/data/panel" "${STACK_ROOT}/infra/nginx/conf.d" "${STACK_ROOT}/compose.d"
 [[ -f "${STACK_ROOT}/data/panel/sites.json" ]] || echo '[]' > "${STACK_ROOT}/data/panel/sites.json"

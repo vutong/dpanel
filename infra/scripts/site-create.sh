@@ -4,6 +4,9 @@
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh" 2>/dev/null || true
+
 DOMAIN="${1:-}"
 RUNTIME="${2:-}"
 GITHUB_URL="${3:-}"
@@ -174,9 +177,10 @@ server {
 EOF
 fi
 
-# Cập nhật sites.json
+# Update sites.json
+ensure_python3 || die "python3 required — run: sudo apt-get install -y python3"
 export SITES_FILE DOMAIN RUNTIME GITHUB_URL
-python3 <<'PY'
+"${PYBIN}" <<'PY'
 import json, os, datetime
 path = os.environ["SITES_FILE"]
 domain = os.environ["DOMAIN"]
