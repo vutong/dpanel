@@ -17,6 +17,7 @@
           <AppIcon name="overview" :size="14" class="section-icon" />
           Overview
         </NuxtLink>
+        <hr class="nav-divider" aria-hidden="true" />
 
         <p class="nav-section">
           <AppIcon name="globe" :size="14" class="section-icon" />
@@ -130,7 +131,7 @@ async function logout() {
   gap: 0.4rem;
   font-size: 0.68rem;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text);
   margin: 0.8rem 0 0.3rem 0.5rem;
   letter-spacing: 0.06em;
   font-weight: 600;
@@ -142,7 +143,7 @@ async function logout() {
 
 .nav-section--link {
   text-decoration: none;
-  color: var(--muted);
+  color: var(--text);
   border-radius: 8px;
   padding: 0.45rem 0.5rem;
   margin: 0 0 0.15rem 0;
@@ -169,6 +170,12 @@ async function logout() {
   opacity: 1;
 }
 
+.nav-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.65rem 0.25rem 0.75rem;
+}
+
 :deep(.nav-link--main),
 :deep(.nav-link--sub) {
   display: flex;
@@ -182,7 +189,7 @@ async function logout() {
   padding: 0.5rem 0.65rem;
   margin-bottom: 0.3rem;
   border-radius: 9px;
-  color: var(--text);
+  color: var(--muted);
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -191,7 +198,7 @@ async function logout() {
   gap: 0.55rem;
   padding: 0.38rem 0.55rem 0.38rem 0.72rem;
   border-radius: 8px;
-  color: var(--text);
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
