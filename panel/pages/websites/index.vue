@@ -114,7 +114,7 @@
           This permanently removes all related files and cannot be undone.
         </p>
         <p v-else class="alert alert-info delete-running">
-          Quá trình xoá đang diễn ra tự động. Bạn có thể đóng hộp thoại này — site đã được ẩn khỏi danh sách.
+          Deletion is running automatically.
         </p>
         <div class="modal-actions">
           <button
