@@ -30,6 +30,12 @@ prune_orphan_site_artifacts
 log "Syncing site configs from sites.json..."
 sync_site_configs
 
+log "Migrating legacy Nuxt nginx vhosts (static upstream → resolver)..."
+fix_legacy_nginx_vhosts
+if quarantine_legacy_static_nuxt_vhosts; then
+  log "Quarantined remaining legacy vhosts under conf.d/disabled/"
+fi
+
 log "Starting site containers (compose.d)..."
 stack_compose_up_sites
 
@@ -93,9 +99,22 @@ if ! _nginx_running; then
 fi
 
 if ! _nginx_running; then
+  log "nginx still not running — quarantining site vhosts and retrying..."
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+  for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
+    [[ -f "$f" ]] || continue
+    [[ "$(basename "$f")" == "00-panel.conf" ]] && continue
+    mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/" 2>/dev/null || true
+  done
+  fix_legacy_nginx_vhosts
+  stack_compose up -d nginx 2>&1 || true
+  sleep 3
+fi
+
+if ! _nginx_running; then
   log "nginx still not running. Last logs:"
   stack_compose logs nginx --tail 30 2>&1 || true
-  die "nginx failed to start — check logs above"
+  die "nginx failed to start — run: dpanel site-remove <domain> or remove conf.d/*.conf (keep 00-panel.conf)"
 fi
 
 if [[ "$MODE" != "panel-only" ]]; then

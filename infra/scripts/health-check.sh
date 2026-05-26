@@ -68,6 +68,8 @@ fi
 
 prune_orphan_site_artifacts 2>/dev/null || true
 sync_site_configs 2>/dev/null || true
+fix_legacy_nginx_vhosts 2>/dev/null || true
+quarantine_legacy_static_nuxt_vhosts 2>/dev/null || true
 
 if ! stack_compose ps >/dev/null 2>&1; then
   report "compose" 0 "docker compose error" "dpanel nginx-reload"

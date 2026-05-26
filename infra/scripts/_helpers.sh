@@ -153,6 +153,68 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
+# Legacy v1 nginx: proxy_pass http://nuxt-<slug>:3000 (resolved at boot → fails if container down).
+is_legacy_nuxt_vhost() {
+  local f="$1"
+  [[ -f "$f" ]] || return 1
+  grep -qE 'proxy_pass[[:space:]]+http://nuxt-' "$f" 2>/dev/null \
+    && ! grep -q 'resolver 127.0.0.11' "$f" 2>/dev/null
+}
+
+site_runtime_from_registry() {
+  local domain="$1"
+  local sites_file="${STACK_ROOT}/data/panel/sites.json"
+  [[ -f "${sites_file}" ]] || return 0
+  ensure_python3 >/dev/null 2>&1 || return 0
+  export SITES_FILE="${sites_file}" DOMAIN="${domain}"
+  "${PYBIN}" -c "
+import json, os, sys
+domain = os.environ.get('DOMAIN', '')
+with open(os.environ['SITES_FILE']) as f:
+    for s in json.load(f):
+        if s.get('domain') == domain:
+            print(s.get('runtime') or '')
+            sys.exit(0)
+" 2>/dev/null || true
+}
+
+# Rewrite or quarantine old static-upstream Nuxt vhosts (safe when nuxt container is not up yet).
+fix_legacy_nginx_vhosts() {
+  local f domain runtime
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+  shopt -s nullglob
+  for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
+    [[ -f "$f" ]] || continue
+    domain="$(basename "$f" .conf)"
+    [[ "${domain}" == "00-panel" ]] && continue
+    is_legacy_nuxt_vhost "$f" || continue
+    runtime="$(site_runtime_from_registry "${domain}")"
+    if [[ "${runtime}" == "node" ]]; then
+      write_nginx_node_site "${domain}"
+    else
+      mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${domain}.conf" 2>/dev/null \
+        || rm -f "$f"
+    fi
+  done
+  shopt -u nullglob
+}
+
+quarantine_legacy_static_nuxt_vhosts() {
+  local f domain moved=0
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+  shopt -s nullglob
+  for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
+    [[ -f "$f" ]] || continue
+    domain="$(basename "$f" .conf)"
+    [[ "${domain}" == "00-panel" ]] && continue
+    is_legacy_nuxt_vhost "$f" || continue
+    mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${domain}.conf"
+    moved=$((moved + 1))
+  done
+  shopt -u nullglob
+  [[ "${moved}" -gt 0 ]]
+}
+
 # Remove nginx/compose/container artifacts for domains not listed in sites.json.
 prune_orphan_site_artifacts() {
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
