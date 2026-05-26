@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h1>Dashboard</h1>
+    <h1>Overview</h1>
     <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
     <div class="grid">
       <NuxtLink to="/websites" class="card stat-card">

@@ -7,7 +7,7 @@
 
     <div v-if="pending" class="muted">Loading...</div>
     <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
-    <div v-else class="card">
+    <div v-else class="card table-wrap">
       <table class="table">
         <thead>
           <tr>
@@ -15,7 +15,7 @@
             <th>Runtime</th>
             <th>GitHub</th>
             <th>Created</th>
-            <th style="text-align: right">Actions</th>
+            <th class="col-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -28,15 +28,35 @@
             </td>
             <td class="github-cell">{{ s.githubUrl || '—' }}</td>
             <td>{{ formatDate(s.createdAt) }}</td>
-            <td style="text-align: right">
-              <button
-                type="button"
-                class="btn btn-danger"
-                :disabled="!!removing"
-                @click="openDelete(s)"
-              >
-                Delete
-              </button>
+            <td class="col-actions">
+              <div class="action-btns">
+                <button
+                  v-if="s.githubUrl"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="!!busy"
+                  @click="openUpdate(s)"
+                >
+                  Update
+                </button>
+                <button
+                  v-if="s.runtime === 'node'"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="!!busy"
+                  @click="runRebuild(s)"
+                >
+                  Rebuild
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  :disabled="!!busy"
+                  @click="openDelete(s)"
+                >
+                  Delete
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -44,6 +64,38 @@
     </div>
 
     <p v-if="msg" class="alert" :class="ok ? 'alert-success' : 'alert-error'">{{ msg }}</p>
+
+    <div v-if="updateTarget" class="modal-backdrop" @click.self="closeUpdate">
+      <div class="modal card" role="dialog" aria-labelledby="update-title">
+        <h2 id="update-title">Update from Git</h2>
+        <p class="muted">
+          Pull latest code for <strong>{{ updateTarget.domain }}</strong>
+          <span v-if="updateTarget.githubUrl" class="repo-url">{{ updateTarget.githubUrl }}</span>
+        </p>
+        <div class="field">
+          <label class="label">GitHub token (PAT)</label>
+          <input
+            v-model="updateToken"
+            class="input"
+            type="password"
+            placeholder="Required for private repos; leave empty if public"
+            autocomplete="off"
+          />
+          <p class="hint">
+            Token is not stored. If pull fails with 401/403, your PAT may be <strong>expired</strong> — create a new one
+            (<code>ghp_...</code> with <code>repo</code> scope).
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" :disabled="!!busy" @click="closeUpdate">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="!!busy" @click="confirmUpdate">
+            {{ busy === updateTarget.domain ? 'Pulling…' : 'Pull from Git' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="deleteTarget" class="modal-backdrop" @click.self="closeDelete">
       <div class="modal card" role="dialog" aria-labelledby="delete-title">
@@ -68,16 +120,11 @@
           If unchecked, code remains on disk — you can redeploy the same domain later.
         </p>
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" :disabled="!!removing" @click="closeDelete">
+          <button type="button" class="btn btn-ghost" :disabled="!!busy" @click="closeDelete">
             Cancel
           </button>
-          <button
-            type="button"
-            class="btn btn-danger"
-            :disabled="!!removing"
-            @click="confirmDelete"
-          >
-            {{ removing ? 'Deleting…' : 'Delete website' }}
+          <button type="button" class="btn btn-danger" :disabled="!!busy" @click="confirmDelete">
+            {{ busy === deleteTarget.domain ? 'Deleting…' : 'Delete website' }}
           </button>
         </div>
       </div>
@@ -93,13 +140,67 @@ const { data, pending, refresh } = await useFetch<{ sites: Site[] }>('/api/websi
 const sites = computed(() => data.value?.sites ?? [])
 
 const deleteTarget = ref<Site | null>(null)
+const updateTarget = ref<Site | null>(null)
+const updateToken = ref('')
 const purgeFiles = ref(false)
-const removing = ref('')
+const busy = ref('')
 const msg = ref('')
 const ok = ref(false)
 
 function slug(domain: string) {
   return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
+}
+
+function openUpdate(site: Site) {
+  updateTarget.value = site
+  updateToken.value = ''
+  msg.value = ''
+}
+
+function closeUpdate() {
+  if (busy.value) return
+  updateTarget.value = null
+}
+
+async function confirmUpdate() {
+  const site = updateTarget.value
+  if (!site) return
+
+  busy.value = site.domain
+  msg.value = ''
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.domain)}/update`, {
+      method: 'POST',
+      body: { githubToken: updateToken.value.trim() || undefined }
+    })
+    ok.value = true
+    msg.value = `Updated ${site.domain} from Git`
+    updateTarget.value = null
+    await refresh()
+  } catch (e: unknown) {
+    ok.value = false
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    msg.value = err.data?.statusMessage || err.statusMessage || 'Git update failed'
+  } finally {
+    busy.value = ''
+  }
+}
+
+async function runRebuild(site: Site) {
+  if (site.runtime !== 'node') return
+  busy.value = site.domain
+  msg.value = ''
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.domain)}/rebuild`, { method: 'POST' })
+    ok.value = true
+    msg.value = `Rebuilt ${site.domain} (npm build + container restart)`
+  } catch (e: unknown) {
+    ok.value = false
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    msg.value = err.data?.statusMessage || err.statusMessage || 'Rebuild failed'
+  } finally {
+    busy.value = ''
+  }
 }
 
 function openDelete(site: Site) {
@@ -108,7 +209,7 @@ function openDelete(site: Site) {
 }
 
 function closeDelete() {
-  if (removing.value) return
+  if (busy.value) return
   deleteTarget.value = null
 }
 
@@ -116,7 +217,7 @@ async function confirmDelete() {
   const site = deleteTarget.value
   if (!site) return
 
-  removing.value = site.domain
+  busy.value = site.domain
   msg.value = ''
   try {
     const result = await $fetch<DeleteResult>(
@@ -139,7 +240,7 @@ async function confirmDelete() {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     msg.value = err.data?.statusMessage || err.statusMessage || 'Delete failed'
   } finally {
-    removing.value = ''
+    busy.value = ''
   }
 }
 
@@ -159,12 +260,31 @@ function formatDate(iso?: string) {
   gap: 0.75rem;
 }
 .muted { color: var(--muted); }
+.table-wrap {
+  overflow-x: auto;
+}
+.col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.action-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
 .github-cell {
-  max-width: 220px;
+  max-width: min(280px, 28vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.85rem;
+}
+.repo-url {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+  word-break: break-all;
 }
 .modal-backdrop {
   position: fixed;
@@ -207,6 +327,7 @@ function formatDate(iso?: string) {
   font-size: 0.8rem;
   color: var(--muted);
   margin-bottom: 1rem;
+  line-height: 1.45;
 }
 .modal-actions {
   display: flex;

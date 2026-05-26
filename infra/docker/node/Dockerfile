@@ -2,7 +2,7 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache tini git bash docker-cli curl wget python3 apache2-utils
+RUN apk add --no-cache tini git bash docker-cli docker-cli-compose curl wget python3 apache2-utils
 
 COPY runtime/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

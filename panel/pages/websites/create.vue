@@ -11,6 +11,7 @@
       <div class="field">
         <label class="label">Runtime</label>
         <select v-model="runtime" class="select" required>
+          <option disabled value="">Choice.....</option>
           <option value="node">Node (Nuxt SSR)</option>
           <option value="php">PHP (Laravel / WordPress)</option>
         </select>
@@ -57,7 +58,7 @@
 
 <script setup lang="ts">
 const domain = ref('')
-const runtime = ref<'node' | 'php'>('php')
+const runtime = ref('')
 const cloneGithub = ref(false)
 const githubUrl = ref('')
 const githubToken = ref('')
@@ -70,6 +71,10 @@ async function submit() {
   loading.value = true
   ok.value = false
   try {
+    if (!runtime.value) {
+      message.value = 'Please select a runtime'
+      return
+    }
     const url = cloneGithub.value ? githubUrl.value.trim() : ''
     const token = cloneGithub.value ? githubToken.value.trim() : ''
     if (cloneGithub.value && !url) {

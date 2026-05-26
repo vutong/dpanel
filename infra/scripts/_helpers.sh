@@ -31,16 +31,119 @@ ensure_python3() {
   [[ -n "${PYBIN}" ]]
 }
 
+# Colon-separated dirs for the docker compose CLI plugin (panel container often lacks it).
+_stack_compose_plugin_dirs() {
+  local -a dirs=()
+  local d
+  for d in \
+    /usr/libexec/docker/cli-plugins \
+    /usr/local/lib/docker/cli-plugins \
+    /usr/lib/docker/cli-plugins; do
+    if [[ -d "$d" ]] && [[ -x "$d/docker-compose" || -f "$d/docker-compose" ]]; then
+      dirs+=("$d")
+    fi
+  done
+  if [[ ${#dirs[@]} -gt 0 ]]; then
+    local IFS=:
+    echo "${dirs[*]}"
+  fi
+}
+
 # docker compose with compose.yml + all compose.d/*.yml (per-site Nuxt services).
 stack_compose() {
   local -a args=(-f "${STACK_ROOT}/compose.yml")
-  local f
+  local f plugin_dirs
   shopt -s nullglob
   for f in "${STACK_ROOT}"/compose.d/*.yml; do
     args+=(-f "$f")
   done
   shopt -u nullglob
-  docker compose "${args[@]}" "$@"
+
+  plugin_dirs="$(_stack_compose_plugin_dirs)"
+  if [[ -n "${plugin_dirs}" ]]; then
+    if DOCKER_CLI_PLUGIN_EXTRA_DIRS="${plugin_dirs}" docker compose version &>/dev/null 2>&1; then
+      DOCKER_CLI_PLUGIN_EXTRA_DIRS="${plugin_dirs}" docker compose "${args[@]}" "$@"
+      return $?
+    fi
+  fi
+  if docker compose version &>/dev/null 2>&1; then
+    docker compose "${args[@]}" "$@"
+    return $?
+  fi
+  if command -v docker-compose &>/dev/null 2>&1; then
+    docker-compose "${args[@]}" "$@"
+    return $?
+  fi
+  echo "[dpanel] ERROR: docker compose unavailable (rebuild panel: sudo dpanel update)" >&2
+  return 1
+}
+
+_stack_compose_available() {
+  local plugin_dirs
+  plugin_dirs="$(_stack_compose_plugin_dirs)"
+  if [[ -n "${plugin_dirs}" ]] && DOCKER_CLI_PLUGIN_EXTRA_DIRS="${plugin_dirs}" docker compose version &>/dev/null 2>&1; then
+    return 0
+  fi
+  docker compose version &>/dev/null 2>&1 && return 0
+  command -v docker-compose &>/dev/null 2>&1
+}
+
+_stack_project_name() {
+  local p="dpanel"
+  if [[ -f "${STACK_ROOT}/.env" ]]; then
+    # shellcheck source=/dev/null
+    source "${STACK_ROOT}/.env"
+    p="${COMPOSE_PROJECT_NAME:-dpanel}"
+  fi
+  echo "${p}"
+}
+
+# Running nginx container (works with plain docker CLI — no compose plugin required).
+_nginx_container_id() {
+  local project cid
+  project="$(_stack_project_name)"
+  cid="$(docker ps -q -f "name=^${project}-nginx\$" -f "status=running" 2>/dev/null | head -1)"
+  [[ -n "${cid}" ]] && { echo "${cid}"; return 0; }
+  cid="$(docker ps -q -f "name=nginx" -f "status=running" 2>/dev/null | head -1)"
+  [[ -n "${cid}" ]] && echo "${cid}"
+}
+
+_nuxt_container_name() {
+  local slug="$1"
+  echo "$(_stack_project_name)-nuxt-${slug}"
+}
+
+docker_stop_container_by_name() {
+  local name="$1"
+  [[ -n "${name}" ]] || return 0
+  docker stop "${name}" 2>/dev/null || true
+  docker rm -f "${name}" 2>/dev/null || true
+}
+
+# compose.yml only (for nginx -t when compose.d should not affect the test).
+stack_compose_base() {
+  local -a args=(-f "${STACK_ROOT}/compose.yml")
+  local plugin_dirs
+  plugin_dirs="$(_stack_compose_plugin_dirs)"
+  if [[ -n "${plugin_dirs}" ]]; then
+    if DOCKER_CLI_PLUGIN_EXTRA_DIRS="${plugin_dirs}" docker compose version &>/dev/null 2>&1; then
+      DOCKER_CLI_PLUGIN_EXTRA_DIRS="${plugin_dirs}" docker compose "${args[@]}" "$@"
+      return $?
+    fi
+  fi
+  if docker compose version &>/dev/null 2>&1; then
+    docker compose "${args[@]}" "$@"
+    return $?
+  fi
+  if command -v docker-compose &>/dev/null 2>&1; then
+    docker-compose "${args[@]}" "$@"
+    return $?
+  fi
+  return 1
+}
+
+nginx_container_running() {
+  [[ -n "$(_nginx_container_id)" ]]
 }
 
 site_slug() {
@@ -174,14 +277,39 @@ wait_for_dpanel_ready() {
   return 1
 }
 
-# nginx -t via one-off container (quiet on success — docker-entrypoint noise is normal).
+# nginx -t — prefer docker exec on the running nginx container (no compose plugin needed).
 nginx_test_stack() {
   local quiet="${1:-1}"
+  local cid
+  cid="$(_nginx_container_id)"
+  if [[ -n "${cid}" ]]; then
+    if [[ "${quiet}" -eq 1 ]]; then
+      docker exec "${cid}" nginx -t >/dev/null 2>&1
+    else
+      docker exec "${cid}" nginx -t
+    fi
+    return $?
+  fi
   if [[ "${quiet}" -eq 1 ]]; then
+    stack_compose_base run --rm --no-deps nginx nginx -t >/dev/null 2>&1 && return 0
     stack_compose run --rm --no-deps nginx nginx -t >/dev/null 2>&1
     return $?
   fi
-  stack_compose run --rm --no-deps nginx nginx -t
+  stack_compose_base run --rm --no-deps nginx nginx -t \
+    || stack_compose run --rm --no-deps nginx nginx -t
+}
+
+# Reload nginx in the running container (compose plugin not required).
+nginx_reload_stack() {
+  local cid
+  cid="$(_nginx_container_id)"
+  if [[ -n "${cid}" ]]; then
+    docker exec "${cid}" nginx -s reload 2>/dev/null && return 0
+    docker restart "${cid}" 2>/dev/null && return 0
+  fi
+  _stack_compose_available || return 1
+  stack_compose exec -T nginx nginx -s reload 2>/dev/null \
+    || stack_compose restart nginx
 }
 
 # Legacy v1 nginx: proxy_pass http://nuxt-<slug>:3000 (resolved at boot → fails if container down).

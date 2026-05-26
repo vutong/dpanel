@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Usage: site-update.sh <domain>
+# Private repo: GITHUB_TOKEN in env (not saved)
+set -euo pipefail
+
+STACK_ROOT="${STACK_ROOT:-/opt/stack}"
+# shellcheck source=_helpers.sh
+source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+# shellcheck source=_github.sh
+source "${STACK_ROOT}/infra/scripts/_github.sh"
+
+DOMAIN="${1:-}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+
+die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
+
+[[ -n "${DOMAIN}" ]] || die "Missing domain"
+[[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
+
+SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
+APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
+
+ensure_python3 || die "python3 required"
+export SITES_FILE DOMAIN
+read -r GITHUB_URL RUNTIME < <("${PYBIN}" -c "
+import json, os, sys
+path = os.environ['SITES_FILE']
+domain = os.environ['DOMAIN']
+if not os.path.isfile(path):
+    sys.exit(1)
+with open(path) as f:
+    for s in json.load(f):
+        if s.get('domain') == domain:
+            print((s.get('githubUrl') or '').strip())
+            print(s.get('runtime') or '')
+            sys.exit(0)
+sys.exit(1)
+" 2>/dev/null) || die "Site not found in sites.json"
+
+[[ -n "${GITHUB_URL}" ]] || die "No GitHub URL for this site — add repository when creating the site"
+
+mkdir -p "${APP_DIR}"
+
+gh_err="$(mktemp)"
+if ! github_preflight 2>"${gh_err}"; then
+  die "$(tr -d '\r' < "${gh_err}" | head -5 | tr '\n' ' ')"
+fi
+rm -f "${gh_err}"
+
+if [[ -d "${APP_DIR}/.git" ]]; then
+  if ! github_pull_into "${APP_DIR}"; then
+    die "git pull failed — if the repo is private, provide a valid GitHub token"
+  fi
+else
+  if ! github_clone_into "${APP_DIR}" "${GITHUB_URL}"; then
+    die "git clone failed — check token (expired PAT is common) or repository URL"
+  fi
+fi
+
+echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\",\"action\":\"update\"}"

@@ -84,12 +84,29 @@
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </template>
-    <!-- layout-dashboard -->
+    <!-- layout-dashboard (brand) -->
     <template v-else-if="name === 'dashboard'">
       <rect x="3" y="3" width="7" height="9" rx="1" />
       <rect x="14" y="3" width="7" height="5" rx="1" />
       <rect x="14" y="12" width="7" height="9" rx="1" />
       <rect x="3" y="16" width="7" height="5" rx="1" />
+    </template>
+    <!-- overview (home summary — distinct from dashboard grid) -->
+    <template v-else-if="name === 'overview'">
+      <path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9.5Z" />
+      <path d="M9 21V12h6v9" />
+    </template>
+    <!-- git-pull -->
+    <template v-else-if="name === 'git-pull'">
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="18" cy="18" r="3" />
+      <path d="M6 9v4a3 3 0 0 0 3 3h6" />
+      <path d="M15 15v3" />
+      <path d="M12 18h6" />
+    </template>
+    <!-- wrench / rebuild -->
+    <template v-else-if="name === 'wrench'">
+      <path d="M14.7 6.3a4 4 0 0 0-5.6 5.6l-5.1 5.1a2 2 0 0 0 2.8 2.8l5.1-5.1a4 4 0 0 0 5.6-5.6l-2 2-3.6-3.6 2-2Z" />
     </template>
   </svg>
 </template>

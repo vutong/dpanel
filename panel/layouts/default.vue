@@ -13,7 +13,10 @@
       </div>
 
       <nav class="nav">
-        <SidebarNavLink to="/" icon="dashboard" label="Dashboard" :sub="false" />
+        <NuxtLink to="/" class="nav-section nav-section--link">
+          <AppIcon name="overview" :size="14" class="section-icon" />
+          Overview
+        </NuxtLink>
 
         <p class="nav-section">
           <AppIcon name="globe" :size="14" class="section-icon" />
@@ -137,8 +140,33 @@ async function logout() {
   margin-top: 0;
 }
 
+.nav-section--link {
+  text-decoration: none;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0.45rem 0.5rem;
+  margin: 0 0 0.15rem 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-section--link:hover {
+  background: var(--accent-muted);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.nav-section--link.router-link-exact-active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
 .section-icon {
   opacity: 0.75;
+}
+
+.nav-section--link.router-link-exact-active .section-icon,
+.nav-section--link:hover .section-icon {
+  opacity: 1;
 }
 
 :deep(.nav-link--main),
@@ -229,8 +257,9 @@ async function logout() {
 
 .main {
   flex: 1;
-  padding: 2rem 2.25rem;
-  max-width: 980px;
+  min-width: 0;
   width: 100%;
+  padding: 2rem 2.5rem 2.5rem;
+  max-width: none;
 }
 </style>

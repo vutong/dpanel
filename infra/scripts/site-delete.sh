@@ -84,6 +84,7 @@ if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.y
   log "Stopping Docker service ${SVC}..."
   stack_compose stop "${SVC}" 2>/dev/null || true
   stack_compose rm -f "${SVC}" 2>/dev/null || true
+  docker_stop_container_by_name "$(_nuxt_container_name "${SLUG}")"
   REMOVED+=("container:${SVC}")
 fi
 
@@ -117,7 +118,10 @@ log "Pruning orphan artifacts..."
 prune_orphan_site_artifacts 2>/dev/null || true
 
 log "Reloading nginx..."
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2 || die "nginx-reload failed after site remove"
+if ! bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" >&2; then
+  log "Warning: nginx-reload had errors — site files are already removed; trying direct nginx reload..."
+  nginx_reload_stack 2>/dev/null || log "On VPS host run: sudo dpanel nginx-reload"
+fi
 
 log "Applying compose stack..."
 stack_compose up -d --remove-orphans 2>/dev/null || true

@@ -92,7 +92,9 @@ if ! nginx_test_stack 1; then
 fi
 
 _nginx_running() {
-  stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E '^nginx running' >/dev/null
+  nginx_container_running || {
+    stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | grep -E '^nginx running' >/dev/null
+  }
 }
 
 if ! _nginx_running; then
@@ -121,8 +123,10 @@ if ! _nginx_running; then
 fi
 
 if [[ "$MODE" != "panel-only" ]]; then
-  stack_compose exec -T nginx nginx -s reload 2>/dev/null \
-    || stack_compose restart nginx
+  nginx_reload_stack 2>/dev/null \
+    || stack_compose exec -T nginx nginx -s reload 2>/dev/null \
+    || stack_compose restart nginx 2>/dev/null \
+    || true
   sleep 2
 fi
 
