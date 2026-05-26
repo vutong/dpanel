@@ -126,7 +126,7 @@ _site_ops_lock_dir() {
 }
 
 site_ops_lock_acquire() {
-  local lock dir="$(_site_ops_lock_dir)"
+  local lock="$(_site_ops_lock_dir)"
   mkdir -p "$(dirname "${lock}")"
   local i
   for ((i = 0; i < 180; i++)); do
