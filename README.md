@@ -28,6 +28,30 @@ curl -fsSLO https://raw.githubusercontent.com/vutong/dpanel/main/install.sh && s
 
 Install takes **15–30 minutes**. Terminal shows step lines only; details: `tail -f /var/log/dpanel-install.log`. Verbose terminal output: `DPANEL_VERBOSE=1`.
 
+Check installer version before running (should be **1.0.36+**):
+
+```bash
+grep '^INSTALLER_VERSION=' install.sh
+```
+
+### Install failed or stopped mid-way
+
+If `/opt/stack/.env` already exists (steps 1–6 done) but build or Docker failed:
+
+```bash
+sudo tail -50 /var/log/dpanel-install.log
+sudo bash /opt/stack/infra/scripts/install-continue.sh
+```
+
+Common fixes:
+
+| Problem | Action |
+|---------|--------|
+| `Identifier 'loading' has already been declared` | Pull latest repo (`install.sh` v1.0.35+ fixes panel build) |
+| Build `Killed` | Add 2G swap, then `install-continue.sh` |
+| `apt lock` | Wait or `sudo dpkg --configure -a`, re-run install |
+| `dpanel: command not found` | `sudo ln -sf /opt/stack/infra/scripts/dpanel-cli.sh /usr/local/bin/dpanel` |
+
 ### Non-interactive install
 
 ```bash

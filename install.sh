@@ -15,7 +15,7 @@
 #
 set -eu
 
-INSTALLER_VERSION="1.0.35"
+INSTALLER_VERSION="1.0.36"
 DEFAULT_ADMIN_PASSWORD="${DEFAULT_ADMIN_PASSWORD:-12345678}"
 STACK_ROOT="/opt/stack"
 PROJECT_NAME="${PROJECT_NAME:-dpanel}"
@@ -108,7 +108,11 @@ run_cmd() {
     "$@" >> "${INSTALL_LOG}" 2>&1 || rc=$?
   fi
   stop_progress
-  [[ "$rc" -eq 0 ]] || die "${label} failed (exit ${rc})"
+  if [[ "$rc" -ne 0 ]]; then
+    [[ -f "${STACK_ROOT}/.env" ]] \
+      && log "Resume: sudo bash ${STACK_ROOT}/infra/scripts/install-continue.sh"
+    die "${label} failed (exit ${rc})"
+  fi
 }
 
 run_cmd_try() {
@@ -189,7 +193,10 @@ preflight_checks() {
   local mem_kb
   mem_kb="$(grep MemTotal /proc/meminfo | awk '{print $2}')"
   if [[ "${mem_kb}" -lt 1800000 ]]; then
-    log "Warning: less than 2 GB RAM"
+    log "Warning: less than 2 GB RAM — Nuxt build may need swap (see README)"
+  fi
+  if [[ "${mem_kb}" -lt 1200000 && ! -f /swapfile ]]; then
+    log "Tip: add swap before build: fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile"
   fi
 
   command -v curl >/dev/null 2>&1 || die "curl is required"
@@ -277,7 +284,7 @@ Panel URL:    http://${PANEL_DOMAIN}
               http://${SERVER_IP}:8080
 
 Login email:  ${ADMIN_EMAIL}
-Login pass:   ${DEFAULT_ADMIN_PASSWORD}
+Login pass:   ${ADMIN_PASSWORD}
 
 Change password: dpanel setpass <new-password>
 
@@ -291,14 +298,13 @@ EOF
 
 wait_for_healthy_stack() {
   step "Health check"
-  local i
-  for i in $(seq 1 40); do
-    if docker compose exec -T dpanel wget -q -O- http://127.0.0.1:3000/api/ping 2>/dev/null | grep -qE '"ok"[[:space:]]*:[[:space:]]*true'; then
-      log "Panel healthy"
-      return 0
-    fi
-    sleep 3
-  done
+  cd "${STACK_ROOT}"
+  # shellcheck source=_helpers.sh
+  source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+  if wait_for_dpanel_ready 120; then
+    log "Panel healthy"
+    return 0
+  fi
   log "Warning: health check timeout — run: dpanel logs dpanel"
 }
 

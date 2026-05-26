@@ -31,6 +31,7 @@ System
   status                     Docker Compose service status
   health [--fix]             Full stack health (services, nginx, DB, ports)
   credentials, cred          Install summary (CREDENTIALS.txt)
+  install-continue           Resume failed install (build panel + docker + nginx)
 
 Update
   update [--check] [--no-build] [--no-health-fix] [--no-nginx-reload]
@@ -108,6 +109,9 @@ case "${CMD}" in
     else
       echo "No CREDENTIALS.txt — see ${STACK_ROOT}/.env"
     fi
+    ;;
+  install-continue)
+    exec bash "${STACK_ROOT}/infra/scripts/install-continue.sh"
     ;;
   health|doctor)
     hc="${STACK_ROOT}/infra/scripts/health-check.sh"
