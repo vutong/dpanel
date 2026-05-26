@@ -78,6 +78,9 @@ case "${CMD}" in
   restart)
     docker compose restart "${2:-}"
     ;;
+  nginx-reload|fix-nginx)
+    exec bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh"
+    ;;
   update)
     ensure_update_script
     exec bash "${STACK_ROOT}/infra/scripts/update.sh" "${@:2}"

@@ -458,12 +458,14 @@ chmod +x "${STACK_ROOT}/infra/scripts/"*.sh
 ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
 
 export STACK_ROOT
-bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" panel-only 2>/dev/null || true
 
 step "Start containers"
 cd "${STACK_ROOT}"
 run_cmd "docker compose build" docker compose build
 run_cmd "docker compose up" docker compose up -d --remove-orphans
+
+step "Configure nginx"
+bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx configuration failed"
 
 wait_for_healthy_stack
 

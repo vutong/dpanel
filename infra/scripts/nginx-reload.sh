@@ -18,9 +18,9 @@ fi
 
 cat > "${STACK_ROOT}/infra/nginx/conf.d/00-panel.conf" <<EOF
 server {
-    listen 80;
-    listen 8080;
-    server_name ${PANEL_DOMAIN};
+    listen 80 default_server;
+    listen 8080 default_server;
+    server_name ${PANEL_DOMAIN} _;
 
     location /mariadb/ {
         proxy_pass http://phpmyadmin:80/;
@@ -48,8 +48,12 @@ EOF
 
 rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf" "${STACK_ROOT}/infra/nginx/conf.d/99-mariadb.conf"
 
-if [[ "$MODE" != "panel-only" ]]; then
-  docker compose exec -T nginx nginx -s reload 2>/dev/null \
-    || docker compose restart nginx 2>/dev/null \
-    || true
+if docker compose ps --status running 2>/dev/null | grep -q nginx; then
+  docker compose exec -T nginx nginx -t 2>&1 || die "nginx config invalid — check ${STACK_ROOT}/infra/nginx/conf.d/"
+  if [[ "$MODE" != "panel-only" ]]; then
+    docker compose exec -T nginx nginx -s reload 2>/dev/null \
+      || docker compose restart nginx
+  fi
+else
+  echo "[dpanel] nginx not running — start stack: docker compose up -d"
 fi
