@@ -322,6 +322,14 @@ server {
 EOF
 }
 
+# Regenerate nginx vhost from data/panel/site-routing/<slug>.json (wildcard + extraDomains) and reload.
+site_apply_nginx_routing() {
+  local domain="$1"
+  [[ -n "${domain}" ]] || return 1
+  write_nginx_node_site "${domain}"
+  nginx_reload_stack 2>/dev/null || true
+}
+
 write_nginx_php_site() {
   local domain="$1"
   cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
@@ -453,17 +461,6 @@ nuxt_container_build() {
     return 1
   fi
 
-  if docker exec "${nuxt_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
-    echo "[dpanel] Reconciling store custom domains with nginx (sync:dpanel-routing)…" >&2
-    if ! docker exec "${nuxt_cid}" sh -c '
-      set -e
-      if [ -f .env ]; then set -a; . ./.env; set +a; fi
-      npm run sync:dpanel-routing
-    ' 2>&1; then
-      echo "[dpanel] Warning: custom domain sync failed — rebuild OK; fix MongoDB/dpanel env and run: npm run sync:dpanel-routing" >&2
-    fi
-  fi
-
   echo "[dpanel] Restarting ${cname}…" >&2
   docker restart "${cname}" 2>/dev/null || return 1
 
@@ -478,20 +475,36 @@ nuxt_container_build() {
     if docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
       || docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
       echo "[dpanel] App responding on :3000" >&2
-      return 0
+      break
     fi
     sleep 2
   done
 
-  echo "[dpanel] Build OK but app not listening on :3000 yet" >&2
-  _nuxt_container_log_tail "${cname}" 80
-  if ! docker exec "${nuxt_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
-    echo "[dpanel] Hint: add mongoose to package.json (npm install mongoose) and Rebuild" >&2
+  if ! docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
+    && ! docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    echo "[dpanel] Build OK but app not listening on :3000 yet" >&2
+    _nuxt_container_log_tail "${cname}" 80
+    if ! docker exec "${nuxt_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
+      echo "[dpanel] Hint: add mongoose to package.json (npm install mongoose) and Rebuild" >&2
+    fi
+    if [[ ! -f "${app_dir}/.env" ]]; then
+      echo "[dpanel] Hint: set MONGODB_URI in apps/${domain}/.env (panel → Edit .env) then restart" >&2
+    fi
+    return 1
   fi
-  if [[ ! -f "${app_dir}/.env" ]]; then
-    echo "[dpanel] Hint: set MONGODB_URI in apps/${domain}/.env (panel → Edit .env) then restart" >&2
+
+  if docker exec "${nuxt_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
+    echo "[dpanel] Syncing custom store domains from MongoDB (sync:dpanel-routing)…" >&2
+    if ! docker exec "${nuxt_cid}" sh -c '
+      set -e
+      if [ -f .env ]; then set -a; . ./.env; set +a; fi
+      npm run sync:dpanel-routing
+    ' 2>&1; then
+      echo "[dpanel] Warning: custom domain sync failed — rebuild OK; fix MongoDB/dpanel env and run: npm run sync:dpanel-routing" >&2
+    fi
   fi
-  return 1
+
+  return 0
 }
 
 # After site create from panel: start Nuxt service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).

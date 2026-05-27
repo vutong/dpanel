@@ -195,7 +195,7 @@ dpanel/
 - Tên dự án: **dpanel** (không còn ubuntu-docker).
 - Entry point duy nhất cho VPS: `install.sh`.
 - Panel API gọi script trong `infra/scripts/` — không shell tùy ý từ UI.
-- Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild thành công dpanel tự chạy reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile`, xóa orphan).
+- Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild (app đã chạy) reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile`); cuối Rebuild `site_apply_nginx_routing` ghi wildcard + extraDomains vào nginx. Wildcard chỉ cấu hình ở panel (globe), không qua sync script.
 - Site PHP: nginx → php-fpm, root `apps/<domain>/public`.
 - Site Node: service `nuxt-<slug>` trong `compose.d/`.
 - **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).

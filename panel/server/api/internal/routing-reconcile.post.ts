@@ -1,6 +1,5 @@
 import { getHeader, readBody } from 'h3'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
-import { runScriptDetached } from '../../utils/stack'
 
 /**
  * Replace extraDomains for a Node site with the exact hostname list from the app (MongoDB).
@@ -43,7 +42,7 @@ export default defineEventHandler(async (event) => {
     extraDomains: [...nextSet]
   })
 
-  runScriptDetached('site-routing-apply.sh', [siteDomain])
+  // Nginx apply is done by site-rebuild (end) or routing.put / routing-domains — avoids double reload during Rebuild.
 
   return {
     ok: true,

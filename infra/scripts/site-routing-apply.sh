@@ -12,7 +12,6 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 
-write_nginx_node_site "${DOMAIN}"
-nginx_reload_stack 2>/dev/null || true
+site_apply_nginx_routing "${DOMAIN}"
 
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\"}"

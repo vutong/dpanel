@@ -63,6 +63,7 @@ if ! nuxt_container_build "${DOMAIN}"; then
   die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
 fi
 
-nginx_reload_stack 2>/dev/null || true
+log "Applying nginx routing (wildcard + custom domains)…"
+site_apply_nginx_routing "${DOMAIN}"
 site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete — site should be online"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"service\":\"${SVC}\",\"action\":\"rebuild\"}"
