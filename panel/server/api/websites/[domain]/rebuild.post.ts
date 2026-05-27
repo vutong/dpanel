@@ -1,11 +1,18 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { runScriptDetached, stackRoot, writeSiteOpStatus } from '../../../utils/stack'
+import { readBody } from 'h3'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
   const domain = decodeURIComponent(getRouterParam(event, 'domain') || '').trim().toLowerCase()
+  const body = await readBody<{ nodeModulesMode?: string }>(event).catch(() => ({}))
+  const nodeModulesMode = String(body?.nodeModulesMode || 'auto').trim().toLowerCase()
+
+  if (!['auto', 'keep', 'clean'].includes(nodeModulesMode)) {
+    throw createError({ statusCode: 400, statusMessage: 'nodeModulesMode must be auto, keep, or clean' })
+  }
 
   if (!domain) {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
@@ -19,7 +26,7 @@ export default defineEventHandler(async (event) => {
   }
 
   writeSiteOpStatus(domain, 'rebuild', 'running', 'Starting rebuild…')
-  runScriptDetached('site-rebuild.sh', [domain], {}, domain, 'rebuild')
+  runScriptDetached('site-rebuild.sh', [domain], { NODE_MODULES_MODE: nodeModulesMode }, domain, 'rebuild')
 
   return {
     ok: true,

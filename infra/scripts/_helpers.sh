@@ -275,28 +275,47 @@ write_nginx_node_site() {
   server_names="${domain}"
   local routing_json="${STACK_ROOT}/data/panel/site-routing/${slug}.json"
   if [[ -f "${routing_json}" ]]; then
-    ensure_python3 >/dev/null 2>&1 || true
-    if [[ -n "${PYBIN:-}" ]]; then
+    if ensure_python3 >/dev/null 2>&1 && [[ -n "${PYBIN:-}" ]]; then
       wildcard_base="$("${PYBIN}" -c "
 import json, os
-path = os.environ['PATH']
+path = os.environ['ROUTING_JSON_PATH']
 with open(path) as f:
     data = json.load(f)
 print((data.get('wildcardBase') or '').strip().lower())
-" PATH="${routing_json}" 2>/dev/null || true)"
+" ROUTING_JSON_PATH="${routing_json}" 2>/dev/null || true)"
       extra_line="$("${PYBIN}" -c "
 import json, os
-path = os.environ['PATH']
+path = os.environ['ROUTING_JSON_PATH']
 with open(path) as f:
     data = json.load(f)
 domains = data.get('extraDomains') or []
 print(' '.join(str(d).strip().lower() for d in domains if str(d).strip()))
-" PATH="${routing_json}" 2>/dev/null || true)"
+" ROUTING_JSON_PATH="${routing_json}" 2>/dev/null || true)"
+    elif command -v node >/dev/null 2>&1; then
+      wildcard_base="$(node -e "
+const fs = require('fs');
+const p = process.argv[1];
+try {
+  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+  process.stdout.write(String(data.wildcardBase || '').trim().toLowerCase());
+} catch {}
+" "${routing_json}" 2>/dev/null || true)"
+      extra_line="$(node -e "
+const fs = require('fs');
+const p = process.argv[1];
+try {
+  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const arr = Array.isArray(data.extraDomains) ? data.extraDomains : [];
+  process.stdout.write(arr.map(v => String(v || '').trim().toLowerCase()).filter(Boolean).join(' '));
+} catch {}
+" "${routing_json}" 2>/dev/null || true)"
+    else
+      echo "[dpanel] Warning: cannot parse ${routing_json} (python3/node unavailable) — using primary domain only" >&2
+    fi
       if [[ -n "${wildcard_base}" ]]; then
         server_names="${server_names} ${wildcard_base} www.${wildcard_base} *.${wildcard_base}"
       fi
       [[ -n "${extra_line}" ]] && server_names="${server_names} ${extra_line}"
-    fi
   fi
   cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
 server {
@@ -415,6 +434,7 @@ _nuxt_container_log_tail() {
 # npm install + build inside the per-site Nuxt container, then restart (caller should hold site_ops_lock).
 nuxt_container_build() {
   local domain="$1"
+  local node_modules_mode="${2:-auto}"
   local slug svc cname nuxt_cid app_dir
   [[ -n "${domain}" ]] || return 1
   slug="$(site_slug "${domain}")"
@@ -437,15 +457,36 @@ nuxt_container_build() {
   }
 
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
-  docker exec "${nuxt_cid}" bash -lc '
+  docker exec -e DPANEL_NODE_MODULES_MODE="${node_modules_mode}" "${nuxt_cid}" bash -lc '
     set -euo pipefail
     if [ -f .env ]; then set -a; . ./.env; set +a; fi
-    # Clean install avoids ENOTEMPTY on bind-mounted node_modules (race with entrypoint / partial installs).
-    rm -rf node_modules
-    if [ -f package-lock.json ]; then
-      npm ci || { rm -rf node_modules && npm install; }
+    mode="${DPANEL_NODE_MODULES_MODE:-auto}"
+
+    install_once() {
+      if [ -f package-lock.json ]; then
+        npm ci || return 1
+      else
+        npm install || return 1
+      fi
+    }
+
+    if [ "${mode}" = "clean" ]; then
+      rm -rf node_modules
+      install_once
+    elif [ "${mode}" = "keep" ]; then
+      install_once
+    elif [ "${mode}" = "auto" ] || [ -z "${mode}" ]; then
+      if ! install_once; then
+        echo "[dpanel] auto: npm install failed; cleaning node_modules and retrying…" >&2
+        rm -rf node_modules
+        install_once
+      fi
     else
-      npm install
+      echo "[dpanel] Invalid DPANEL_NODE_MODULES_MODE='${mode}' — defaulting to auto" >&2
+      if ! install_once; then
+        rm -rf node_modules
+        install_once
+      fi
     fi
     if grep -q "\"mongoose\"" package.json 2>/dev/null && [ ! -d node_modules/mongoose ]; then
       echo "[dpanel] Installing mongoose (listed in package.json)…"

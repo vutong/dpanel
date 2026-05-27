@@ -7,6 +7,7 @@ STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 
 DOMAIN="${1:-}"
+NODE_MODULES_MODE="${NODE_MODULES_MODE:-auto}"
 
 die() {
   site_op_status_write "${DOMAIN}" "rebuild" "error" "$*" 2>/dev/null || true
@@ -18,6 +19,7 @@ log() { echo "[dpanel] $*" >&2; }
 
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
+[[ "${NODE_MODULES_MODE}" =~ ^(auto|keep|clean)$ ]] || die "Invalid NODE_MODULES_MODE: ${NODE_MODULES_MODE}"
 
 ensure_python3 || die "python3 required — run: sudo dpanel update"
 
@@ -56,7 +58,7 @@ site_ops_lock_acquire
 trap site_ops_lock_release EXIT
 
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
-if ! nuxt_container_build "${DOMAIN}"; then
+if ! nuxt_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
   if [[ -f "${APP_DIR}/.output/server/index.mjs" ]]; then
     die "Build finished but app did not start — check App logs (Eye), Edit .env (MONGODB_URI), and mongoose in package.json"
   fi

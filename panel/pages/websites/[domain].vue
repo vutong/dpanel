@@ -62,7 +62,7 @@
             type="button"
             class="tile"
             :disabled="busy"
-            @click="runRebuild"
+            @click="openRebuild"
           >
             <AppIcon name="wrench" :size="22" />
             <span class="tile-title">Rebuild</span>
@@ -150,6 +150,40 @@
       @saved="onResourcesSaved"
     />
 
+    <div v-if="rebuildOpen" class="modal-backdrop" @click.self="rebuildOpen = false">
+      <div class="modal card" role="dialog" aria-labelledby="rebuild-title">
+        <h2 id="rebuild-title">Rebuild settings</h2>
+        <p class="muted">
+          Node.js rebuild on this VPS. Choose how to handle <code>node_modules</code>.
+        </p>
+
+        <div class="field">
+          <label class="label">node_modules mode</label>
+          <div class="field rebuild-modes">
+            <label class="checkbox-label">
+              <input v-model="nodeModulesMode" type="radio" value="auto" />
+              Auto (recommended) — try keep first, retry with clean only if install fails
+            </label>
+            <label class="checkbox-label">
+              <input v-model="nodeModulesMode" type="radio" value="keep" />
+              Keep — never delete node_modules
+            </label>
+            <label class="checkbox-label">
+              <input v-model="nodeModulesMode" type="radio" value="clean" />
+              Clean — always delete node_modules (slowest)
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="rebuildOpen = false">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmRebuild">
+            Rebuild
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="updateOpen" class="modal-backdrop" @click.self="updateOpen = false">
       <div class="modal card" role="dialog">
         <h2>Update from Git</h2>
@@ -232,6 +266,7 @@
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
 type SiteOpKind = 'update' | 'rebuild'
+type NodeModulesMode = 'auto' | 'keep' | 'clean'
 
 const route = useRoute()
 const domainParam = computed(() => decodeURIComponent(String(route.params.domain || '')))
@@ -276,6 +311,8 @@ const logOpen = ref(false)
 const routingOpen = ref(false)
 const resourcesOpen = ref(false)
 const updateOpen = ref(false)
+const rebuildOpen = ref(false)
+const nodeModulesMode = ref<NodeModulesMode>('auto')
 const updateToken = ref('')
 const updateSaveToken = ref(false)
 const updateGitCheckout = ref(false)
@@ -327,11 +364,23 @@ async function confirmUpdate() {
   }
 }
 
-async function runRebuild() {
+function openRebuild() {
   if (!site.value || site.value.runtime !== 'node') return
+  nodeModulesMode.value = 'auto'
+  rebuildOpen.value = true
   clearAlert()
+}
+
+async function confirmRebuild() {
+  if (!site.value || site.value.runtime !== 'node') return
+  rebuildOpen.value = false
+  clearAlert()
+
   try {
-    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/rebuild`, { method: 'POST' })
+    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/rebuild`, {
+      method: 'POST',
+      body: { nodeModulesMode: nodeModulesMode.value },
+    })
     busy.value = true
     streamOp.value = 'rebuild'
   } catch (e: unknown) {
