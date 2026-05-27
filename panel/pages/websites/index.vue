@@ -227,7 +227,7 @@ function onStreamClose() {
 
 function onStreamDone(payload: { ok: boolean; message: string }) {
   if (streamOp.value) markOpIdle(streamOp.value.domain)
-  streamOp.value = null
+  if (payload.ok) streamOp.value = null
   showAlert(payload.message, payload.ok, payload.ok ? 8000 : 0)
 }
 

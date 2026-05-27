@@ -6,10 +6,23 @@
           <h2 :id="titleId">{{ title }}</h2>
           <p class="stream-sub">{{ domain }}</p>
         </div>
-        <span class="stream-badge" :class="badgeClass">{{ statusLabel }}</span>
+        <div class="stream-header-actions">
+          <span class="stream-badge" :class="badgeClass">{{ statusLabel }}</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="!logText"
+            @click="copyLog"
+          >
+            {{ copyFeedback || 'Copy' }}
+          </button>
+        </div>
       </header>
 
       <p v-if="statusMessage" class="stream-status-msg">{{ statusMessage }}</p>
+      <p v-if="phase === 'error'" class="stream-status-msg stream-status-msg--err">
+        Operation failed — review the log below, then close when done.
+      </p>
 
       <div ref="logViewport" class="stream-log">
         <pre class="stream-pre">{{ logText || waitingHint }}</pre>
@@ -26,11 +39,19 @@
         </button>
         <button
           type="button"
+          class="btn btn-ghost btn-sm"
+          :disabled="!logText"
+          @click="copyLog"
+        >
+          Copy log
+        </button>
+        <button
+          type="button"
           class="btn btn-primary"
           :disabled="phase === 'running'"
-          @click="emit('close')"
+          @click="onCloseClick"
         >
-          {{ phase === 'running' ? 'Please wait…' : 'Close' }}
+          {{ closeLabel }}
         </button>
       </footer>
     </div>
@@ -87,6 +108,18 @@ const waitingHint = computed(() =>
     ? 'Waiting for log output from the server…'
     : ''
 )
+
+const closeLabel = computed(() => {
+  if (phase.value === 'running') return 'Please wait…'
+  if (phase.value === 'error') return 'Close'
+  return 'Close'
+})
+
+const { copyFeedback, copyText } = useCopyText()
+
+function copyLog() {
+  void copyText(logText.value)
+}
 
 function scrollLogToEnd() {
   nextTick(() => {
@@ -158,8 +191,13 @@ function startStreaming() {
   }, 2000)
 }
 
+function onCloseClick() {
+  if (phase.value === 'running') return
+  emit('close')
+}
+
 function onBackdropClick() {
-  if (phase.value !== 'running') emit('close')
+  if (phase.value === 'ok') emit('close')
 }
 
 watch(
@@ -206,6 +244,22 @@ onUnmounted(stopTimers)
   gap: 1rem;
   padding: 1rem 1.15rem 0.65rem;
   border-bottom: 1px solid #21262d;
+}
+
+.stream-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.stream-status-msg--err {
+  color: #f85149 !important;
 }
 
 .stream-header h2 {

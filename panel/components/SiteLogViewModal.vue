@@ -6,9 +6,27 @@
           <h2 id="log-view-title">View logs</h2>
           <p class="stream-sub">{{ domain }}</p>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" :disabled="loading" @click="refreshNow">
-          Refresh
-        </button>
+        <div class="stream-header-actions">
+          <button type="button" class="btn btn-ghost btn-sm" :disabled="loading" @click="refreshNow">
+            Refresh
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="!logText || loading"
+            @click="copyLog"
+          >
+            {{ copyFeedback || 'Copy' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-danger-text"
+            :disabled="loading || clearing"
+            @click="clearLog"
+          >
+            {{ clearing ? 'Clearing…' : 'Clear log' }}
+          </button>
+        </div>
       </header>
 
       <div class="log-tabs" role="tablist">
@@ -33,6 +51,17 @@
       </div>
 
       <footer class="stream-footer">
+        <button type="button" class="btn btn-ghost btn-sm" :disabled="!logText" @click="copyLog">
+          Copy log
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-danger-text"
+          :disabled="loading || clearing"
+          @click="clearLog"
+        >
+          Clear log
+        </button>
         <button type="button" class="btn btn-primary" @click="emit('close')">Close</button>
       </footer>
     </div>
@@ -60,7 +89,13 @@ const activeTab = ref<SiteLogKind>('container')
 const logText = ref('')
 const logOffset = ref(0)
 const loading = ref(false)
+const clearing = ref(false)
 const logViewport = ref<HTMLElement | null>(null)
+const { copyFeedback, copyText } = useCopyText()
+
+function copyLog() {
+  void copyText(logText.value)
+}
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
 let pollGen = 0
@@ -138,6 +173,32 @@ function refreshNow() {
   void fetchLog()
 }
 
+const clearConfirmLabel = computed(() => {
+  const tab = tabs.find((t) => t.id === activeTab.value)?.label ?? activeTab.value
+  return `Clear ${tab} log for ${props.domain}? This cannot be undone.`
+})
+
+async function clearLog() {
+  if (clearing.value || loading.value) return
+  if (!import.meta.client || !confirm(clearConfirmLabel.value)) return
+
+  clearing.value = true
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(props.domain)}/log`, {
+      method: 'DELETE',
+      query: { op: activeTab.value }
+    })
+    resetLog()
+    await fetchLog()
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    logText.value =
+      err.data?.statusMessage || err.statusMessage || '[dpanel] Could not clear log.'
+  } finally {
+    clearing.value = false
+  }
+}
+
 function startPolling() {
   stopPolling()
   pollGen += 1
@@ -212,10 +273,16 @@ onUnmounted(stopPolling)
   word-break: break-all;
 }
 
+.stream-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .btn-sm {
   padding: 0.35rem 0.65rem;
   font-size: 0.82rem;
-  flex-shrink: 0;
 }
 
 .log-tabs {
@@ -280,5 +347,14 @@ onUnmounted(stopPolling)
   gap: 0.5rem;
   padding: 0.75rem 1rem 1rem;
   border-top: 1px solid #21262d;
+}
+
+.btn-danger-text {
+  color: #f85149;
+}
+
+.btn-danger-text:hover:not(:disabled) {
+  color: #ff7b72;
+  border-color: rgba(248, 81, 73, 0.45);
 }
 </style>
