@@ -1,5 +1,6 @@
 import { getHeader, readBody } from 'h3'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
+import { assertNodeSite } from '../../utils/site-env'
 
 /**
  * Replace extraDomains for a Node site with the exact hostname list from the app (MongoDB).
@@ -21,6 +22,7 @@ export default defineEventHandler(async (event) => {
   if (!siteDomain) {
     throw createError({ statusCode: 400, statusMessage: 'Missing siteDomain' })
   }
+  await assertNodeSite(siteDomain)
 
   const primary = siteDomain
   const incoming = Array.isArray(body?.hostnames) ? body.hostnames : []

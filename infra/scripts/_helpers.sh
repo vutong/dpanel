@@ -327,7 +327,8 @@ site_apply_nginx_routing() {
   local domain="$1"
   [[ -n "${domain}" ]] || return 1
   write_nginx_node_site "${domain}"
-  nginx_reload_stack 2>/dev/null || true
+  nginx_test_stack 1 || return 1
+  nginx_reload_stack 2>/dev/null || return 1
 }
 
 write_nginx_php_site() {

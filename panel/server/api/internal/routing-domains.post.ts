@@ -1,5 +1,6 @@
 import { getHeader, readBody } from 'h3'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
+import { assertNodeSite } from '../../utils/site-env'
 import { runScriptDetached } from '../../utils/stack'
 
 /** App containers register extra hostnames (e.g. store custom domains). */
@@ -23,6 +24,7 @@ export default defineEventHandler(async (event) => {
   if (!siteDomain) {
     throw createError({ statusCode: 400, statusMessage: 'Missing siteDomain' })
   }
+  await assertNodeSite(siteDomain)
   if (!['add', 'remove'].includes(action)) {
     throw createError({ statusCode: 400, statusMessage: 'action must be add or remove' })
   }
