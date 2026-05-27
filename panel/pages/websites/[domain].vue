@@ -11,23 +11,11 @@
     <div v-else-if="loadError" class="alert alert-error">{{ loadError }}</div>
     <template v-else-if="site">
       <header class="site-header card">
-        <div class="site-header-top">
-          <div class="site-header-main">
-            <h1>{{ site.domain }}</h1>
-            <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
-              {{ site.runtime }}
-            </span>
-          </div>
-          <div v-if="site.githubUrl" class="github-block">
-            <span class="meta-label">GitHub</span>
-            <a
-              :href="site.githubUrl"
-              class="github-url"
-              target="_blank"
-              rel="noopener noreferrer"
-              :title="site.githubUrl"
-            >{{ site.githubUrl }}</a>
-          </div>
+        <div class="site-header-main">
+          <h1>{{ site.domain }}</h1>
+          <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
+            {{ site.runtime }}
+          </span>
         </div>
         <dl class="meta-grid">
           <div>
@@ -35,8 +23,20 @@
             <dd>{{ formatDate(site.createdAt) }}</dd>
           </div>
           <div v-if="site.runtime === 'node' && resources">
-            <dt>Limits</dt>
+            <dt>Container limits</dt>
             <dd>{{ limitsSummary }}</dd>
+          </div>
+          <div v-if="site.githubUrl">
+            <dt>GitHub</dt>
+            <dd>
+              <a
+                :href="site.githubUrl"
+                class="meta-ellipsis"
+                target="_blank"
+                rel="noopener noreferrer"
+                :title="site.githubUrl"
+              >{{ site.githubUrl }}</a>
+            </dd>
           </div>
         </dl>
       </header>
@@ -94,11 +94,6 @@
             <span class="tile-title">Resources</span>
             <span class="tile-desc">CPU, RAM, disk limits</span>
           </button>
-          <button type="button" class="tile" :disabled="busy || routingSyncing" @click="runRoutingSync">
-            <AppIcon name="globe" :size="22" />
-            <span class="tile-title">Sync custom domains</span>
-            <span class="tile-desc">MongoDB → nginx (add &amp; remove)</span>
-          </button>
         </div>
       </section>
 
@@ -127,9 +122,8 @@
       </section>
 
       <section class="section section--danger">
-        <h2 class="section-title">Danger zone</h2>
-        <button type="button" class="btn btn-danger" :disabled="busy" @click="openDelete">
-          Delete website
+        <button type="button" class="btn-delete-quiet" :disabled="busy" @click="openDelete">
+          Delete website…
         </button>
       </section>
     </template>
@@ -172,13 +166,32 @@
     </div>
 
     <div v-if="deleteOpen" class="modal-backdrop" @click.self="closeDelete">
-      <div class="modal card" role="dialog">
-        <h2>Delete website</h2>
-        <p class="muted">Remove <strong>{{ site?.domain }}</strong> permanently.</p>
-        <ul v-if="deletePhase === 'confirm'" class="delete-list">
-          <li>Panel registry, nginx, <code>apps/{{ site?.domain }}/</code></li>
-          <li v-if="site?.runtime === 'node'">Docker service &amp; compose fragment</li>
-        </ul>
+      <div class="modal card" role="dialog" aria-labelledby="delete-title">
+        <h2 id="delete-title">Delete website</h2>
+        <template v-if="deletePhase === 'confirm'">
+          <p class="muted">
+            This permanently removes <strong>{{ site?.domain }}</strong> and cannot be undone.
+          </p>
+          <ul class="delete-list">
+            <li>Panel registry, nginx, <code>apps/{{ site?.domain }}/</code></li>
+            <li v-if="site?.runtime === 'node'">Docker service &amp; compose fragment</li>
+          </ul>
+          <div class="field">
+            <label class="label" :for="deleteInputId">
+              Type <code>{{ site?.domain }}</code> to confirm
+            </label>
+            <input
+              :id="deleteInputId"
+              v-model="deleteConfirm"
+              class="input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              :placeholder="site?.domain"
+              @keydown.enter="deleteConfirmMatches && confirmDelete()"
+            />
+          </div>
+        </template>
         <p v-else class="alert alert-info">Deletion is running…</p>
         <div class="modal-actions">
           <button v-if="deletePhase === 'confirm'" type="button" class="btn btn-ghost" @click="closeDelete">
@@ -188,9 +201,10 @@
             v-if="deletePhase === 'confirm'"
             type="button"
             class="btn btn-danger"
+            :disabled="!deleteConfirmMatches"
             @click="confirmDelete"
           >
-            Delete
+            Delete permanently
           </button>
           <button v-else type="button" class="btn btn-primary" @click="closeDelete">Close</button>
         </div>
@@ -200,8 +214,6 @@
 </template>
 
 <script setup lang="ts">
-import { formatBytes } from '~/composables/useFormatBytes'
-
 type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
 type SiteOpKind = 'update' | 'rebuild'
@@ -231,8 +243,7 @@ const limitsSummary = computed(() => {
   if (r.cpuLimit > 0) parts.push(`${r.cpuLimit} CPU`)
   if (r.memoryMb > 0) parts.push(`${r.memoryMb} MB RAM`)
   if (r.diskGb > 0) parts.push(`${r.diskGb} GB disk`)
-  if (r.appDirBytes) parts.push(`using ${formatBytes(r.appDirBytes)}`)
-  return parts.length ? parts.join(' · ') : 'No limits'
+  return parts.length ? parts.join(' · ') : 'Not set (unlimited)'
 })
 
 const comingSoon = [
@@ -240,7 +251,6 @@ const comingSoon = [
   { icon: 'folder', title: 'File manager', desc: 'Browse apps folder' },
   { icon: 'clock', title: 'Cron jobs', desc: 'Scheduled tasks' },
   { icon: 'database', title: 'Linked database', desc: 'Attach MariaDB' },
-  { icon: 'layers', title: 'Deployments', desc: 'Release history' },
   { icon: 'mail', title: 'Email', desc: 'SMTP / mailboxes' }
 ]
 
@@ -250,12 +260,18 @@ const envOpen = ref(false)
 const logOpen = ref(false)
 const routingOpen = ref(false)
 const resourcesOpen = ref(false)
-const routingSyncing = ref(false)
 const updateOpen = ref(false)
 const updateToken = ref('')
 const deleteOpen = ref(false)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
+const deleteConfirm = ref('')
+const deleteInputId = `delete-confirm-${Math.random().toString(36).slice(2, 9)}`
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
+
+const deleteConfirmMatches = computed(() => {
+  const expected = site.value?.domain?.trim().toLowerCase() || ''
+  return expected.length > 0 && deleteConfirm.value.trim().toLowerCase() === expected
+})
 
 function formatDate(iso?: string) {
   if (!iso) return '—'
@@ -329,36 +345,21 @@ async function onResourcesSaved() {
   showAlert('Resource limits saved and container updated', true, 8000)
 }
 
-async function runRoutingSync() {
-  if (!site.value || site.value.runtime !== 'node' || routingSyncing.value) return
-  routingSyncing.value = true
-  clearAlert()
-  try {
-    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/routing-sync`, {
-      method: 'POST'
-    })
-    showAlert('Custom domains reconciled with MongoDB (nginx reloaded)', true, 10000)
-  } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    showAlert(err.data?.statusMessage || err.statusMessage || 'Domain sync failed', false)
-  } finally {
-    routingSyncing.value = false
-  }
-}
-
 function openDelete() {
   deleteOpen.value = true
   deletePhase.value = 'confirm'
+  deleteConfirm.value = ''
   clearAlert()
 }
 
 function closeDelete() {
   deleteOpen.value = false
   deletePhase.value = 'confirm'
+  deleteConfirm.value = ''
 }
 
 function confirmDelete() {
-  if (!site.value || deletePhase.value !== 'confirm') return
+  if (!site.value || deletePhase.value !== 'confirm' || !deleteConfirmMatches.value) return
   const domain = site.value.domain
   deletePhase.value = 'background'
   void $fetch(`/api/websites/${encodeURIComponent(domain)}`, { method: 'DELETE' })
@@ -393,57 +394,26 @@ function confirmDelete() {
   padding: 1.25rem 1.35rem;
   margin-bottom: 1.25rem;
 }
-.site-header-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.25rem;
-  margin-bottom: 1rem;
-}
 .site-header-main {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  flex-shrink: 0;
-  min-width: 0;
+  margin-bottom: 1rem;
 }
 .site-header h1 {
   font-size: 1.45rem;
   word-break: break-word;
-}
-.github-block {
-  flex: 1 1 12rem;
-  min-width: 0;
-  max-width: min(52%, 520px);
-  text-align: right;
-}
-.meta-label {
-  display: block;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin-bottom: 0.2rem;
-}
-.github-url {
-  display: block;
-  font-size: 0.8rem;
-  font-family: ui-monospace, monospace;
-  color: var(--accent);
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.github-url:hover {
-  text-decoration: underline;
 }
 .meta-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 2rem;
   font-size: 0.88rem;
+}
+.meta-grid > div {
+  min-width: 0;
+  max-width: min(100%, 22rem);
 }
 .meta-grid dt {
   font-size: 0.68rem;
@@ -452,15 +422,17 @@ function confirmDelete() {
   color: var(--muted);
   margin-bottom: 0.15rem;
 }
-@media (max-width: 640px) {
-  .site-header-top {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .github-block {
-    max-width: none;
-    text-align: left;
-  }
+.meta-ellipsis {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta-ellipsis:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 .section {
   margin-bottom: 2rem;
@@ -534,8 +506,33 @@ button.tile:hover:not(:disabled) {
   color: var(--muted);
 }
 .section--danger {
-  padding-top: 0.5rem;
+  padding-top: 1.5rem;
+  margin-top: 0.5rem;
   border-top: 1px solid var(--border);
+  text-align: right;
+}
+.btn-delete-quiet {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.btn-delete-quiet:hover:not(:disabled) {
+  color: var(--danger);
+}
+.btn-delete-quiet:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal .field {
+  margin-top: 1rem;
+}
+.modal .field code {
+  font-size: 0.85em;
 }
 .modal-backdrop {
   position: fixed;
