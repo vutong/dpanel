@@ -2,7 +2,7 @@
   <button
     type="button"
     class="icon-btn"
-    :class="[`icon-btn--${variant}`, { 'icon-btn--busy': busy }]"
+    :class="`icon-btn--${variant}`"
     :data-tip="title"
     :aria-label="title"
     :disabled="disabled || busy"
@@ -20,13 +20,13 @@ withDefaults(
     variant?: 'default' | 'danger'
     size?: number
     disabled?: boolean
+    /** @deprecated Use disabled only — avoids flicker when toggled with disabled */
     busy?: boolean
   }>(),
   {
     variant: 'default',
     size: 18,
-    disabled: false,
-    busy: false
+    disabled: false
   }
 )
 
@@ -98,9 +98,5 @@ defineEmits<{ click: [event: MouseEvent] }>()
   border-color: var(--danger);
   color: var(--danger);
   background: var(--danger-muted);
-}
-
-.icon-btn--busy {
-  pointer-events: none;
 }
 </style>

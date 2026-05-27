@@ -6,6 +6,13 @@ export STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 export NUXT_HOST="${NUXT_HOST:-0.0.0.0}"
 export NUXT_PORT="${NUXT_PORT:-3000}"
 
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
 if [ -f package.json ]; then
   if [ ! -d node_modules/.bin ]; then
     echo "[dpanel] Installing dependencies..."

@@ -315,6 +315,33 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
+# Wait until site Nuxt container is running and not in a restart loop.
+_nuxt_container_wait_ready() {
+  local cname="$1"
+  local max_wait="${2:-90}"
+  local i cid status restarting
+  for ((i = 0; i < max_wait; i++)); do
+    cid="$(docker ps -aq -f "name=^${cname}$" 2>/dev/null | head -1)"
+    [[ -n "${cid}" ]] || { sleep 2; continue; }
+    status="$(docker inspect -f '{{.State.Status}}' "${cid}" 2>/dev/null || echo "")"
+    restarting="$(docker inspect -f '{{.State.Restarting}}' "${cid}" 2>/dev/null || echo false)"
+    if [[ "${status}" == "running" && "${restarting}" != "true" ]]; then
+      echo "${cid}"
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+_nuxt_container_log_tail() {
+  local cname="$1"
+  local lines="${2:-60}"
+  echo "[dpanel] --- docker logs ${cname} (last ${lines} lines) ---" >&2
+  docker logs --tail "${lines}" "${cname}" 2>&1 || true
+  echo "[dpanel] --- end docker logs ---" >&2
+}
+
 # npm install + build inside the per-site Nuxt container, then restart (caller should hold site_ops_lock).
 nuxt_container_build() {
   local domain="$1"
@@ -332,20 +359,26 @@ nuxt_container_build() {
 
   cd "${STACK_ROOT}"
   stack_compose up -d "${svc}" 2>/dev/null || true
-  local i
-  for ((i = 0; i < 30; i++)); do
-    nuxt_cid="$(docker ps -q -f "name=^${cname}$" -f "status=running" 2>/dev/null | head -1)"
-    [[ -n "${nuxt_cid}" ]] && break
-    sleep 2
-  done
-  [[ -n "${nuxt_cid}" ]] || {
-    echo "[dpanel] Nuxt container not running (${cname}) — check: docker ps -a | grep nuxt-${slug}" >&2
+
+  nuxt_cid="$(_nuxt_container_wait_ready "${cname}" 90)" || {
+    echo "[dpanel] Nuxt container not ready (${cname}) — check: docker ps -a | grep ${slug}" >&2
+    _nuxt_container_log_tail "${cname}" 40
     return 1
   }
 
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
-  docker exec "${nuxt_cid}" sh -c 'npm ci 2>/dev/null || npm install; npm run build' \
-    || return 1
+  docker exec "${nuxt_cid}" sh -c '
+    set -e
+    npm ci 2>/dev/null || npm install
+    if grep -q "\"mongoose\"" package.json 2>/dev/null && [ ! -d node_modules/mongoose ]; then
+      echo "[dpanel] Installing mongoose (listed in package.json)…"
+      npm install mongoose
+    fi
+    npm run build
+  ' || {
+    _nuxt_container_log_tail "${cname}" 40
+    return 1
+  }
 
   if [[ ! -f "${app_dir}/.output/server/index.mjs" ]]; then
     echo "[dpanel] Build finished but missing .output/server/index.mjs — check package.json build script" >&2
@@ -353,15 +386,32 @@ nuxt_container_build() {
   fi
 
   echo "[dpanel] Restarting ${cname}…" >&2
-  docker restart "${nuxt_cid}" 2>/dev/null || return 1
-  for ((i = 0; i < 20; i++)); do
-    if docker exec "${nuxt_cid}" wget -q -O- --timeout=2 http://127.0.0.1:3000/ >/dev/null 2>&1; then
+  docker restart "${cname}" 2>/dev/null || return 1
+
+  nuxt_cid="$(_nuxt_container_wait_ready "${cname}" 90)" || {
+    echo "[dpanel] Container did not become ready after restart" >&2
+    _nuxt_container_log_tail "${cname}" 80
+    return 1
+  }
+
+  local i
+  for ((i = 0; i < 45; i++)); do
+    if docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
+      || docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
       echo "[dpanel] App responding on :3000" >&2
       return 0
     fi
     sleep 2
   done
-  echo "[dpanel] Container up but nothing listening on :3000 — see logs above" >&2
+
+  echo "[dpanel] Build OK but app not listening on :3000 yet" >&2
+  _nuxt_container_log_tail "${cname}" 80
+  if ! docker exec "${nuxt_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
+    echo "[dpanel] Hint: add mongoose to package.json (npm install mongoose) and Rebuild" >&2
+  fi
+  if [[ ! -f "${app_dir}/.env" ]]; then
+    echo "[dpanel] Hint: set MONGODB_URI in apps/${domain}/.env (panel → Edit .env) then restart" >&2
+  fi
   return 1
 }
 

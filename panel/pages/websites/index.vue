@@ -35,7 +35,6 @@
                   icon="git-pull"
                   title="Update from Git"
                   :disabled="isSiteBusy(s.domain)"
-                  :busy="isSiteBusy(s.domain)"
                   @click="openUpdate(s)"
                 />
                 <IconButton
@@ -56,15 +55,13 @@
                   icon="wrench"
                   title="Rebuild (npm build)"
                   :disabled="isSiteBusy(s.domain)"
-                  :busy="isSiteBusy(s.domain)"
                   @click="runRebuild(s)"
                 />
                 <IconButton
                   icon="trash"
                   title="Delete website"
                   variant="danger"
-                  :disabled="!!busy"
-                  :busy="busy === s.domain"
+                  :disabled="!!busy || busy === s.domain"
                   @click="openDelete(s)"
                 />
               </div>

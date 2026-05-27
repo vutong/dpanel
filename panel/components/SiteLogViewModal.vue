@@ -7,13 +7,13 @@
           <p class="stream-sub">{{ domain }}</p>
         </div>
         <div class="stream-header-actions">
-          <button type="button" class="btn btn-ghost btn-sm" :disabled="loading" @click="refreshNow">
+          <button type="button" class="btn btn-ghost btn-sm" :disabled="clearing" @click="refreshNow">
             Refresh
           </button>
           <button
             type="button"
             class="btn btn-ghost btn-sm"
-            :disabled="!logText || loading"
+            :disabled="!logText || clearing"
             @click="copyLog"
           >
             {{ copyFeedback || 'Copy' }}
@@ -21,7 +21,7 @@
           <button
             type="button"
             class="btn btn-ghost btn-sm btn-danger-text"
-            :disabled="loading || clearing"
+            :disabled="clearing"
             @click="clearLog"
           >
             {{ clearing ? 'Clearing…' : 'Clear log' }}
@@ -45,19 +45,20 @@
       </div>
 
       <p class="stream-status-msg">{{ tabHint }}</p>
+      <p v-if="clearedNotice" class="stream-status-msg stream-status-msg--ok">{{ clearedNotice }}</p>
 
       <div ref="logViewport" class="stream-log">
         <pre class="stream-pre">{{ logText || emptyHint }}</pre>
       </div>
 
       <footer class="stream-footer">
-        <button type="button" class="btn btn-ghost btn-sm" :disabled="!logText" @click="copyLog">
+        <button type="button" class="btn btn-ghost btn-sm" :disabled="!logText || clearing" @click="copyLog">
           Copy log
         </button>
         <button
           type="button"
           class="btn btn-ghost btn-sm btn-danger-text"
-          :disabled="loading || clearing"
+          :disabled="clearing"
           @click="clearLog"
         >
           Clear log
@@ -88,8 +89,10 @@ const tabs: { id: SiteLogKind; label: string }[] = [
 const activeTab = ref<SiteLogKind>('container')
 const logText = ref('')
 const logOffset = ref(0)
-const loading = ref(false)
+const initialLoad = ref(false)
 const clearing = ref(false)
+const clearedNotice = ref('')
+const logPaused = ref(false)
 const logViewport = ref<HTMLElement | null>(null)
 const { copyFeedback, copyText } = useCopyText()
 
@@ -101,8 +104,11 @@ let pollTimer: ReturnType<typeof setInterval> | undefined
 let pollGen = 0
 
 const tabHint = computed(() => {
+  if (logPaused.value && activeTab.value === 'container') {
+    return 'Auto-refresh paused after clear — click Refresh to load new App logs'
+  }
   const map: Record<SiteLogKind, string> = {
-    container: 'Docker logs (last 400 lines) — refreshes every 2s',
+    container: 'Docker logs (last 400 lines) — refreshes every 3s',
     rebuild: 'logs/node/site-rebuild-*.log',
     update: 'logs/node/site-update-*.log',
     create: 'logs/node/site-create-*.log'
@@ -111,7 +117,7 @@ const tabHint = computed(() => {
 })
 
 const emptyHint = computed(() =>
-  loading.value ? 'Loading…' : 'No log output yet for this source.'
+  initialLoad.value ? 'Loading…' : 'No log output yet for this source.'
 )
 
 function scrollLogToEnd() {
@@ -129,13 +135,16 @@ function resetLog() {
 function setTab(id: SiteLogKind) {
   if (activeTab.value === id) return
   activeTab.value = id
+  clearedNotice.value = ''
+  logPaused.value = false
   resetLog()
-  void fetchLog()
+  void fetchLog(true)
+  startPolling()
 }
 
-async function fetchLog() {
+async function fetchLog(showSpinner = false) {
   const gen = pollGen
-  loading.value = true
+  if (showSpinner) initialLoad.value = true
   try {
     const res = await $fetch<{
       chunk: string
@@ -144,7 +153,7 @@ async function fetchLog() {
     }>(`/api/websites/${encodeURIComponent(props.domain)}/log`, {
       query: {
         op: activeTab.value,
-        offset: activeTab.value === 'container' ? 0 : logOffset.value
+        offset: activeTab.value === 'container' || logOffset.value === 0 ? 0 : logOffset.value
       }
     })
     if (gen !== pollGen) return
@@ -164,66 +173,87 @@ async function fetchLog() {
   } catch {
     if (gen === pollGen) logText.value = '[dpanel] Could not load logs.'
   } finally {
-    if (gen === pollGen) loading.value = false
+    if (gen === pollGen && showSpinner) initialLoad.value = false
   }
 }
 
 function refreshNow() {
+  clearedNotice.value = ''
+  logPaused.value = false
   resetLog()
-  void fetchLog()
+  void fetchLog(true)
+  startPolling()
 }
 
-const clearConfirmLabel = computed(() => {
-  const tab = tabs.find((t) => t.id === activeTab.value)?.label ?? activeTab.value
-  return `Clear ${tab} log for ${props.domain}? This cannot be undone.`
-})
-
 async function clearLog() {
-  if (clearing.value || loading.value) return
-  if (!import.meta.client || !confirm(clearConfirmLabel.value)) return
+  if (clearing.value) return
+  const tab = tabs.find((t) => t.id === activeTab.value)?.label ?? activeTab.value
+  if (!import.meta.client || !confirm(`Clear ${tab} log for ${props.domain}? This cannot be undone.`)) {
+    return
+  }
 
   clearing.value = true
+  clearedNotice.value = ''
+  stopPolling()
+
   try {
     await $fetch(`/api/websites/${encodeURIComponent(props.domain)}/log`, {
       method: 'DELETE',
       query: { op: activeTab.value }
     })
     resetLog()
-    await fetchLog()
+    if (activeTab.value === 'container') {
+      logPaused.value = true
+      logText.value = '(Log cleared — app may write new lines; click Refresh to view.)'
+      clearedNotice.value = 'Docker log cleared. Auto-refresh paused until you click Refresh.'
+    } else {
+      clearedNotice.value = 'Log file cleared.'
+      await fetchLog(false)
+      startPolling()
+    }
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     logText.value =
       err.data?.statusMessage || err.statusMessage || '[dpanel] Could not clear log.'
+    startPolling()
   } finally {
     clearing.value = false
   }
 }
 
 function startPolling() {
+  if (logPaused.value) return
+  stopPolling(false)
+  pollTimer = setInterval(() => void fetchLog(false), 3000)
+}
+
+function stopPolling(bumpGen = true) {
+  if (bumpGen) pollGen += 1
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = undefined
+}
+
+function startSession() {
   stopPolling()
   pollGen += 1
   resetLog()
+  clearedNotice.value = ''
+  logPaused.value = false
   activeTab.value = 'container'
-  void fetchLog()
-  pollTimer = setInterval(() => void fetchLog(), 2000)
-}
-
-function stopPolling() {
-  pollGen += 1
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = undefined
+  void fetchLog(true)
+  startPolling()
 }
 
 watch(
   () => [props.open, props.domain] as const,
   ([isOpen]) => {
-    if (isOpen) startPolling()
+    if (isOpen) startSession()
     else stopPolling()
   },
   { immediate: true }
 )
 
-onUnmounted(stopPolling)
+onUnmounted(() => stopPolling())
 </script>
 
 <style scoped>
@@ -318,6 +348,10 @@ onUnmounted(stopPolling)
   padding: 0.35rem 1.15rem 0;
   font-size: 0.78rem;
   color: #8b949e;
+}
+
+.stream-status-msg--ok {
+  color: #3fb950;
 }
 
 .stream-log {

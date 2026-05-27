@@ -56,8 +56,12 @@ site_ops_lock_acquire
 trap site_ops_lock_release EXIT
 
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
-nuxt_container_build "${DOMAIN}" \
-  || die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
+if ! nuxt_container_build "${DOMAIN}"; then
+  if [[ -f "${APP_DIR}/.output/server/index.mjs" ]]; then
+    die "Build finished but app did not start — check App logs (Eye), Edit .env (MONGODB_URI), and mongoose in package.json"
+  fi
+  die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
+fi
 
 nginx_reload_stack 2>/dev/null || true
 site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete — site should be online"

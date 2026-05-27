@@ -1,6 +1,7 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { normalizeSiteDomain } from '../../../utils/site-env'
-import { parseScriptJson, runScript, type SiteLogKind } from '../../../utils/stack'
+import { clearSiteLog } from '../../../utils/site-log'
+import type { SiteLogKind } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -15,9 +16,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const out = await runScript('site-log-clear.sh', [domain, op], 30_000)
-    return parseScriptJson<{ ok: boolean; domain?: string; op?: string }>(out)
+    return await clearSiteLog(domain, op)
   } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'statusCode' in e) throw e
     const msg = e instanceof Error ? e.message : 'Could not clear log'
     throw createError({ statusCode: 500, statusMessage: msg })
   }
