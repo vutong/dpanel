@@ -151,34 +151,42 @@
     />
 
     <div v-if="rebuildOpen" class="modal-backdrop" @click.self="rebuildOpen = false">
-      <div class="modal card" role="dialog" aria-labelledby="rebuild-title">
-        <h2 id="rebuild-title">Rebuild settings</h2>
-        <p class="muted">
-          Node.js rebuild on this VPS. Choose how to handle <code>node_modules</code>.
+      <div class="modal card rebuild-modal" role="dialog" aria-labelledby="rebuild-title">
+        <h2 id="rebuild-title">Rebuild</h2>
+        <p class="muted rebuild-intro">
+          <code>npm install</code> and <code>npm run build</code> for <strong>{{ site?.domain }}</strong>.
+          Choose how dependencies are handled.
         </p>
 
-        <div class="field">
-          <label class="label">node_modules mode</label>
-          <div class="field rebuild-modes">
-            <label class="checkbox-label">
-              <input v-model="nodeModulesMode" type="radio" value="auto" />
-              Auto (recommended) — try keep first, retry with clean only if install fails
-            </label>
-            <label class="checkbox-label">
-              <input v-model="nodeModulesMode" type="radio" value="keep" />
-              Keep — never delete node_modules
-            </label>
-            <label class="checkbox-label">
-              <input v-model="nodeModulesMode" type="radio" value="clean" />
-              Clean — always delete node_modules (slowest)
-            </label>
-          </div>
-        </div>
+        <fieldset class="rebuild-mode-group">
+          <legend class="label">node_modules</legend>
+          <label
+            v-for="opt in rebuildModeOptions"
+            :key="opt.value"
+            class="rebuild-mode-option"
+            :class="{ 'rebuild-mode-option--active': nodeModulesMode === opt.value }"
+          >
+            <input
+              v-model="nodeModulesMode"
+              class="rebuild-mode-input"
+              type="radio"
+              name="node-modules-mode"
+              :value="opt.value"
+            />
+            <span class="rebuild-mode-body">
+              <span class="rebuild-mode-title">
+                {{ opt.title }}
+                <span v-if="opt.recommended" class="rebuild-mode-badge">Recommended</span>
+              </span>
+              <span class="rebuild-mode-desc">{{ opt.desc }}</span>
+            </span>
+          </label>
+        </fieldset>
 
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="rebuildOpen = false">Cancel</button>
           <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmRebuild">
-            Rebuild
+            Start rebuild
           </button>
         </div>
       </div>
@@ -267,6 +275,30 @@ type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: s
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
 type SiteOpKind = 'update' | 'rebuild'
 type NodeModulesMode = 'auto' | 'keep' | 'clean'
+
+const rebuildModeOptions: {
+  value: NodeModulesMode
+  title: string
+  desc: string
+  recommended?: boolean
+}[] = [
+  {
+    value: 'auto',
+    title: 'Auto',
+    desc: 'Keep node_modules when possible; delete and retry only if install fails.',
+    recommended: true
+  },
+  {
+    value: 'keep',
+    title: 'Keep',
+    desc: 'Never delete node_modules — fastest when dependencies rarely change.'
+  },
+  {
+    value: 'clean',
+    title: 'Clean',
+    desc: 'Always delete node_modules before install — slowest, most reliable.'
+  }
+]
 
 const route = useRoute()
 const domainParam = computed(() => decodeURIComponent(String(route.params.domain || '')))
@@ -646,6 +678,87 @@ button.tile:hover:not(:disabled) {
 .modal {
   width: 100%;
   max-width: 480px;
+}
+.rebuild-modal {
+  max-width: 440px;
+}
+.rebuild-intro {
+  margin: 0 0 0.25rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.rebuild-mode-group {
+  margin: 1rem 0 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+.rebuild-mode-group .label {
+  margin-bottom: 0.5rem;
+}
+.rebuild-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.rebuild-mode-option:first-of-type {
+  margin-top: 0;
+}
+.rebuild-mode-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--surface-elevated);
+}
+.rebuild-mode-option--active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.rebuild-mode-input {
+  flex-shrink: 0;
+  margin: 0.2rem 0 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+.rebuild-mode-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.rebuild-mode-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.rebuild-mode-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+.rebuild-mode-desc {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--muted);
 }
 .modal-actions {
   display: flex;

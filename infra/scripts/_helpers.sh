@@ -482,7 +482,7 @@ nuxt_container_build() {
         install_once
       fi
     else
-      echo "[dpanel] Invalid DPANEL_NODE_MODULES_MODE='${mode}' — defaulting to auto" >&2
+      echo "[dpanel] Invalid DPANEL_NODE_MODULES_MODE=${mode} — defaulting to auto" >&2
       if ! install_once; then
         rm -rf node_modules
         install_once
