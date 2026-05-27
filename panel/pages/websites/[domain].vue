@@ -158,6 +158,21 @@
           <label class="label">GitHub token (PAT)</label>
           <input v-model="updateToken" class="input" type="password" autocomplete="off" />
         </div>
+        <div class="field update-options">
+          <label class="checkbox-label">
+            <input v-model="updateSaveToken" type="checkbox" />
+            Save token
+          </label>
+          <p class="hint">Remember in this browser and fill the field next time.</p>
+          <label class="checkbox-label">
+            <input v-model="updateGitCheckout" type="checkbox" />
+            Checkout (git)
+          </label>
+          <p class="hint">
+            Run <code>git restore .</code> before pull — discards local changes (e.g. after Rebuild modified
+            <code>package-lock.json</code>).
+          </p>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="updateOpen = false">Cancel</button>
           <button type="button" class="btn btn-primary" @click="confirmUpdate">Pull from Git</button>
@@ -262,6 +277,9 @@ const routingOpen = ref(false)
 const resourcesOpen = ref(false)
 const updateOpen = ref(false)
 const updateToken = ref('')
+const updateSaveToken = ref(false)
+const updateGitCheckout = ref(false)
+const gitTokenStorage = useGitHubTokenStorage()
 const deleteOpen = ref(false)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const deleteConfirm = ref('')
@@ -279,18 +297,26 @@ function formatDate(iso?: string) {
 }
 
 function openUpdate() {
+  const domain = site.value?.domain || domainParam.value
   updateOpen.value = true
-  updateToken.value = ''
+  updateSaveToken.value = gitTokenStorage.getSavePreference(domain)
+  updateToken.value = gitTokenStorage.getSavedToken(domain)
+  updateGitCheckout.value = false
   clearAlert()
 }
 
 async function confirmUpdate() {
   if (!site.value) return
   clearAlert()
+  const token = updateToken.value.trim()
+  gitTokenStorage.persist(site.value.domain, token, updateSaveToken.value)
   try {
     await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/update`, {
       method: 'POST',
-      body: { githubToken: updateToken.value.trim() || undefined }
+      body: {
+        githubToken: token || undefined,
+        gitDiscardLocal: updateGitCheckout.value
+      }
     })
     updateOpen.value = false
     busy.value = true
@@ -530,6 +556,30 @@ button.tile:hover:not(:disabled) {
 }
 .modal .field {
   margin-top: 1rem;
+}
+.update-options {
+  margin-top: 0.75rem;
+}
+.update-options .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  font-size: 0.88rem;
+  cursor: pointer;
+  margin-top: 0.65rem;
+}
+.update-options .checkbox-label:first-of-type {
+  margin-top: 0;
+}
+.update-options .checkbox-label input {
+  width: auto;
+}
+.update-options .hint {
+  margin: 0.25rem 0 0 1.55rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
 }
 .modal .field code {
   font-size: 0.85em;

@@ -6,8 +6,9 @@ import { join } from 'node:path'
 export default defineEventHandler(async (event) => {
   requireAuth(event)
   const domain = decodeURIComponent(getRouterParam(event, 'domain') || '').trim().toLowerCase()
-  const body = await readBody<{ githubToken?: string }>(event).catch(() => ({}))
+  const body = await readBody<{ githubToken?: string; gitDiscardLocal?: boolean }>(event).catch(() => ({}))
   const githubToken = (body?.githubToken || '').trim()
+  const gitDiscardLocal = body?.gitDiscardLocal === true
 
   if (!domain) {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
@@ -22,6 +23,7 @@ export default defineEventHandler(async (event) => {
 
   const extraEnv: Record<string, string> = {}
   if (githubToken) extraEnv.GITHUB_TOKEN = githubToken
+  if (gitDiscardLocal) extraEnv.GIT_DISCARD_LOCAL = '1'
 
   writeSiteOpStatus(domain, 'update', 'running', 'Pulling from Git…')
   runScriptDetached('site-update.sh', [domain], extraEnv, domain, 'update')

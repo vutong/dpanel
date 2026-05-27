@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: site-update.sh <domain>
-# Private repo: GITHUB_TOKEN in env (not saved)
+# Private repo: GITHUB_TOKEN in env (not saved on server)
+# GIT_DISCARD_LOCAL=1 — git restore . before pull (panel: Checkout checkbox)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -63,6 +64,13 @@ fi
 rm -f "${gh_err}"
 
 if [[ -d "${APP_DIR}/.git" ]]; then
+  if [[ "${GIT_DISCARD_LOCAL:-}" == "1" ]]; then
+    echo "[dpanel] git restore . (discard local changes before pull)"
+    (
+      cd "${APP_DIR}"
+      git restore . 2>/dev/null || git checkout -- . 2>/dev/null || true
+    )
+  fi
   if ! github_pull_into "${APP_DIR}"; then
     die "git pull failed — if the repo is private, provide a valid GitHub token"
   fi
