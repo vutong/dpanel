@@ -2,7 +2,7 @@
   <div v-if="open" class="routing-backdrop" @click.self="onCancel">
     <div class="routing-modal card" role="dialog" aria-labelledby="routing-title">
       <header class="routing-header">
-        <h2 id="routing-title">Public domains</h2>
+        <h2 id="routing-title">Wildcard</h2>
         <p class="routing-sub">
           DNS for store subdomains on this website. Custom merchant domains are managed inside your app, not here.
         </p>
@@ -28,7 +28,7 @@
                 <tr>
                   <td><code>A</code></td>
                   <td><code>{{ adminDnsName }}</code></td>
-                  <td>Your VPS IP <span class="muted-inline">(Proxied)</span></td>
+                  <td><code>{{ dnsTargetIp }}</code> <span class="muted-inline">(Proxied)</span></td>
                 </tr>
               </tbody>
             </table>
@@ -65,7 +65,7 @@
                   <tr v-for="row in wildcardDnsRows" :key="row.name">
                     <td><code>{{ row.type }}</code></td>
                     <td><code>{{ row.name }}</code></td>
-                    <td>Your VPS IP <span class="muted-inline">(Proxied)</span></td>
+                    <td><code>{{ dnsTargetIp }}</code> <span class="muted-inline">(Proxied)</span></td>
                     <td class="opens-cell">{{ row.opens }}</td>
                   </tr>
                 </tbody>
@@ -106,6 +106,7 @@ const wildcardBase = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
+const serverIp = ref('')
 
 const adminDnsName = computed(() => {
   const parts = props.domain.toLowerCase().split('.')
@@ -122,18 +123,23 @@ const wildcardDnsRows = computed(() => {
   ]
 })
 
+const dnsTargetIp = computed(() => serverIp.value || 'Your VPS IP')
+
 async function loadRouting() {
   loading.value = true
   loadError.value = ''
   wildcardBase.value = ''
+  serverIp.value = ''
   try {
     const res = await $fetch<{
       routing?: { wildcardBase?: string }
+      serverIp?: string
     }>(`/api/websites/${encodeURIComponent(props.domain)}/routing`)
     wildcardBase.value = res.routing?.wildcardBase ?? ''
+    serverIp.value = String(res.serverIp || '').trim()
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load public domains'
+    loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load wildcard settings'
   } finally {
     loading.value = false
   }
@@ -253,7 +259,8 @@ watch(
 }
 
 .dns-table th {
-  background: var(--surface-2, #f1f5f9);
+  background: var(--surface-elevated);
+  color: var(--text);
   font-weight: 600;
 }
 

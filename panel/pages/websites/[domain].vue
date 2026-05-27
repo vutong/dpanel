@@ -81,7 +81,7 @@
         <div class="tile-grid">
           <button type="button" class="tile" :disabled="busy" @click="routingOpen = true">
             <AppIcon name="globe" :size="22" />
-            <span class="tile-title">Public domains</span>
+            <span class="tile-title">Wildcard</span>
             <span class="tile-desc">Wildcard &amp; DNS</span>
           </button>
           <button type="button" class="tile" :disabled="busy" @click="envOpen = true">
