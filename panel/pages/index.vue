@@ -3,29 +3,29 @@
     <h1>Overview</h1>
     <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
 
-    <DockerStatsPanel />
-
     <PageLoader v-if="loading" label="Loading overview…" />
-    <div v-else class="grid">
-        <NuxtLink to="/websites" class="card stat-card">
-          <div class="stat-icon">
-            <AppIcon name="globe" :size="22" />
-          </div>
-          <div>
-            <h2>Websites</h2>
-            <p class="stat-value">{{ siteCount }} <span class="stat-unit">site(s)</span></p>
-          </div>
-        </NuxtLink>
-        <NuxtLink to="/databases" class="card stat-card">
-          <div class="stat-icon stat-icon-db">
-            <AppIcon name="database" :size="22" />
-          </div>
-          <div>
-            <h2>MariaDB</h2>
-            <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
-          </div>
-        </NuxtLink>
+    <div v-else class="grid stat-grid">
+      <NuxtLink to="/websites" class="card stat-card">
+        <div class="stat-icon">
+          <AppIcon name="globe" :size="22" />
+        </div>
+        <div>
+          <h2>Websites</h2>
+          <p class="stat-value">{{ siteCount }} <span class="stat-unit">site(s)</span></p>
+        </div>
+      </NuxtLink>
+      <NuxtLink to="/databases" class="card stat-card">
+        <div class="stat-icon stat-icon-db">
+          <AppIcon name="database" :size="22" />
+        </div>
+        <div>
+          <h2>MariaDB</h2>
+          <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
+        </div>
+      </NuxtLink>
     </div>
+
+    <DockerStatsPanel />
   </div>
 </template>
 
@@ -40,8 +40,12 @@ const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
 <style scoped>
 .page-desc {
   color: var(--muted);
-  margin: 0.35rem 0 1.75rem;
+  margin: 0.35rem 0 1.25rem;
   font-size: 0.95rem;
+}
+
+.stat-grid {
+  margin-bottom: 2rem;
 }
 
 .grid {

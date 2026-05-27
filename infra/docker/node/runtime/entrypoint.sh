@@ -16,15 +16,16 @@ if [ -f .env ]; then
 fi
 
 if [ -f package.json ]; then
-  if [ ! -d node_modules/.bin ]; then
-    echo "[dpanel] Installing dependencies..."
-    npm ci --omit=dev 2>/dev/null || npm install --omit=dev
-  fi
   if [ -f .output/server/index.mjs ]; then
+    if [ ! -d node_modules/.bin ]; then
+      echo "[dpanel] Installing production dependencies..."
+      npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+    fi
     exec node .output/server/index.mjs
   fi
   echo "[dpanel] No .output build yet — use Rebuild in the panel or: dpanel site-rebuild <domain>"
   echo "[dpanel] Container waiting (nginx will return 502 until build completes)."
+  exec sleep infinity
 fi
 
 echo "[dpanel] /app is empty — deploy code then Rebuild in the panel"

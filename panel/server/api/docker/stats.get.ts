@@ -8,6 +8,11 @@ export type DockerStatsResponse = {
     memUsedBytes: number
     memTotalBytes: number
   }
+  disk: {
+    stackUsedBytes: number
+    stackTotalBytes: number
+    breakdown: { label: string; path: string; bytes: number }[]
+  }
   containers: {
     name: string
     cpuPercent: number

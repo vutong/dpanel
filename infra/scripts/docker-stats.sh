@@ -11,7 +11,9 @@ export STACK_ROOT
 ensure_python3 >/dev/null 2>&1 || die "python3 required"
 
 "${PYBIN}" <<'PY'
-import json, os, re, subprocess
+import json, os, re, shutil, subprocess
+
+stack_root = os.environ.get("STACK_ROOT", "/opt/stack")
 
 def parse_docker_size(s):
     s = (s or "").strip().split("/")[0].strip()
@@ -81,12 +83,39 @@ except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError):
 
 containers.sort(key=lambda c: c["cpuPercent"])
 
+stack_disk_used = stack_disk_total = 0
+try:
+    du = shutil.disk_usage(stack_root)
+    stack_disk_used = du.used
+    stack_disk_total = du.total
+except OSError:
+    pass
+
+disk_breakdown = []
+for label, sub in [("Applications", "apps"), ("Data", "data"), ("Logs", "logs")]:
+    path = os.path.join(stack_root, sub)
+    if not os.path.isdir(path):
+        continue
+    try:
+        out = subprocess.check_output(["du", "-sb", path], text=True, timeout=120, stderr=subprocess.DEVNULL)
+        nbytes = int(out.split()[0])
+        disk_breakdown.append({"label": label, "path": sub, "bytes": nbytes})
+    except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
+        disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
+
+disk_breakdown.sort(key=lambda x: x["bytes"], reverse=True)
+
 print(json.dumps({
     "ok": True,
     "host": {
         "cpuPercent": host_cpu_pct,
         "memUsedBytes": host_mem_used,
         "memTotalBytes": host_mem_total,
+    },
+    "disk": {
+        "stackUsedBytes": stack_disk_used,
+        "stackTotalBytes": stack_disk_total,
+        "breakdown": disk_breakdown,
     },
     "containers": containers,
 }))

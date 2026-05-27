@@ -11,17 +11,25 @@
     <div v-else-if="loadError" class="alert alert-error">{{ loadError }}</div>
     <template v-else-if="site">
       <header class="site-header card">
-        <div class="site-header-main">
-          <h1>{{ site.domain }}</h1>
-          <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
-            {{ site.runtime }}
-          </span>
+        <div class="site-header-top">
+          <div class="site-header-main">
+            <h1>{{ site.domain }}</h1>
+            <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
+              {{ site.runtime }}
+            </span>
+          </div>
+          <div v-if="site.githubUrl" class="github-block">
+            <span class="meta-label">GitHub</span>
+            <a
+              :href="site.githubUrl"
+              class="github-url"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="site.githubUrl"
+            >{{ site.githubUrl }}</a>
+          </div>
         </div>
         <dl class="meta-grid">
-          <div v-if="site.githubUrl">
-            <dt>GitHub</dt>
-            <dd class="mono">{{ site.githubUrl }}</dd>
-          </div>
           <div>
             <dt>Created</dt>
             <dd>{{ formatDate(site.createdAt) }}</dd>
@@ -385,21 +393,56 @@ function confirmDelete() {
   padding: 1.25rem 1.35rem;
   margin-bottom: 1.25rem;
 }
+.site-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
 .site-header-main {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  flex-shrink: 0;
+  min-width: 0;
 }
 .site-header h1 {
   font-size: 1.45rem;
-  word-break: break-all;
+  word-break: break-word;
+}
+.github-block {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: min(52%, 520px);
+  text-align: right;
+}
+.meta-label {
+  display: block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+.github-url {
+  display: block;
+  font-size: 0.8rem;
+  font-family: ui-monospace, monospace;
+  color: var(--accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.github-url:hover {
+  text-decoration: underline;
 }
 .meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 0.75rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
   font-size: 0.88rem;
 }
 .meta-grid dt {
@@ -409,9 +452,15 @@ function confirmDelete() {
   color: var(--muted);
   margin-bottom: 0.15rem;
 }
-.mono {
-  font-size: 0.8rem;
-  word-break: break-all;
+@media (max-width: 640px) {
+  .site-header-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .github-block {
+    max-width: none;
+    text-align: left;
+  }
 }
 .section {
   margin-bottom: 2rem;

@@ -431,7 +431,13 @@ nuxt_container_build() {
   docker exec "${nuxt_cid}" sh -c '
     set -e
     if [ -f .env ]; then set -a; . ./.env; set +a; fi
-    npm ci 2>/dev/null || npm install
+    # Clean install avoids ENOTEMPTY on bind-mounted node_modules (race with entrypoint / partial installs).
+    rm -rf node_modules
+    if [ -f package-lock.json ]; then
+      npm ci || { rm -rf node_modules && npm install; }
+    else
+      npm install
+    fi
     if grep -q "\"mongoose\"" package.json 2>/dev/null && [ ! -d node_modules/mongoose ]; then
       echo "[dpanel] Installing mongoose (listed in package.json)…"
       npm install mongoose
