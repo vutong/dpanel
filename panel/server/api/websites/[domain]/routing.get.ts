@@ -1,10 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { assertNodeSite, normalizeSiteDomain } from '../../../utils/site-env'
-import {
-  computeServerNames,
-  readSiteRouting,
-  routingConfigExists
-} from '../../../utils/site-routing'
+import { readSiteRouting, routingConfigExists } from '../../../utils/site-routing'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -15,8 +11,7 @@ export default defineEventHandler(async (event) => {
   return {
     ok: true,
     domain,
-    routing,
-    configured: await routingConfigExists(domain),
-    serverNames: computeServerNames(domain, routing)
+    routing: { wildcardBase: routing.wildcardBase },
+    configured: await routingConfigExists(domain)
   }
 })

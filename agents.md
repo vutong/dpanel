@@ -19,7 +19,7 @@ Ubuntu 24.04 LTS
         └── redis
 ```
 
-**SSL:** Cloudflare phía trước. Nginx chỉ HTTP :80 và :8080 (panel khi chưa có DNS).
+**SSL:** Cloudflare phía trước (vd `https://dpanel.example.com` → origin :80). Nginx HTTP only. Port **80**: host lạ → **404**; panel chỉ `server_name` = `PANEL_DOMAIN`. Port **8443**: panel qua IP (`http://<ip>:8443`) — không publish :80/:8080 cho IP trần.
 
 ## Bootstrap
 
@@ -82,7 +82,12 @@ dpanel/
     ├── docker/
     │   ├── node/
     │   │   ├── Dockerfile
-    │   │   └── runtime/entrypoint.sh
+    │   │   └── runtime/
+    │   │       ├── entrypoint.sh
+    │   │       └── nuxt-env-bridge.sh
+    │   ├── site-resources-apply.sh
+    │   ├── site-routing-sync.sh
+    │   ├── docker-stats.sh
     │   └── php/
     │       ├── Dockerfile
     │       └── config/99-custom.ini
@@ -191,6 +196,7 @@ dpanel/
 - Tên dự án: **dpanel** (không còn ubuntu-docker).
 - Entry point duy nhất cho VPS: `install.sh`.
 - Panel API gọi script trong `infra/scripts/` — không shell tùy ý từ UI.
+- Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild dpanel reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile`, xóa orphan). Manager: **Sync custom domains**.
 - Site PHP: nginx → php-fpm, root `apps/<domain>/public`.
 - Site Node: service `nuxt-<slug>` trong `compose.d/`.
 - **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).
@@ -198,4 +204,4 @@ dpanel/
 - **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB chỉ cho site PHP + menu tạo DB; **không** tạo database/user mặc định `dpanel` khi cài mới.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
-- **Domain routing** (panel → Websites → globe icon, Node sites): wildcard base + extra domains; config `data/panel/site-routing/<slug>.json`; `site-routing-apply.sh`. App thêm custom domain: `POST http://dpanel:3000/api/internal/routing-domains` + `x-dpanel-internal` (`DPANEL_INTERNAL_SECRET`). Không marker trong `.env.example` app.
+- **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` + `x-dpanel-internal`.

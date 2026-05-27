@@ -1,11 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { assertNodeSite, normalizeSiteDomain } from '../../../utils/site-env'
-import {
-  computeServerNames,
-  readSiteRouting,
-  writeSiteRouting,
-  type SiteRoutingConfig
-} from '../../../utils/site-routing'
+import { readSiteRouting, writeSiteRouting } from '../../../utils/site-routing'
 import { runScript } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
@@ -13,19 +8,13 @@ export default defineEventHandler(async (event) => {
   const domain = normalizeSiteDomain(decodeURIComponent(getRouterParam(event, 'domain') || ''))
   await assertNodeSite(domain)
 
-  const body = await readBody<{
-    wildcardBase?: string
-    extraDomains?: string[]
-  }>(event).catch(() => ({}))
+  const body = await readBody<{ wildcardBase?: string }>(event).catch(() => ({}))
 
-  const input: SiteRoutingConfig = {
+  const current = await readSiteRouting(domain)
+  const saved = await writeSiteRouting(domain, {
     wildcardBase: String(body?.wildcardBase ?? ''),
-    extraDomains: Array.isArray(body?.extraDomains)
-      ? body.extraDomains.map((d) => String(d))
-      : []
-  }
-
-  const saved = await writeSiteRouting(domain, input)
+    extraDomains: current.extraDomains
+  })
 
   try {
     await runScript('site-routing-apply.sh', [domain], 60_000)
@@ -37,9 +26,5 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const routing = await readSiteRouting(domain)
-  return {
-    ...saved,
-    serverNames: computeServerNames(domain, routing)
-  }
+  return saved
 })

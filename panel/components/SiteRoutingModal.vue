@@ -2,25 +2,47 @@
   <div v-if="open" class="routing-backdrop" @click.self="onCancel">
     <div class="routing-modal card" role="dialog" aria-labelledby="routing-title">
       <header class="routing-header">
-        <h2 id="routing-title">Domain routing</h2>
+        <h2 id="routing-title">Public domains</h2>
         <p class="routing-sub">
-          Public hostnames for <strong>{{ domain }}</strong> (SSL via Cloudflare — nginx serves HTTP only).
+          DNS for store subdomains on this website. Custom merchant domains are managed inside your app, not here.
         </p>
       </header>
 
-      <PageLoader v-if="loading" label="Loading routing…" />
+      <PageLoader v-if="loading" label="Loading…" />
       <template v-else>
         <p v-if="loadError" class="alert alert-error">{{ loadError }}</p>
         <template v-else>
           <div class="field">
-            <label class="label">Primary domain</label>
-            <input class="input" type="text" :value="domain" readonly />
-            <p class="hint">Always routed to this site container.</p>
+            <span class="label">Website domain</span>
+            <div class="domain-readonly" aria-readonly="true">{{ domain }}</div>
+            <p class="hint">Set when this site was created in dpanel — cannot be changed here.</p>
+            <table class="dns-table" aria-label="Admin site DNS">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Name</th>
+                  <th>Content</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>A</code></td>
+                  <td><code>{{ adminDnsName }}</code></td>
+                  <td>Your VPS IP <span class="muted-inline">(Proxied)</span></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
-          <div class="field">
-            <label class="label">Wildcard base domain</label>
+          <section class="block">
+            <h3 class="block-title">Store subdomains (wildcard)</h3>
+            <p class="block-desc">
+              For multi-store apps: each shop uses <code>shopname.&lt;base&gt;</code>.
+              Enter the shared base domain (e.g. <code>dutabi.com</code>, without <code>www</code>).
+            </p>
+            <label class="label" for="wildcard-base">Base domain</label>
             <input
+              id="wildcard-base"
               v-model="wildcardBase"
               class="input"
               type="text"
@@ -28,48 +50,29 @@
               :disabled="saving"
               autocomplete="off"
             />
-            <p class="hint">
-              Optional. Also routes <code>www.&lt;base&gt;</code> and <code>*.&lt;base&gt;</code> (store subdomains).
-              Point DNS <code>*</code> and apex to this server in Cloudflare.
-            </p>
-          </div>
-
-          <div class="field">
-            <label class="label">Extra domains</label>
-            <div class="extra-list">
-              <div v-for="(host, idx) in extraDomains" :key="`${host}-${idx}`" class="extra-row">
-                <code>{{ host }}</code>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  :disabled="saving"
-                  @click="removeExtra(idx)"
-                >
-                  Remove
-                </button>
-              </div>
-              <p v-if="!extraDomains.length" class="hint">No extra domains yet (e.g. custom store domains).</p>
-            </div>
-            <div class="extra-add">
-              <input
-                v-model="newExtra"
-                class="input"
-                type="text"
-                placeholder="shop-customer.com"
-                :disabled="saving"
-                autocomplete="off"
-                @keydown.enter.prevent="addExtra"
-              />
-              <button type="button" class="btn btn-ghost" :disabled="saving || !newExtra.trim()" @click="addExtra">
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div v-if="serverNames.length" class="preview card-muted">
-            <p class="label">Active <code>server_name</code> preview</p>
-            <p class="preview-names">{{ serverNames.join(' · ') }}</p>
-          </div>
+            <template v-if="wildcardBase.trim()">
+              <p class="dns-label">Add these records in Cloudflare (zone for the base domain):</p>
+              <table class="dns-table" aria-label="Wildcard DNS records">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Content</th>
+                    <th>Opens</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in wildcardDnsRows" :key="row.name">
+                    <td><code>{{ row.type }}</code></td>
+                    <td><code>{{ row.name }}</code></td>
+                    <td>Your VPS IP <span class="muted-inline">(Proxied)</span></td>
+                    <td class="opens-cell">{{ row.opens }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+            <p v-else class="hint">Leave empty if this site does not use shared store subdomains.</p>
+          </section>
         </template>
       </template>
 
@@ -81,7 +84,7 @@
           :disabled="loading || !!loadError || saving"
           @click="onSave"
         >
-          {{ saving ? 'Applying…' : 'Save & apply nginx' }}
+          {{ saving ? 'Applying…' : 'Save & reload nginx' }}
         </button>
       </footer>
     </div>
@@ -100,61 +103,49 @@ const emit = defineEmits<{
 }>()
 
 const wildcardBase = ref('')
-const extraDomains = ref<string[]>([])
-const newExtra = ref('')
-const serverNames = ref<string[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
+
+const adminDnsName = computed(() => {
+  const parts = props.domain.toLowerCase().split('.')
+  if (parts.length <= 2) return '@'
+  return parts[0]!
+})
+
+const wildcardDnsRows = computed(() => {
+  const base = wildcardBase.value.trim().toLowerCase()
+  if (!base) return []
+  return [
+    { type: 'A', name: '@', opens: `${base}, www.${base}` },
+    { type: 'A', name: '*', opens: `*.${base} (e.g. shop.${base})` },
+  ]
+})
 
 async function loadRouting() {
   loading.value = true
   loadError.value = ''
   wildcardBase.value = ''
-  extraDomains.value = []
-  serverNames.value = []
   try {
     const res = await $fetch<{
-      routing?: { wildcardBase?: string; extraDomains?: string[] }
-      serverNames?: string[]
+      routing?: { wildcardBase?: string }
     }>(`/api/websites/${encodeURIComponent(props.domain)}/routing`)
     wildcardBase.value = res.routing?.wildcardBase ?? ''
-    extraDomains.value = [...(res.routing?.extraDomains ?? [])]
-    serverNames.value = res.serverNames ?? []
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load domain routing'
+    loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load public domains'
   } finally {
     loading.value = false
   }
 }
 
-function addExtra() {
-  const host = newExtra.value.trim().toLowerCase()
-  if (!host) return
-  if (host === props.domain.toLowerCase()) return
-  if (!extraDomains.value.includes(host)) extraDomains.value.push(host)
-  newExtra.value = ''
-}
-
-function removeExtra(idx: number) {
-  extraDomains.value.splice(idx, 1)
-}
-
 async function onSave() {
   saving.value = true
   try {
-    const res = await $fetch<{ serverNames?: string[] }>(
-      `/api/websites/${encodeURIComponent(props.domain)}/routing`,
-      {
-        method: 'PUT',
-        body: {
-          wildcardBase: wildcardBase.value.trim(),
-          extraDomains: extraDomains.value
-        }
-      }
-    )
-    serverNames.value = res.serverNames ?? []
+    await $fetch(`/api/websites/${encodeURIComponent(props.domain)}/routing`, {
+      method: 'PUT',
+      body: { wildcardBase: wildcardBase.value.trim() }
+    })
     emit('saved')
     emit('close')
   } catch (e: unknown) {
@@ -190,7 +181,7 @@ watch(
 }
 
 .routing-modal {
-  width: min(560px, 100%);
+  width: min(580px, 100%);
   max-height: 90vh;
   overflow-y: auto;
   display: flex;
@@ -207,50 +198,80 @@ watch(
   margin: 0;
   font-size: 0.85rem;
   color: var(--muted, #64748b);
-}
-
-.extra-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
-}
-
-.extra-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  background: var(--surface-2, #f1f5f9);
-}
-
-.extra-add {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.extra-add .input {
-  flex: 1;
-}
-
-.btn-sm {
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
-}
-
-.preview {
-  padding: 0.65rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.8rem;
-}
-
-.preview-names {
-  margin: 0.35rem 0 0;
-  word-break: break-word;
   line-height: 1.45;
+}
+
+.domain-readonly {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface-2, #f1f5f9);
+  color: var(--muted, #64748b);
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  cursor: not-allowed;
+  user-select: all;
+}
+
+.block {
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.block-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.block-desc {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+  line-height: 1.45;
+}
+
+.dns-label {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.dns-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin: 0.35rem 0;
+}
+
+.dns-table th,
+.dns-table td {
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  border: 1px solid var(--border, #e2e8f0);
+  vertical-align: top;
+}
+
+.dns-table th {
+  background: var(--surface-2, #f1f5f9);
+  font-weight: 600;
+}
+
+.opens-cell {
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+}
+
+.muted-inline {
+  color: var(--muted, #64748b);
+  font-size: 0.78rem;
+}
+
+.hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted, #64748b);
+  line-height: 1.4;
 }
 
 .routing-footer {

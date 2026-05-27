@@ -1,0 +1,35 @@
+import { requireAuth } from '../../../utils/auth-guard'
+import { assertNodeSite, normalizeSiteDomain } from '../../../utils/sites'
+import { writeSiteResources } from '../../../utils/site-resources'
+import { runScript } from '../../../utils/stack'
+
+export default defineEventHandler(async (event) => {
+  requireAuth(event)
+  const domain = normalizeSiteDomain(decodeURIComponent(getRouterParam(event, 'domain') || ''))
+  await assertNodeSite(domain)
+
+  const body = await readBody<{
+    cpuLimit?: number
+    memoryMb?: number
+    diskGb?: number
+  }>(event).catch(() => ({}))
+
+  const saved = await writeSiteResources(domain, {
+    cpuLimit: body?.cpuLimit,
+    memoryMb: body?.memoryMb,
+    diskGb: body?.diskGb
+  })
+
+  try {
+    await runScript('site-resources-apply.sh', [domain], 120_000)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Could not apply container limits'
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Limits saved but container update failed: ${msg}`
+    })
+  }
+
+  const appDirBytes = await getAppDirSizeBytes(domain)
+  return { domain, config: saved, appDirBytes }
+})

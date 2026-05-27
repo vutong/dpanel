@@ -1,34 +1,10 @@
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises'
+import { writeFile, mkdir, access } from 'node:fs/promises'
 import { join } from 'node:path'
+import { assertNodeSite, normalizeSiteDomain } from './sites'
 import { stackRoot } from './stack'
 
-const DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/
+export { normalizeSiteDomain, assertNodeSite }
 export const MAX_SITE_ENV_BYTES = 64 * 1024
-
-export function normalizeSiteDomain(raw: string): string {
-  const domain = raw.trim().toLowerCase()
-  if (!domain || !DOMAIN_RE.test(domain)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid domain' })
-  }
-  return domain
-}
-
-export async function assertNodeSite(domain: string) {
-  const sitesPath = join(stackRoot(), 'data/panel', 'sites.json')
-  let sites: { domain?: string; runtime?: string }[]
-  try {
-    sites = JSON.parse(await readFile(sitesPath, 'utf8')) as { domain?: string; runtime?: string }[]
-  } catch {
-    throw createError({ statusCode: 500, statusMessage: 'sites.json not found' })
-  }
-  const site = sites.find((s) => (s.domain || '').toLowerCase() === domain)
-  if (!site) {
-    throw createError({ statusCode: 404, statusMessage: 'Site not found' })
-  }
-  if (site.runtime !== 'node') {
-    throw createError({ statusCode: 400, statusMessage: '.env editor is only available for Node sites' })
-  }
-}
 
 export function siteAppDir(domain: string): string {
   return join(stackRoot(), 'apps', domain)

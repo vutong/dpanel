@@ -143,13 +143,13 @@ check_nginx() {
     run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
   fi
   local p ports_ok=1
-  for p in 80 8080; do
+  for p in 80 8443; do
     stack_compose port nginx "${p}" 2>/dev/null | grep -qE ':[0-9]+' || ports_ok=0
   done
   if [[ "${ports_ok}" -eq 1 ]]; then
-    report "nginx_ports" 1 "ports 80/8080 published" ""
+    report "nginx_ports" 1 "ports 80/8443 published" ""
   else
-    report "nginx_ports" 0 "ports 80/8080 not bound" "dpanel nginx-reload"
+    report "nginx_ports" 0 "ports 80/8443 not bound" "dpanel nginx-reload"
     run_fix "bash ${STACK_ROOT}/infra/scripts/nginx-reload.sh"
   fi
 }

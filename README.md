@@ -8,7 +8,7 @@ Docker hosting control panel for **Ubuntu 24.04 LTS**: manage websites (Node/PHP
 - Root or sudo
 - 2 GB+ RAM recommended
 - 10 GB+ free disk
-- Ports **80** and **8080** available
+- Ports **80** and **8443** available (80 = sites + panel domain; 8443 = panel via IP only)
 
 ## Install
 
@@ -78,7 +78,7 @@ dpanel setpass 'Your_new_password'
 
 ## After install
 
-- Panel: `http://<panel-domain>` or `http://<server-ip>:8080`
+- Panel: `https://<panel-domain>` (Cloudflare) or `http://<server-ip>:8443` (bootstrap, no domain yet)
 - Summary file: `/opt/stack/CREDENTIALS.txt`
 - Default password: `12345678` → `dpanel setpass 'new-password'`
 - **MariaDB:** panel settings live in JSON files, not MySQL. MariaDB is for your PHP apps — create databases in the panel. New installs do not create a default `dpanel` database. Older VPS may still have an empty one; delete it in phpMyAdmin if you do not use it.
@@ -114,7 +114,7 @@ dpanel logs dpanel
 
 ## SSL
 
-Use **Cloudflare** (or similar) in front of the VPS — nginx listens on HTTP only (ports 80 / 8080).
+Use **Cloudflare** (or similar) in front of the VPS — nginx listens on HTTP only (port 80 for domains; port 8443 for direct IP panel access).
 
 ## Stack layout
 

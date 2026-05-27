@@ -11,6 +11,8 @@ if [ -f .env ]; then
   # shellcheck disable=SC1091
   . ./.env
   set +a
+  # shellcheck disable=SC1091
+  . /nuxt-env-bridge.sh 2>/dev/null || true
 fi
 
 if [ -f package.json ]; then

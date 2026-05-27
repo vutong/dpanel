@@ -1,10 +1,12 @@
 <template>
   <div>
+    <h1>Overview</h1>
+    <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
+
+    <DockerStatsPanel />
+
     <PageLoader v-if="loading" label="Loading overview…" />
-    <template v-else>
-      <h1>Overview</h1>
-      <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
-      <div class="grid">
+    <div v-else class="grid">
         <NuxtLink to="/websites" class="card stat-card">
           <div class="stat-icon">
             <AppIcon name="globe" :size="22" />
@@ -23,8 +25,7 @@
             <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
           </div>
         </NuxtLink>
-      </div>
-    </template>
+    </div>
   </div>
 </template>
 

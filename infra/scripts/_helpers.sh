@@ -206,11 +206,40 @@ site_slug() {
   echo "$1" | tr '.' '-' | tr -cd 'a-zA-Z0-9-'
 }
 
+# YAML lines for Docker resource limits (from data/panel/site-resources/<slug>.json).
+_site_resource_compose_lines() {
+  local domain="$1"
+  local slug res cpu mem disk
+  slug="$(site_slug "$domain")"
+  res="${STACK_ROOT}/data/panel/site-resources/${slug}.json"
+  cpu=0
+  mem=0
+  disk=0
+  if [[ -f "${res}" ]] && ensure_python3 >/dev/null 2>&1; then
+    read -r cpu mem disk <<< "$("${PYBIN}" -c "
+import json
+with open('${res}') as f:
+    d = json.load(f)
+print(float(d.get('cpuLimit') or 0), int(d.get('memoryMb') or 0), int(d.get('diskGb') or 0))
+" 2>/dev/null || echo "0 0 0")"
+  fi
+  if awk "BEGIN {exit !(${cpu} > 0)}" 2>/dev/null; then
+    echo "    cpus: ${cpu}"
+  fi
+  if [[ "${mem}" -gt 0 ]] 2>/dev/null; then
+    echo "    mem_limit: ${mem}m"
+  fi
+  if [[ "${disk}" -gt 0 ]] 2>/dev/null; then
+    echo "    storage_opt:"
+    echo "      size: ${disk}G"
+  fi
+}
+
 write_nuxt_compose_fragment() {
   local domain="$1"
-  local slug
+  local slug frag extras
   slug="$(site_slug "$domain")"
-  local frag="${STACK_ROOT}/compose.d/nuxt-${slug}.yml"
+  frag="${STACK_ROOT}/compose.d/nuxt-${slug}.yml"
   mkdir -p "${STACK_ROOT}/compose.d"
   # shellcheck source=/dev/null
   [[ -f "${STACK_ROOT}/.env" ]] && source "${STACK_ROOT}/.env"
@@ -233,6 +262,10 @@ services:
     networks:
       - stack
 EOF
+  extras="$(_site_resource_compose_lines "${domain}" || true)"
+  if [[ -n "${extras}" ]]; then
+    printf '%s\n' "${extras}" >> "${frag}"
+  fi
 }
 
 write_nginx_node_site() {
@@ -397,6 +430,7 @@ nuxt_container_build() {
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
   docker exec "${nuxt_cid}" sh -c '
     set -e
+    if [ -f .env ]; then set -a; . ./.env; set +a; fi
     npm ci 2>/dev/null || npm install
     if grep -q "\"mongoose\"" package.json 2>/dev/null && [ ! -d node_modules/mongoose ]; then
       echo "[dpanel] Installing mongoose (listed in package.json)…"
@@ -411,6 +445,17 @@ nuxt_container_build() {
   if [[ ! -f "${app_dir}/.output/server/index.mjs" ]]; then
     echo "[dpanel] Build finished but missing .output/server/index.mjs — check package.json build script" >&2
     return 1
+  fi
+
+  if docker exec "${nuxt_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
+    echo "[dpanel] Reconciling store custom domains with nginx (sync:dpanel-routing)…" >&2
+    if ! docker exec "${nuxt_cid}" sh -c '
+      set -e
+      if [ -f .env ]; then set -a; . ./.env; set +a; fi
+      npm run sync:dpanel-routing
+    ' 2>&1; then
+      echo "[dpanel] Warning: custom domain sync failed — rebuild OK; fix MongoDB/dpanel env and run: npm run sync:dpanel-routing" >&2
+    fi
   fi
 
   echo "[dpanel] Restarting ${cname}…" >&2
@@ -579,7 +624,7 @@ fix_legacy_nginx_vhosts() {
   for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
     [[ -f "$f" ]] || continue
     domain="$(basename "$f" .conf)"
-    [[ "${domain}" == "00-panel" ]] && continue
+    [[ "${domain}" == "00-default-404" || "${domain}" == "10-panel" ]] && continue
     is_legacy_nuxt_vhost "$f" || continue
     runtime="$(site_runtime_from_registry "${domain}")"
     if [[ "${runtime}" == "node" ]]; then
@@ -599,7 +644,7 @@ quarantine_legacy_static_nuxt_vhosts() {
   for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
     [[ -f "$f" ]] || continue
     domain="$(basename "$f" .conf)"
-    [[ "${domain}" == "00-panel" ]] && continue
+    [[ "${domain}" == "00-default-404" || "${domain}" == "10-panel" ]] && continue
     is_legacy_nuxt_vhost "$f" || continue
     mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${domain}.conf"
     moved=$((moved + 1))
@@ -670,7 +715,7 @@ print(' '.join(domains))
   for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf "${STACK_ROOT}"/infra/nginx/conf.d/disabled/*.conf; do
     [[ -f "$f" ]] || continue
     domain="$(basename "$f" .conf)"
-    [[ "${domain}" == "00-panel" ]] && continue
+    [[ "${domain}" == "00-default-404" || "${domain}" == "10-panel" ]] && continue
     [[ -n "${panel_domain}" && "${domain}" == "${panel_domain}" ]] && continue
     if ! _is_registered_domain "${domain}"; then
       rm -f "$f"

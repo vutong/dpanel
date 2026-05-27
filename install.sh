@@ -281,7 +281,7 @@ Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Installer: v${INSTALLER_VERSION}
 
 Panel URL:    http://${PANEL_DOMAIN}
-              http://${SERVER_IP}:8080
+              http://${SERVER_IP}:8443
 
 Login email:  ${ADMIN_EMAIL}
 Login pass:   ${ADMIN_PASSWORD}
@@ -371,7 +371,7 @@ if command -v ufw &>/dev/null; then
   ufw allow OpenSSH >/dev/null 2>&1 || true
   ufw allow 80/tcp >/dev/null 2>&1 || true
   ufw allow 443/tcp >/dev/null 2>&1 || true
-  ufw allow 8080/tcp >/dev/null 2>&1 || true
+  ufw allow 8443/tcp >/dev/null 2>&1 || true
   ufw --force enable >/dev/null 2>&1 || true
 fi
 
@@ -485,7 +485,7 @@ systemctl start unattended-upgrades.service unattended-upgrades.timer 2>/dev/nul
 SERVER_IP="$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')"
 write_credentials
 
-log "Done — http://${PANEL_DOMAIN} (or http://${SERVER_IP}:8080)"
+log "Done — http://${PANEL_DOMAIN} (or http://${SERVER_IP}:8443)"
 log "Login: ${ADMIN_EMAIL} / ${DEFAULT_ADMIN_PASSWORD} — dpanel setpass <new-password>"
 log "Updates: dpanel update-check | sudo dpanel update"
 log "Credentials: ${STACK_ROOT}/CREDENTIALS.txt"

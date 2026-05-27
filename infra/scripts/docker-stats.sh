@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Host + container resource usage (JSON on last line).
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_helpers.sh
+source "${SCRIPT_DIR}/_helpers.sh"
+
+STACK_ROOT="${STACK_ROOT:-/opt/stack}"
+export STACK_ROOT
+
+ensure_python3 >/dev/null 2>&1 || die "python3 required"
+
+"${PYBIN}" <<'PY'
+import json, os, re, subprocess
+
+def parse_docker_size(s):
+    s = (s or "").strip().split("/")[0].strip()
+    m = re.match(r"^([\d.]+)\s*([KMGTP]?i?B)$", s, re.I)
+    if not m:
+        return 0
+    val = float(m.group(1))
+    unit = m.group(2).upper().replace("IB", "B")
+    mult = {"B": 1, "KB": 1000, "KIB": 1024, "MB": 1000**2, "MIB": 1024**2,
+            "GB": 1000**3, "GIB": 1024**3, "TB": 1000**4, "TIB": 1024**4}
+    return int(val * mult.get(unit, 1))
+
+def parse_cpu_pct(s):
+    s = (s or "").replace("%", "").strip()
+    try:
+        return round(float(s), 2)
+    except ValueError:
+        return 0.0
+
+host_mem_total = host_mem_used = 0
+try:
+    with open("/proc/meminfo") as f:
+        info = {}
+        for line in f:
+            k, v = line.split(":", 1)
+            info[k.strip()] = int(v.strip().split()[0]) * 1024
+        host_mem_total = info.get("MemTotal", 0)
+        avail = info.get("MemAvailable", info.get("MemFree", 0))
+        host_mem_used = max(0, host_mem_total - avail)
+except OSError:
+    pass
+
+host_cpu_pct = 0.0
+try:
+    nproc = os.cpu_count() or 1
+    with open("/proc/loadavg") as f:
+        load1 = float(f.read().split()[0])
+    host_cpu_pct = min(100.0, round(load1 / nproc * 100, 1))
+except (OSError, ValueError):
+    pass
+
+containers = []
+try:
+    out = subprocess.check_output(
+        ["docker", "stats", "--no-stream", "--format", "{{json .}}"],
+        text=True,
+        timeout=30,
+        stderr=subprocess.DEVNULL,
+    )
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        mem_parts = (row.get("MemUsage") or "").split("/")
+        mem_used = parse_docker_size(mem_parts[0] if mem_parts else "")
+        mem_limit = parse_docker_size(mem_parts[1]) if len(mem_parts) > 1 else 0
+        containers.append({
+            "name": (row.get("Name") or row.get("Container") or "").strip(),
+            "cpuPercent": parse_cpu_pct(row.get("CPUPerc")),
+            "memUsedBytes": mem_used,
+            "memLimitBytes": mem_limit if mem_limit > 0 else None,
+            "memPercent": parse_cpu_pct(row.get("MemPerc")),
+        })
+except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError):
+    pass
+
+containers.sort(key=lambda c: c["cpuPercent"])
+
+print(json.dumps({
+    "ok": True,
+    "host": {
+        "cpuPercent": host_cpu_pct,
+        "memUsedBytes": host_mem_used,
+        "memTotalBytes": host_mem_total,
+    },
+    "containers": containers,
+}))
+PY

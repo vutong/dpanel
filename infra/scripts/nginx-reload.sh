@@ -39,11 +39,46 @@ fi
 log "Starting site containers (compose.d)..."
 stack_compose_up_sites
 
-cat > "${STACK_ROOT}/infra/nginx/conf.d/00-panel.conf" <<EOF
+cat > "${STACK_ROOT}/infra/nginx/conf.d/00-default-404.conf" <<'EOF'
 server {
     listen 80 default_server;
-    listen 8080 default_server;
-    server_name ${PANEL_DOMAIN} _;
+    server_name _;
+    default_type text/plain;
+    return 404;
+}
+EOF
+
+cat > "${STACK_ROOT}/infra/nginx/conf.d/10-panel.conf" <<EOF
+server {
+    listen 80;
+    server_name ${PANEL_DOMAIN};
+
+    location /mariadb/ {
+        proxy_pass http://phpmyadmin:80/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+        proxy_redirect off;
+    }
+
+    location / {
+        proxy_pass http://dpanel:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 8443 default_server;
+    server_name _;
 
     location /mariadb/ {
         proxy_pass http://phpmyadmin:80/;
@@ -69,6 +104,8 @@ server {
 }
 EOF
 
+rm -f "${STACK_ROOT}/infra/nginx/conf.d/00-panel.conf"
+
 rm -f "${STACK_ROOT}/infra/nginx/conf.d/99-pma.conf" "${STACK_ROOT}/infra/nginx/conf.d/99-mariadb.conf"
 
 log "Testing nginx configuration..."
@@ -76,11 +113,12 @@ if ! nginx_test_stack 1; then
   log "nginx configuration errors:"
   nginx_test_stack 0 2>&1 | tail -15 || true
   log "Invalid config in ${STACK_ROOT}/infra/nginx/conf.d/"
-  log "Quarantining broken site configs (keeping 00-panel.conf)..."
+  log "Quarantining broken site configs (keeping panel + default-404)..."
   mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
   for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
     [[ -f "$f" ]] || continue
-    [[ "$(basename "$f")" == "00-panel.conf" ]] && continue
+    base="$(basename "$f")"
+    [[ "$base" == "00-default-404.conf" || "$base" == "10-panel.conf" ]] && continue
     mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/" 2>/dev/null || true
   done
   if ! nginx_test_stack 1; then
@@ -108,7 +146,8 @@ if ! _nginx_running; then
   mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
   for f in "${STACK_ROOT}"/infra/nginx/conf.d/*.conf; do
     [[ -f "$f" ]] || continue
-    [[ "$(basename "$f")" == "00-panel.conf" ]] && continue
+    base="$(basename "$f")"
+    [[ "$base" == "00-default-404.conf" || "$base" == "10-panel.conf" ]] && continue
     mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/" 2>/dev/null || true
   done
   fix_legacy_nginx_vhosts
@@ -119,7 +158,7 @@ fi
 if ! _nginx_running; then
   log "nginx still not running. Last logs:"
   stack_compose logs nginx --tail 30 2>&1 || true
-  die "nginx failed to start — run: dpanel site-remove <domain> or remove conf.d/*.conf (keep 00-panel.conf)"
+  die "nginx failed to start — run: dpanel site-remove <domain> or remove conf.d/*.conf (keep 00-default-404.conf and 10-panel.conf)"
 fi
 
 if [[ "$MODE" != "panel-only" ]]; then
@@ -130,10 +169,10 @@ if [[ "$MODE" != "panel-only" ]]; then
   sleep 2
 fi
 
-if ss -tln 2>/dev/null | grep -qE ':80 |:8080 '; then
-  log "nginx listening on port 80 / 8080"
+if ss -tln 2>/dev/null | grep -qE ':80 |:8443 '; then
+  log "nginx listening on port 80 / 8443"
 else
-  log "Warning: ports 80/8080 not visible on host — run: dpanel status && dpanel logs nginx"
+  log "Warning: ports 80/8443 not visible on host — run: dpanel status && dpanel logs nginx"
 fi
 
-log "Done — panel: http://${PANEL_DOMAIN} or http://$(hostname -I | awk '{print $1}'):8080"
+log "Done — panel: http://${PANEL_DOMAIN} (or http://$(hostname -I | awk '{print $1}'):8443)"
