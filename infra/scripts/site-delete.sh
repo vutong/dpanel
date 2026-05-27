@@ -90,6 +90,13 @@ if [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
   log "Removed compose.d/nuxt-${SLUG}.yml"
 fi
 
+routing_json="${STACK_ROOT}/data/panel/site-routing/${SLUG}.json"
+if [[ -f "${routing_json}" ]]; then
+  rm -f "${routing_json}"
+  REMOVED+=("site-routing:${SLUG}.json")
+  log "Removed ${routing_json}"
+fi
+
 for conf in \
   "${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf" \
   "${STACK_ROOT}/infra/nginx/conf.d/disabled/${DOMAIN}.conf"; do

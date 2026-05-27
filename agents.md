@@ -197,4 +197,5 @@ dpanel/
 - Mật khẩu nhạy cảm chỉ trong `.env` và `data/panel/auth.json`.
 - **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB chỉ cho site PHP + menu tạo DB; **không** tạo database/user mặc định `dpanel` khi cài mới.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
-- Không SSL local trừ khi user yêu cầu.
+- Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
+- **Domain routing** (panel → Websites → globe icon, Node sites): wildcard base + extra domains; config `data/panel/site-routing/<slug>.json`; `site-routing-apply.sh`. App thêm custom domain: `POST http://dpanel:3000/api/internal/routing-domains` + `x-dpanel-internal` (`DPANEL_INTERNAL_SECRET`). Không marker trong `.env.example` app.

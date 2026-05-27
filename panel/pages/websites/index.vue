@@ -45,6 +45,13 @@
                 />
                 <IconButton
                   v-if="s.runtime === 'node'"
+                  icon="globe"
+                  title="Domain routing"
+                  :disabled="isSiteBusy(s.domain)"
+                  @click="openRouting(s)"
+                />
+                <IconButton
+                  v-if="s.runtime === 'node'"
                   icon="edit"
                   title="Edit .env"
                   :disabled="isSiteBusy(s.domain)"
@@ -92,6 +99,13 @@
       :open="!!logViewDomain"
       :domain="logViewDomain ?? ''"
       @close="closeLogView"
+    />
+
+    <SiteRoutingModal
+      :open="!!routingDomain"
+      :domain="routingDomain ?? ''"
+      @close="closeRouting"
+      @saved="onRoutingSaved"
     />
 
     <div v-if="updateTarget" class="modal-backdrop" @click.self="closeUpdate">
@@ -193,6 +207,7 @@ const updateTarget = ref<Site | null>(null)
 const updateToken = ref('')
 const streamOp = ref<{ domain: string; op: SiteOpKind } | null>(null)
 const envEditDomain = ref<string | null>(null)
+const routingDomain = ref<string | null>(null)
 const logViewDomain = ref<string | null>(null)
 const opsRunning = ref<Set<string>>(new Set())
 const busy = ref('')
@@ -249,6 +264,23 @@ function openEnvEdit(site: Site) {
 
 function closeEnvEdit() {
   envEditDomain.value = null
+}
+
+function openRouting(site: Site) {
+  if (site.runtime !== 'node') return
+  clearAlert()
+  routingDomain.value = site.domain
+}
+
+function closeRouting() {
+  routingDomain.value = null
+}
+
+function onRoutingSaved() {
+  const domain = routingDomain.value
+  routingDomain.value = null
+  if (!domain) return
+  showAlert(`${domain}: domain routing applied (nginx reloaded)`, true, 8000)
 }
 
 function onEnvSaved(payload: { restarted: boolean }) {

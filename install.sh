@@ -416,6 +416,7 @@ if [[ ! -f "${STACK_ROOT}/.env" ]]; then
   DB_ROOT_PASS="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)"
   REDIS_PASS="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)"
   SESSION_SECRET="$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 48)"
+  DPANEL_INTERNAL_SECRET="$(openssl rand -hex 32)"
   cat > "${STACK_ROOT}/.env" <<EOF
 COMPOSE_PROJECT_NAME=${PROJECT_NAME}
 PANEL_DOMAIN=${PANEL_DOMAIN}
@@ -429,6 +430,7 @@ MARIADB_ROOT_PASSWORD=${DB_ROOT_PASS}
 
 REDIS_PASSWORD=${REDIS_PASS}
 PANEL_SESSION_SECRET=${SESSION_SECRET}
+DPANEL_INTERNAL_SECRET=${DPANEL_INTERNAL_SECRET}
 
 NODE_ENV=production
 NUXT_HOST=0.0.0.0
@@ -441,6 +443,9 @@ else
   grep -q '^PANEL_DOMAIN=' "${STACK_ROOT}/.env" \
     && sed -i "s/^PANEL_DOMAIN=.*/PANEL_DOMAIN=${PANEL_DOMAIN}/" "${STACK_ROOT}/.env" \
     || echo "PANEL_DOMAIN=${PANEL_DOMAIN}" >> "${STACK_ROOT}/.env"
+  if ! grep -q '^DPANEL_INTERNAL_SECRET=' "${STACK_ROOT}/.env" 2>/dev/null; then
+    echo "DPANEL_INTERNAL_SECRET=$(openssl rand -hex 32)" >> "${STACK_ROOT}/.env"
+  fi
 fi
 
 step "Build panel"

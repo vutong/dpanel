@@ -226,6 +226,8 @@ services:
     environment:
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
+      DPANEL_SITE_DOMAIN: ${domain}
+      DPANEL_INTERNAL_SECRET: \${DPANEL_INTERNAL_SECRET}
     volumes:
       - ./apps/${domain}:/app
     networks:
@@ -235,12 +237,38 @@ EOF
 
 write_nginx_node_site() {
   local domain="$1"
-  local slug
+  local slug server_names wildcard_base extra_line
   slug="$(site_slug "$domain")"
+  server_names="${domain}"
+  local routing_json="${STACK_ROOT}/data/panel/site-routing/${slug}.json"
+  if [[ -f "${routing_json}" ]]; then
+    ensure_python3 >/dev/null 2>&1 || true
+    if [[ -n "${PYBIN:-}" ]]; then
+      wildcard_base="$("${PYBIN}" -c "
+import json, os
+path = os.environ['PATH']
+with open(path) as f:
+    data = json.load(f)
+print((data.get('wildcardBase') or '').strip().lower())
+" PATH="${routing_json}" 2>/dev/null || true)"
+      extra_line="$("${PYBIN}" -c "
+import json, os
+path = os.environ['PATH']
+with open(path) as f:
+    data = json.load(f)
+domains = data.get('extraDomains') or []
+print(' '.join(str(d).strip().lower() for d in domains if str(d).strip()))
+" PATH="${routing_json}" 2>/dev/null || true)"
+      if [[ -n "${wildcard_base}" ]]; then
+        server_names="${server_names} ${wildcard_base} www.${wildcard_base} *.${wildcard_base}"
+      fi
+      [[ -n "${extra_line}" ]] && server_names="${server_names} ${extra_line}"
+    fi
+  fi
   cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
 server {
     listen 80;
-    server_name ${domain};
+    server_name ${server_names};
     resolver 127.0.0.11 valid=10s ipv6=off;
 
     location / {
