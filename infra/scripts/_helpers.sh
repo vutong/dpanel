@@ -428,8 +428,8 @@ nuxt_container_build() {
   }
 
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
-  docker exec "${nuxt_cid}" sh -c '
-    set -e
+  docker exec "${nuxt_cid}" bash -lc '
+    set -euo pipefail
     if [ -f .env ]; then set -a; . ./.env; set +a; fi
     # Clean install avoids ENOTEMPTY on bind-mounted node_modules (race with entrypoint / partial installs).
     rm -rf node_modules
