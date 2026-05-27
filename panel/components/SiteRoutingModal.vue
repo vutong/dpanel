@@ -208,13 +208,13 @@ watch(
 }
 
 .domain-readonly {
-  padding: 0.5rem 0.65rem;
-  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 9px;
   border: 1px solid var(--border, #e2e8f0);
-  background: var(--surface-2, #f1f5f9);
+  background: var(--bg-subtle, #0f141c);
   color: var(--muted, #64748b);
   font-family: ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: not-allowed;
   user-select: all;
 }
