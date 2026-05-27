@@ -75,9 +75,19 @@
         </table>
       </div>
 
-      <h3 class="sub-title">Containers</h3>
+      <div class="containers-head">
+        <h3 class="sub-title">Containers</h3>
+        <button
+          v-if="containers.length"
+          type="button"
+          class="toggle-btn"
+          @click="containersExpanded = !containersExpanded"
+        >
+          {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
+        </button>
+      </div>
       <p v-if="!containers.length" class="muted empty">No running containers.</p>
-      <div v-else class="table-wrap">
+      <div v-else-if="containersExpanded" class="table-wrap">
         <table class="table stats-table">
           <thead>
             <tr>
@@ -129,6 +139,7 @@ const data = ref<StatsPayload | null>(null)
 const fetchError = ref('')
 const live = ref(false)
 const history = ref<HistoryPoint[]>([])
+const containersExpanded = ref(false)
 
 const gridYs = [0, 30, 60, 90, 120]
 
@@ -302,6 +313,25 @@ onUnmounted(() => {
   font-weight: 600;
   margin: 0 0 0.65rem;
   color: var(--text);
+}
+.containers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.toggle-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .disk-summary {
   margin-bottom: 0.75rem;
