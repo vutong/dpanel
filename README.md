@@ -112,6 +112,110 @@ dpanel logs dpanel
 
 `dpanel update` runs health then a single `nginx-reload` (no duplicate site sync / nginx -t). Skip with `--no-nginx-reload` / `--no-health-fix`.
 
+## SSH when the panel is unavailable
+
+Use these on the VPS as **root** or **sudo**. Stack path: `/opt/stack`. Replace `shop.example.com` with your site’s primary domain (as in `sites.json`).
+
+### Stack and panel
+
+```bash
+dpanel status
+sudo dpanel health --fix
+dpanel credentials
+dpanel logs dpanel 200
+dpanel logs nginx 100
+
+# Panel UI won’t load — sync repo, rebuild panel, fix nginx
+sudo dpanel update
+sudo dpanel update-panel          # panel source already updated, skip git pull
+sudo dpanel nginx-reload            # regenerate site vhosts from sites.json + routing, reload
+
+# Install stopped after .env was written
+sudo tail -50 /var/log/dpanel-install.log
+sudo bash /opt/stack/infra/scripts/install-continue.sh
+
+# Reset panel login password (no UI)
+dpanel setpass 'Your_new_password'
+```
+
+Bootstrap panel (no DNS yet): `http://<server-ip>:8443`
+
+### List sites
+
+```bash
+cat /opt/stack/data/panel/sites.json
+bash /opt/stack/infra/scripts/site-list.sh
+```
+
+### Node (Nuxt) site — rebuild, restart, logs
+
+```bash
+# Rebuild (npm install + build in site container; applies nginx routing at end)
+sudo bash /opt/stack/infra/scripts/site-rebuild.sh shop.example.com
+tail -f /opt/stack/logs/node/site-rebuild-shop-example-com.log
+
+# Restart app container only (after .env change)
+sudo bash /opt/stack/infra/scripts/site-app-restart.sh shop.example.com
+
+# Live container logs
+sudo bash /opt/stack/infra/scripts/site-app-logs.sh shop.example.com
+```
+
+Rebuild runs in the background when started from the panel; from SSH the script stays attached until finished (or check the log file above).
+
+### Wildcard subdomains and custom store domains
+
+Configured in the panel under **Websites → Manager → globe (Wildcard)**. Stored in:
+
+`/opt/stack/data/panel/site-routing/<slug>.json`  
+(`<slug>` = domain with `.` → `-`, e.g. `shop.example.com` → `shop-example-com`)
+
+```bash
+# Show routing config
+cat /opt/stack/data/panel/site-routing/shop-example-com.json
+
+# Regenerate nginx vhost (wildcard + extraDomains) and reload — use after editing JSON or MongoDB sync
+sudo bash /opt/stack/infra/scripts/site-routing-apply.sh shop.example.com
+
+# Check nginx accepts the right hostnames
+grep server_name /opt/stack/infra/nginx/conf.d/shop.example.com.conf
+
+# Test nginx config
+docker exec "$(docker ps -q -f name=nginx)" nginx -t
+```
+
+| Routing type | Where it is set | SSH apply |
+|--------------|-----------------|----------|
+| Wildcard (`*.base.com`, `shop.base.com`) | Panel → globe → **Base domain**, or edit `wildcardBase` in `site-routing/*.json` | `site-routing-apply.sh` (or full **Rebuild**) |
+| Custom merchant domains | App / MongoDB → `npm run sync:dpanel-routing` | Reconcile updates JSON; then `site-routing-apply.sh` or **Rebuild** |
+
+Sync custom domains from inside the site container (app must define `sync:dpanel-routing` in `package.json`):
+
+```bash
+# Container name: <compose-project>-nuxt-<slug> (see: docker ps | grep nuxt)
+docker exec -it dpanel-nuxt-shop-example-com sh -c 'cd /app && set -a && [ -f .env ] && . ./.env; set +a && npm run sync:dpanel-routing'
+sudo bash /opt/stack/infra/scripts/site-routing-apply.sh shop.example.com
+```
+
+DNS (Cloudflare): for wildcard base `dutabi.com`, add proxied **A** records `@`, `*`, and usually `www` → VPS IP. App `.env` often needs `HUB_BASE_DOMAIN` / `ADMIN_HOST` — then **Rebuild** or restart the site container.
+
+### Pull site code from Git (no panel)
+
+```bash
+# Optional: private repo token for this run only
+export GITHUB_TOKEN=ghp_xxxx
+sudo bash /opt/stack/infra/scripts/site-update.sh shop.example.com
+sudo bash /opt/stack/infra/scripts/site-rebuild.sh shop.example.com
+```
+
+### Remove a site
+
+```bash
+sudo dpanel site-remove shop.example.com
+# or
+sudo bash /opt/stack/infra/scripts/site-delete.sh shop.example.com
+```
+
 ## SSL
 
 Use **Cloudflare** (or similar) in front of the VPS — nginx listens on HTTP only (port 80 for domains; port 8443 for direct IP panel access).
