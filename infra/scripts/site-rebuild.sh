@@ -66,6 +66,8 @@ if ! nuxt_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
 fi
 
 log "Applying nginx routing (wildcard + custom domains)…"
-site_apply_nginx_routing "${DOMAIN}"
+if ! site_apply_nginx_routing "${DOMAIN}"; then
+  die "nginx routing apply failed — see log; run: sudo bash ${STACK_ROOT}/infra/scripts/site-routing-apply.sh ${DOMAIN}"
+fi
 site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete — site should be online"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"service\":\"${SVC}\",\"action\":\"rebuild\"}"

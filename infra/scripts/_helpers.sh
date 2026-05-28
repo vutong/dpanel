@@ -268,55 +268,72 @@ EOF
   fi
 }
 
+# Print wildcard base on line 1, extra domains (space-separated) on line 2.
+_site_routing_read_json() {
+  local routing_json="$1"
+  [[ -f "${routing_json}" ]] || return 1
+
+  if ensure_python3 >/dev/null 2>&1 && [[ -n "${PYBIN:-}" ]]; then
+    "${PYBIN}" -c "
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path) as f:
+        data = json.load(f)
+    wb = (data.get('wildcardBase') or '').strip().lower()
+    extras = [str(x).strip().lower() for x in (data.get('extraDomains') or []) if str(x).strip()]
+    print(wb)
+    print(' '.join(extras))
+except Exception:
+    pass
+" "${routing_json}" 2>/dev/null && return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    node -e "
+const fs = require('fs');
+const p = process.argv[1];
+try {
+  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const wb = String(data.wildcardBase || '').trim().toLowerCase();
+  const extras = (Array.isArray(data.extraDomains) ? data.extraDomains : [])
+    .map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+  console.log(wb);
+  console.log(extras.join(' '));
+} catch {}
+" "${routing_json}" 2>/dev/null && return 0
+  fi
+
+  return 1
+}
+
 write_nginx_node_site() {
   local domain="$1"
-  local slug server_names wildcard_base extra_line
+  local slug server_names wildcard_base extra_line routing_json
+  local -a routing_lines=()
   slug="$(site_slug "$domain")"
   server_names="${domain}"
-  local routing_json="${STACK_ROOT}/data/panel/site-routing/${slug}.json"
+  routing_json="${STACK_ROOT}/data/panel/site-routing/${slug}.json"
+  wildcard_base=""
+  extra_line=""
+
   if [[ -f "${routing_json}" ]]; then
-    if ensure_python3 >/dev/null 2>&1 && [[ -n "${PYBIN:-}" ]]; then
-      wildcard_base="$("${PYBIN}" -c "
-import json, os
-path = os.environ['ROUTING_JSON_PATH']
-with open(path) as f:
-    data = json.load(f)
-print((data.get('wildcardBase') or '').strip().lower())
-" ROUTING_JSON_PATH="${routing_json}" 2>/dev/null || true)"
-      extra_line="$("${PYBIN}" -c "
-import json, os
-path = os.environ['ROUTING_JSON_PATH']
-with open(path) as f:
-    data = json.load(f)
-domains = data.get('extraDomains') or []
-print(' '.join(str(d).strip().lower() for d in domains if str(d).strip()))
-" ROUTING_JSON_PATH="${routing_json}" 2>/dev/null || true)"
-    elif command -v node >/dev/null 2>&1; then
-      wildcard_base="$(node -e "
-const fs = require('fs');
-const p = process.argv[1];
-try {
-  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-  process.stdout.write(String(data.wildcardBase || '').trim().toLowerCase());
-} catch {}
-" "${routing_json}" 2>/dev/null || true)"
-      extra_line="$(node -e "
-const fs = require('fs');
-const p = process.argv[1];
-try {
-  const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const arr = Array.isArray(data.extraDomains) ? data.extraDomains : [];
-  process.stdout.write(arr.map(v => String(v || '').trim().toLowerCase()).filter(Boolean).join(' '));
-} catch {}
-" "${routing_json}" 2>/dev/null || true)"
+    if mapfile -t routing_lines < <(_site_routing_read_json "${routing_json}" 2>/dev/null) && [[ ${#routing_lines[@]} -ge 1 ]]; then
+      wildcard_base="${routing_lines[0]}"
+      extra_line="${routing_lines[1]:-}"
     else
-      echo "[dpanel] Warning: cannot parse ${routing_json} (python3/node unavailable) — using primary domain only" >&2
+      echo "[dpanel] ERROR: cannot parse ${routing_json} (install python3 or node on host)" >&2
+      return 1
     fi
-      if [[ -n "${wildcard_base}" ]]; then
-        server_names="${server_names} ${wildcard_base} www.${wildcard_base} *.${wildcard_base}"
-      fi
-      [[ -n "${extra_line}" ]] && server_names="${server_names} ${extra_line}"
+    if [[ -n "${wildcard_base}" ]]; then
+      server_names="${server_names} ${wildcard_base} www.${wildcard_base} *.${wildcard_base}"
+    fi
+    if [[ -n "${extra_line}" ]]; then
+      server_names="${server_names} ${extra_line}"
+    fi
   fi
+
+  echo "[dpanel] nginx server_name for ${domain}: ${server_names}" >&2
   cat > "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" <<EOF
 server {
     listen 80;
@@ -344,8 +361,20 @@ EOF
 # Regenerate nginx vhost from data/panel/site-routing/<slug>.json (wildcard + extraDomains) and reload.
 site_apply_nginx_routing() {
   local domain="$1"
+  local slug routing_json
   [[ -n "${domain}" ]] || return 1
-  write_nginx_node_site "${domain}"
+  slug="$(site_slug "${domain}")"
+  routing_json="${STACK_ROOT}/data/panel/site-routing/${slug}.json"
+
+  write_nginx_node_site "${domain}" || return 1
+
+  if [[ -f "${routing_json}" ]] && grep -q '"wildcardBase"[[:space:]]*:[[:space:]]*"[^"]' "${routing_json}" 2>/dev/null; then
+    if ! grep -qF '*.' "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" 2>/dev/null; then
+      echo "[dpanel] ERROR: wildcard configured in ${routing_json} but missing in nginx vhost" >&2
+      return 1
+    fi
+  fi
+
   nginx_test_stack 1 || return 1
   nginx_reload_stack 2>/dev/null || return 1
 }
