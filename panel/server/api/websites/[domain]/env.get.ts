@@ -1,5 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { normalizeSiteDomain, readSiteEnv } from '../../../utils/site-env'
+import { normalizeSiteDomain } from '../../../utils/sites'
+import { readSiteEnv } from '../../../utils/site-env'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)

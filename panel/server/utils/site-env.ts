@@ -1,9 +1,8 @@
 import { readFile, writeFile, mkdir, access, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { assertNodeSite, normalizeSiteDomain } from './sites'
+import { assertNodeSite } from './sites'
 import { stackRoot } from './stack'
 
-export { normalizeSiteDomain, assertNodeSite }
 export const MAX_SITE_ENV_BYTES = 64 * 1024
 
 export function siteAppDir(domain: string): string {

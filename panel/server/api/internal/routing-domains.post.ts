@@ -1,6 +1,6 @@
 import { getHeader, readBody } from 'h3'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
-import { assertNodeSite } from '../../utils/site-env'
+import { assertNodeSite } from '../../utils/sites'
 import { runScriptDetached } from '../../utils/stack'
 
 /** App containers register extra hostnames (e.g. store custom domains). */

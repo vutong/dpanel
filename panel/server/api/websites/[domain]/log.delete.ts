@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { normalizeSiteDomain } from '../../../utils/site-env'
+import { normalizeSiteDomain } from '../../../utils/sites'
 import { clearSiteLog } from '../../../utils/site-log'
 import type { SiteLogKind } from '../../../utils/stack'
 

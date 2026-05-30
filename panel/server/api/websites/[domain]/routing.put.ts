@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { assertNodeSite, normalizeSiteDomain } from '../../../utils/site-env'
+import { assertNodeSite, normalizeSiteDomain } from '../../../utils/sites'
 import { readSiteRouting, writeSiteRouting } from '../../../utils/site-routing'
 import { runScript } from '../../../utils/stack'
 

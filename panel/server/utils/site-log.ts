@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { writeFile, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
-import { normalizeSiteDomain, assertNodeSite } from './site-env'
+import { normalizeSiteDomain, assertNodeSite } from './sites'
 import { domainSlug, siteOpLogPath, stackRoot, type SiteLogKind } from './stack'
 
 const execFileAsync = promisify(execFile)

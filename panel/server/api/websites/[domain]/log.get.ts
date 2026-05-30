@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { normalizeSiteDomain } from '../../../utils/site-env'
+import { normalizeSiteDomain } from '../../../utils/sites'
 import { domainSlug, runScript, siteOpLogPath, type SiteLogKind } from '../../../utils/stack'
 import { readFile, stat } from 'node:fs/promises'
 
