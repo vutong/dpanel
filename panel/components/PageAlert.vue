@@ -2,6 +2,7 @@
   <Transition name="page-alert" mode="out-in">
     <p
       v-if="message"
+      id="page-alert"
       :key="alertKey"
       class="alert"
       :class="success ? 'alert-success' : 'alert-error'"

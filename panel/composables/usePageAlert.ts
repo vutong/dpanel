@@ -15,6 +15,27 @@ export function usePageAlert() {
     alertKey.value += 1
   }
 
+  function scrollToPageAlert() {
+    if (!import.meta.client) return
+    const run = () => {
+      const el = document.getElementById('page-alert')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      document.documentElement.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    // Brief delay so modals (rebuild/update stream) can close before scroll.
+    window.setTimeout(() => {
+      nextTick(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(run)
+        })
+      })
+    }, 150)
+  }
+
   function showAlert(text: string, success = true, autoDismissMs = 0) {
     if (dismissTimer) {
       clearTimeout(dismissTimer)
@@ -26,6 +47,7 @@ export function usePageAlert() {
     nextTick(() => {
       msg.value = text
       alertKey.value += 1
+      scrollToPageAlert()
       if (autoDismissMs > 0) {
         dismissTimer = setTimeout(clearAlert, autoDismissMs)
       }
