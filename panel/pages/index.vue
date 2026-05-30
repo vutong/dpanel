@@ -32,7 +32,7 @@
     <footer class="overview-footer">
       <button
         type="button"
-        class="btn btn-danger"
+        class="btn btn-danger reboot-btn"
         :disabled="rebooting"
         @click="onRebootClick"
       >
@@ -143,15 +143,17 @@ async function onRebootClick() {
 }
 
 .overview {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 4.5rem);
+  padding-bottom: 4.5rem;
 }
 
 .overview-footer {
-  margin-top: auto;
-  padding-top: 2rem;
-  display: flex;
-  justify-content: flex-end;
+  position: fixed;
+  right: 2.5rem;
+  bottom: 2rem;
+  z-index: 40;
+}
+
+.reboot-btn {
+  box-shadow: var(--shadow-md);
 }
 </style>
