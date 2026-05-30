@@ -50,26 +50,68 @@ const loading = computed(() => sitesPending.value || dbsPending.value)
 const siteCount = computed(() => sites.value?.sites?.length ?? 0)
 const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
 
+const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
+
 const rebooting = ref(false)
 const { msg, ok, alertKey, showAlert } = usePageAlert()
 
-async function onRebootClick() {
+let rebootPollTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearRebootPoll() {
+  if (rebootPollTimer) {
+    clearTimeout(rebootPollTimer)
+    rebootPollTimer = null
+  }
+}
+
+async function pollUntilOnline(attempt = 0) {
+  const maxAttempts = 90
+  try {
+    await $fetch('/api/ping', { timeout: 4000 })
+    rebooting.value = false
+    sessionStorage.removeItem(REBOOT_WAIT_KEY)
+    showAlert('Server is back online.', true)
+    return
+  } catch {
+    if (attempt >= maxAttempts) {
+      rebooting.value = false
+      sessionStorage.removeItem(REBOOT_WAIT_KEY)
+      showAlert('Reboot is taking longer than expected — refresh the page when the panel loads.', false)
+      return
+    }
+    rebootPollTimer = setTimeout(() => void pollUntilOnline(attempt + 1), 4000)
+  }
+}
+
+function startRebootWatch() {
+  sessionStorage.setItem(REBOOT_WAIT_KEY, '1')
+  clearRebootPoll()
+  rebootPollTimer = setTimeout(() => void pollUntilOnline(0), 8000)
+}
+
+function onRebootClick() {
   if (
+    rebooting.value ||
     !import.meta.client ||
     !confirm('Reboot this VPS now? All websites and the panel will be offline for a minute.')
   ) {
     return
   }
   rebooting.value = true
-  try {
-    const res = await $fetch<{ message?: string }>('/api/system/reboot', { method: 'POST' })
-    showAlert(res.message || 'VPS is rebooting. The panel will be back shortly.', true)
-  } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not reboot VPS', false)
-    rebooting.value = false
-  }
+  void $fetch('/api/system/reboot', { method: 'POST' })
+  startRebootWatch()
 }
+
+onMounted(() => {
+  if (import.meta.client && sessionStorage.getItem(REBOOT_WAIT_KEY) === '1') {
+    rebooting.value = true
+    startRebootWatch()
+  }
+})
+
+onUnmounted(() => {
+  clearRebootPoll()
+})
 </script>
 
 <style scoped>
