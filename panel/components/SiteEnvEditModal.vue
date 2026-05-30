@@ -12,6 +12,7 @@
       <template v-else>
         <p v-if="loadError" class="alert alert-error">{{ loadError }}</p>
         <div v-else class="field">
+          <p v-if="!fileExists" class="hint hint-top">No .env file yet — create one below.</p>
           <textarea
             v-model="content"
             class="env-textarea input"
@@ -62,15 +63,18 @@ const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const restartAfterSave = ref(true)
+const fileExists = ref(false)
 
 async function loadEnv() {
   loading.value = true
   loadError.value = ''
   content.value = ''
+  fileExists.value = false
   try {
-    const res = await $fetch<{ content?: string }>(
+    const res = await $fetch<{ content?: string; exists?: boolean }>(
       `/api/websites/${encodeURIComponent(props.domain)}/env`
     )
+    fileExists.value = !!res.exists
     content.value = res.content ?? ''
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -81,6 +85,13 @@ async function loadEnv() {
 }
 
 async function onSave() {
+  if (
+    fileExists.value &&
+    content.value.trim() === '' &&
+    !confirm('Save an empty .env? This will remove all environment variables for this site.')
+  ) {
+    return
+  }
   saving.value = true
   try {
     const res = await $fetch<{ restarted?: boolean }>(
@@ -183,6 +194,10 @@ watch(
   font-size: 0.8rem;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.hint-top {
+  margin: 0 0 0.5rem;
 }
 
 .env-footer {

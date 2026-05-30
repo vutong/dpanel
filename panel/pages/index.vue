@@ -1,7 +1,9 @@
 <template>
-  <div>
+  <div class="overview">
     <h1>Overview</h1>
     <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
+
+    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
 
     <PageLoader v-if="loading" label="Loading overview…" />
     <div v-else class="grid stat-grid">
@@ -26,6 +28,17 @@
     </div>
 
     <DockerStatsPanel />
+
+    <footer class="overview-footer">
+      <button
+        type="button"
+        class="btn btn-danger"
+        :disabled="rebooting"
+        @click="onRebootClick"
+      >
+        {{ rebooting ? 'Rebooting…' : 'Reboot VPS' }}
+      </button>
+    </footer>
   </div>
 </template>
 
@@ -35,6 +48,27 @@ const { data: dbs, pending: dbsPending } = useFetch('/api/databases')
 const loading = computed(() => sitesPending.value || dbsPending.value)
 const siteCount = computed(() => sites.value?.sites?.length ?? 0)
 const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
+
+const rebooting = ref(false)
+const { msg, ok, alertKey, showAlert } = usePageAlert()
+
+async function onRebootClick() {
+  if (
+    !import.meta.client ||
+    !confirm('Reboot this VPS now? All websites and the panel will be offline for a minute.')
+  ) {
+    return
+  }
+  rebooting.value = true
+  try {
+    const res = await $fetch<{ message?: string }>('/api/system/reboot', { method: 'POST' })
+    showAlert(res.message || 'VPS is rebooting. The panel will be back shortly.', true)
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not reboot VPS', false)
+    rebooting.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -106,5 +140,18 @@ const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--muted);
+}
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 4.5rem);
+}
+
+.overview-footer {
+  margin-top: auto;
+  padding-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>
