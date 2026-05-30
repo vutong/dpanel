@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, access, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { assertNodeSite } from './sites'
-import { stackRoot } from './stack'
+import { assertNodeSite } from '../utils/sites'
+import { stackRoot } from '../utils/stack'
 
 export const MAX_SITE_ENV_BYTES = 64 * 1024
 
