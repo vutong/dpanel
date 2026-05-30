@@ -35,9 +35,9 @@ System
 
 Update
   update [--check] [--no-build] [--no-health-fix] [--no-nginx-reload]
-                             One command: sync, rebuild, health --fix, nginx-reload
-  update-check               Compare installed vs latest version
-  update-panel               Rebuild panel UI only (no git pull)
+                             One command: sync, rebuild, health --fix, nginx-reload (sudo)
+  update-check               Compare installed vs latest version (sudo)
+  update-panel               Rebuild panel UI only — no git pull (sudo)
   deploy                     docker compose build && up -d
 
 Services
@@ -73,6 +73,13 @@ ensure_update_script() {
   chmod +x "${STACK_ROOT}/infra/scripts/update.sh"
 }
 
+require_root() {
+  [[ "${EUID:-0}" -eq 0 ]] || {
+    echo "[dpanel] ERROR: This command must run as root — use: sudo dpanel ${1:-update}" >&2
+    exit 1
+  }
+}
+
 case "${CMD}" in
   help|-h|--help)
     show_help
@@ -90,14 +97,17 @@ case "${CMD}" in
     exec bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh"
     ;;
   update)
+    require_root update
     ensure_update_script
     exec bash "${STACK_ROOT}/infra/scripts/update.sh" "${@:2}"
     ;;
   update-check|update-check-only)
+    require_root update-check
     ensure_update_script
     exec bash "${STACK_ROOT}/infra/scripts/update.sh" --check
     ;;
   update-panel)
+    require_root update-panel
     exec bash "${STACK_ROOT}/infra/scripts/update-panel.sh"
     ;;
   deploy)

@@ -1,6 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { normalizeSiteDomain } from '../../../utils/sites'
-import { writeSiteEnv } from '../../../lib/site-env'
+import { writeSiteEnv } from '../../../utils/site-env'
 import { parseScriptJson, runScript } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {

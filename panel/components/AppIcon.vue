@@ -162,6 +162,11 @@
       <polyline points="2 17 12 22 22 17" />
       <polyline points="2 12 12 17 22 12" />
     </template>
+    <!-- power (reboot) -->
+    <template v-else-if="name === 'power'">
+      <path d="M12 2v10" />
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+    </template>
   </svg>
 </template>
 

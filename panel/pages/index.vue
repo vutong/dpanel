@@ -32,10 +32,11 @@
     <footer class="overview-footer">
       <button
         type="button"
-        class="btn btn-danger reboot-btn"
+        class="btn btn-sm reboot-btn"
         :disabled="rebooting"
         @click="onRebootClick"
       >
+        <AppIcon name="power" :size="14" />
         {{ rebooting ? 'Rebooting…' : 'Reboot VPS' }}
       </button>
     </footer>
@@ -142,18 +143,24 @@ async function onRebootClick() {
   color: var(--muted);
 }
 
-.overview {
-  padding-bottom: 4.5rem;
-}
-
 .overview-footer {
-  position: fixed;
-  right: 2.5rem;
-  bottom: 2rem;
-  z-index: 40;
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .reboot-btn {
-  box-shadow: var(--shadow-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.reboot-btn:hover:not(:disabled) {
+  background: var(--danger-muted);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 </style>
