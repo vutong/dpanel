@@ -3,7 +3,7 @@
     <h1>Overview</h1>
     <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
 
-    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
+    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
     <PageLoader v-if="loading" label="Loading overview…" />
     <div v-else class="grid stat-grid">
@@ -32,6 +32,15 @@
     <footer class="overview-footer">
       <button
         type="button"
+        class="btn btn-sm update-btn"
+        :disabled="updateBusy"
+        @click="onUpdateClick"
+      >
+        <AppIcon name="git-pull" :size="14" />
+        {{ updateBusy ? 'Updating…' : 'Update Dpanel' }}
+      </button>
+      <button
+        type="button"
         class="btn btn-sm reboot-btn"
         :disabled="rebooting"
         @click="onRebootClick"
@@ -40,6 +49,12 @@
         {{ rebooting ? 'Rebooting…' : 'Reboot VPS' }}
       </button>
     </footer>
+
+    <DpanelUpdateStreamModal
+      :open="updateOpen"
+      @close="onUpdateStreamClose"
+      @done="onUpdateDone"
+    />
   </div>
 </template>
 
@@ -53,7 +68,9 @@ const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
 const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
 
 const rebooting = ref(false)
-const { msg, ok, alertKey, showAlert } = usePageAlert()
+const updateOpen = ref(false)
+const updateBusy = ref(false)
+const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 let rebootPollTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -89,6 +106,40 @@ function startRebootWatch() {
   rebootPollTimer = setTimeout(() => void pollUntilOnline(0), 8000)
 }
 
+async function onUpdateClick() {
+  if (
+    updateBusy.value ||
+    !import.meta.client ||
+    !confirm(
+      'Update dpanel from GitHub now? This runs sudo dpanel update — the panel may restart and take several minutes.'
+    )
+  ) {
+    return
+  }
+
+  updateBusy.value = true
+  clearAlert()
+  try {
+    await $fetch('/api/system/update', { method: 'POST' })
+    updateOpen.value = true
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start update', false)
+  } finally {
+    updateBusy.value = false
+  }
+}
+
+function onUpdateStreamClose() {
+  updateOpen.value = false
+}
+
+function onUpdateDone(payload: { ok: boolean; message: string }) {
+  updateBusy.value = false
+  if (payload.ok) updateOpen.value = false
+  showAlert(payload.message, payload.ok)
+}
+
 function onRebootClick() {
   if (
     rebooting.value ||
@@ -103,10 +154,19 @@ function onRebootClick() {
 }
 
 onMounted(() => {
-  if (import.meta.client && sessionStorage.getItem(REBOOT_WAIT_KEY) === '1') {
+  if (!import.meta.client) return
+  if (sessionStorage.getItem(REBOOT_WAIT_KEY) === '1') {
     rebooting.value = true
     startRebootWatch()
   }
+  void $fetch<{ status?: string }>('/api/system/update/operation')
+    .then((s) => {
+      if (s.status === 'running') {
+        updateBusy.value = true
+        updateOpen.value = true
+      }
+    })
+    .catch(() => {})
 })
 
 onUnmounted(() => {
@@ -189,6 +249,22 @@ onUnmounted(() => {
   margin-top: 2rem;
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.update-btn:hover:not(:disabled) {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .reboot-btn {

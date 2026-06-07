@@ -167,6 +167,11 @@
       <path d="M12 2v10" />
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
     </template>
+    <!-- x / close -->
+    <template v-else-if="name === 'x'">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </template>
   </svg>
 </template>
 

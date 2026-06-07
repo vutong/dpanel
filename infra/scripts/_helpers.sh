@@ -176,6 +176,37 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
+system_update_status_file() {
+  mkdir -p "${STACK_ROOT}/data/panel"
+  echo "${STACK_ROOT}/data/panel/system-update.json"
+}
+
+# Panel polls data/panel/system-update.json for dpanel update progress (Overview).
+system_update_status_write() {
+  local status="$1" message="${2:-}"
+  ensure_python3 >/dev/null 2>&1 || {
+    echo "[dpanel] WARNING: system_update_status_write skipped (python3 unavailable)" >&2
+    return 1
+  }
+  local path
+  path="$(system_update_status_file)"
+  export STATUS_PATH="${path}" STATUS="${status}" MSG="${message}"
+  "${PYBIN}" <<'PY'
+import json, os
+from datetime import datetime, timezone
+
+path = os.environ["STATUS_PATH"]
+data = {
+    "op": "update",
+    "status": os.environ["STATUS"],
+    "message": os.environ.get("MSG") or "",
+    "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+PY
+}
+
 # compose.yml only (for nginx -t when compose.d should not affect the test).
 stack_compose_base() {
   local -a args=(-f "${STACK_ROOT}/compose.yml")

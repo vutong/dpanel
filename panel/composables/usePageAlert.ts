@@ -3,13 +3,8 @@ export function usePageAlert() {
   const msg = ref('')
   const ok = ref(false)
   const alertKey = ref(0)
-  let dismissTimer: ReturnType<typeof setTimeout> | undefined
 
   function clearAlert() {
-    if (dismissTimer) {
-      clearTimeout(dismissTimer)
-      dismissTimer = undefined
-    }
     if (!msg.value) return
     msg.value = ''
     alertKey.value += 1
@@ -36,11 +31,7 @@ export function usePageAlert() {
     }, 150)
   }
 
-  function showAlert(text: string, success = true, autoDismissMs = 0) {
-    if (dismissTimer) {
-      clearTimeout(dismissTimer)
-      dismissTimer = undefined
-    }
+  function showAlert(text: string, success = true) {
     msg.value = ''
     alertKey.value += 1
     ok.value = success
@@ -48,15 +39,8 @@ export function usePageAlert() {
       msg.value = text
       alertKey.value += 1
       scrollToPageAlert()
-      if (autoDismissMs > 0) {
-        dismissTimer = setTimeout(clearAlert, autoDismissMs)
-      }
     })
   }
-
-  onUnmounted(() => {
-    if (dismissTimer) clearTimeout(dismissTimer)
-  })
 
   return { msg, ok, alertKey, clearAlert, showAlert }
 }

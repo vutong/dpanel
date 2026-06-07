@@ -41,7 +41,7 @@
         </dl>
       </header>
 
-      <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
+      <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
       <section class="section">
         <h2 class="section-title">Deploy &amp; code</h2>
@@ -429,27 +429,26 @@ function onStreamClose() {
 function onStreamDone(payload: { ok: boolean; message: string }) {
   busy.value = false
   if (payload.ok) streamOp.value = null
-  showAlert(payload.message, payload.ok, payload.ok ? 8000 : 0)
+  showAlert(payload.message, payload.ok)
 }
 
 function onEnvSaved(payload: { restarted: boolean }) {
   envOpen.value = false
   showAlert(
     payload.restarted ? '.env saved and app restarted' : '.env saved — restart or Rebuild to apply',
-    true,
-    8000
+    true
   )
 }
 
 function onRoutingSaved() {
   routingOpen.value = false
-  showAlert('Public domains saved (nginx reloaded)', true, 8000)
+  showAlert('Public domains saved (nginx reloaded)', true)
 }
 
 async function onResourcesSaved() {
   resourcesOpen.value = false
   await refresh()
-  showAlert('Resource limits saved and container updated', true, 8000)
+  showAlert('Resource limits saved and container updated', true)
 }
 
 function openDelete() {
@@ -471,7 +470,7 @@ function confirmDelete() {
   deletePhase.value = 'background'
   void $fetch(`/api/websites/${encodeURIComponent(domain)}`, { method: 'DELETE' })
     .then(() => {
-      showAlert(`Deleting ${domain}…`, true, 4000)
+      showAlert(`Deleting ${domain}…`, true)
       setTimeout(() => navigateTo('/websites'), 2500)
     })
     .catch((e: unknown) => {

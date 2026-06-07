@@ -47,7 +47,7 @@
       </table>
     </div>
 
-    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" />
+    <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
     <div v-if="modifyTarget" class="modal-backdrop" @click.self="closeModify">
       <div class="modal card" role="dialog" aria-labelledby="modify-title">

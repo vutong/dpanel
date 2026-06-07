@@ -71,6 +71,44 @@ export function siteOpLogPath(domain: string, op: Exclude<SiteLogKind, 'containe
 }
 
 /** Reset site-ops status before a background script starts (avoids stale poll results). */
+export type SystemUpdateStatus = {
+  op?: 'update'
+  status: 'none' | 'running' | 'ok' | 'error'
+  message?: string
+  updatedAt?: string
+}
+
+export function systemUpdateLogPath(): string {
+  return join(stackRoot(), 'logs', 'panel', 'dpanel-update.log')
+}
+
+export function systemUpdateStatusPath(): string {
+  return join(stackRoot(), 'data', 'panel', 'system-update.json')
+}
+
+export function writeSystemUpdateStatus(
+  status: 'running' | 'ok' | 'error',
+  message = ''
+): void {
+  const dir = join(stackRoot(), 'data', 'panel')
+  mkdirSync(dir, { recursive: true })
+  const path = systemUpdateStatusPath()
+  writeFileSync(
+    path,
+    JSON.stringify(
+      {
+        op: 'update',
+        status,
+        message,
+        updatedAt: new Date().toISOString()
+      },
+      null,
+      2
+    ),
+    'utf8'
+  )
+}
+
 export function writeSiteOpStatus(
   domain: string,
   op: SiteOpKind,
