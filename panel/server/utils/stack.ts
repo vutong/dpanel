@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, openSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 const execFileAsync = promisify(execFile)
@@ -195,7 +195,22 @@ export function parseScriptJson<T extends Record<string, unknown>>(stdout: strin
   return JSON.parse(last) as T
 }
 
+export function authFilePath(): string {
+  return join(stackRoot(), 'data', 'panel', 'auth.json')
+}
+
 export async function readAuth() {
-  const raw = await readFile(join(stackRoot(), 'data', 'panel', 'auth.json'), 'utf8')
+  const raw = await readFile(authFilePath(), 'utf8')
   return JSON.parse(raw) as { email: string; passwordHash: string }
+}
+
+export async function updateAuthPassword(passwordHash: string): Promise<void> {
+  const auth = await readAuth()
+  const path = authFilePath()
+  await writeFile(path, JSON.stringify({ ...auth, passwordHash }), 'utf8')
+  try {
+    chmodSync(path, 0o600)
+  } catch {
+    /* ignore when path is not writable (local dev) */
+  }
 }

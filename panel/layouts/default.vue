@@ -33,6 +33,12 @@
         <SidebarNavLink to="/databases/create" icon="database-plus" label="Create database" />
         <SidebarNavLink to="/databases" icon="database" label="List databases" />
         <SidebarNavLink to="/databases/phpmyadmin" icon="table" label="phpMyAdmin" />
+
+        <p class="nav-section">
+          <AppIcon name="settings" :size="14" class="section-icon" />
+          Settings
+        </p>
+        <SidebarNavLink to="/settings/set-password" icon="lock" label="Set Password" />
       </nav>
 
       <button class="logout-btn" type="button" @click="logout">
