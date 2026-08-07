@@ -235,6 +235,18 @@ Use **Cloudflare** (or similar) in front of the VPS — nginx listens on HTTP on
 
 Details: [AGENTS.md](./AGENTS.md) (or `agents.md` on case-sensitive systems).
 
+## API Keys (machine auth)
+
+Panel UI: **Settings → API Keys**.
+
+- Create keys with **Read Only** (`GET /api/sites/check`) or **Read & Write** (check + nginx routing sync).
+- Secret is shown **once** at creation — copy into each Node site `apps/<domain>/.env` as `DPANEL_API_KEY` / `DPANEL_API_SECRET`.
+- Request headers: `x-dpanel-api-key`, `x-dpanel-api-secret`.
+- Failed auth is limited to about **1 request/second per IP**; valid credentials are not rate-limited (verification always runs first — only repeated 401s are throttled).
+- `GET /api/sites/check?domain=example.com` → `{ "available": true|false }` (exact hostname match across site domains / extraDomains / wildcard apex+www).
+
+Legacy `DPANEL_INTERNAL_SECRET` / `x-dpanel-internal` are removed.
+
 ## Uninstall
 
 ```bash

@@ -195,7 +195,7 @@ dpanel/
 - Tên dự án: **dpanel** (không còn ubuntu-docker).
 - Entry point duy nhất cho VPS: `install.sh`.
 - Panel API gọi script trong `infra/scripts/` — không shell tùy ý từ UI.
-- Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild (app đã chạy) reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile`); cuối Rebuild `site_apply_nginx_routing` ghi wildcard + extraDomains vào nginx. Wildcard chỉ cấu hình ở panel (globe), không qua sync script.
+- Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild (app đã chạy) reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile` với API key headers); cuối Rebuild `site_apply_nginx_routing` ghi wildcard + extraDomains vào nginx. Wildcard chỉ cấu hình ở panel (globe), không qua sync script.
 - Site PHP: nginx → php-fpm, root `apps/<domain>/public`.
 - Site Node: service `nuxt-<slug>` trong `compose.d/`.
 - **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).
@@ -203,4 +203,4 @@ dpanel/
 - **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB chỉ cho site PHP + menu tạo DB; **không** tạo database/user mặc định `dpanel` khi cài mới.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
-- **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` + `x-dpanel-internal`.
+- **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` with headers `x-dpanel-api-key` + `x-dpanel-api-secret` (Settings → API Keys, Read & Write). Host check: `GET /api/sites/check?domain=`.

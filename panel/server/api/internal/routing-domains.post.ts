@@ -1,15 +1,12 @@
-import { getHeader, readBody } from 'h3'
+import { readBody } from 'h3'
+import { requireApiCredentials } from '../../utils/api-auth'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
 import { assertNodeSite } from '../../utils/sites'
 import { runScriptDetached } from '../../utils/stack'
 
 /** App containers register extra hostnames (e.g. store custom domains). */
 export default defineEventHandler(async (event) => {
-  const secret = String(process.env.DPANEL_INTERNAL_SECRET || '').trim()
-  const hdr = String(getHeader(event, 'x-dpanel-internal') || '').trim()
-  if (!secret || hdr !== secret) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
-  }
+  await requireApiCredentials(event, 'read_write')
 
   const body = await readBody<{
     siteDomain?: string

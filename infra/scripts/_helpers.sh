@@ -287,7 +287,6 @@ services:
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
       DPANEL_SITE_DOMAIN: ${domain}
-      DPANEL_INTERNAL_SECRET: \${DPANEL_INTERNAL_SECRET}
     volumes:
       - ./apps/${domain}:/app
     networks:

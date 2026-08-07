@@ -39,6 +39,7 @@
           Settings
         </p>
         <SidebarNavLink to="/settings/set-password" icon="lock" label="Set Password" />
+        <SidebarNavLink to="/settings/api-keys" icon="key" label="API Keys" />
       </nav>
 
       <button class="logout-btn" type="button" @click="logout">
