@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { runScriptDetached, stackRoot, writeSiteOpStatus } from '../../../utils/stack'
+import { beginSiteOp, runScriptDetached, stackRoot } from '../../../utils/stack'
 import { readBody } from 'h3'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'site-rebuild.sh not found — run: sudo dpanel update' })
   }
 
-  writeSiteOpStatus(domain, 'rebuild', 'running', 'Starting rebuild…')
+  beginSiteOp(domain, 'rebuild', 'Starting rebuild…')
   runScriptDetached('site-rebuild.sh', [domain], { NODE_MODULES_MODE: nodeModulesMode }, domain, 'rebuild')
 
   return {

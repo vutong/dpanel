@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { chmodSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, openSync, rmdirSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -70,12 +70,30 @@ export function siteOpLogPath(domain: string, op: Exclude<SiteLogKind, 'containe
   return join(base, `site-${op}-${slug}.log`)
 }
 
-/** Reset site-ops status before a background script starts (avoids stale poll results). */
 export type SystemUpdateStatus = {
   op?: 'update'
   status: 'none' | 'running' | 'ok' | 'error'
   message?: string
   updatedAt?: string
+}
+
+/**
+ * Clear any stuck prior run (log + lock + status) before starting update/rebuild.
+ * Avoids the stream modal hanging on a stale `running` / leftover `{"ok":false}` log.
+ */
+export function beginSiteOp(domain: string, op: SiteOpKind, message: string): void {
+  const logPath = siteOpLogPath(domain, op)
+  mkdirSync(dirname(logPath), { recursive: true })
+  writeFileSync(logPath, '', 'utf8')
+
+  // Stale lock from a killed rebuild can block the next build for minutes.
+  try {
+    rmdirSync(join(stackRoot(), 'data', 'panel', '.site-ops.lock'))
+  } catch {
+    /* not held or not empty — ignore */
+  }
+
+  writeSiteOpStatus(domain, op, 'running', message)
 }
 
 export function systemUpdateLogPath(): string {

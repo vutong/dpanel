@@ -65,6 +65,7 @@ type SiteOpStatus = {
   op?: string
   status: 'none' | 'running' | 'ok' | 'error'
   message?: string
+  updatedAt?: string
 }
 
 const props = defineProps<{
@@ -87,6 +88,9 @@ const phase = ref<'running' | 'ok' | 'error'>('running')
 let logTimer: ReturnType<typeof setInterval> | undefined
 let statusTimer: ReturnType<typeof setInterval> | undefined
 let pollGen = 0
+/** Ignore terminal status written before this stream started (stale after a failed run). */
+let streamStartedAtMs = 0
+let sawRunningForStream = false
 const logViewport = ref<HTMLElement | null>(null)
 
 const title = computed(() => (props.op === 'rebuild' ? 'Rebuild' : 'Update from Git'))
@@ -148,7 +152,18 @@ async function fetchStatus() {
   )
   if (s.op && s.op !== props.op) return
   if (s.message) statusMessage.value = s.message
-  if (s.status === 'running' || s.status === 'none') return
+  if (s.status === 'running') {
+    sawRunningForStream = true
+    return
+  }
+  if (s.status === 'none') return
+
+  const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN
+  const isFresh =
+    sawRunningForStream ||
+    (!Number.isNaN(updatedAtMs) && updatedAtMs >= streamStartedAtMs - 1500)
+  // Stale ok/error from a previous hung/failed run — keep waiting for this run.
+  if (!isFresh) return
 
   phase.value = s.status === 'ok' ? 'ok' : 'error'
   stopTimers()
@@ -174,6 +189,8 @@ function startStreaming() {
   stopTimers()
   pollGen += 1
   const gen = pollGen
+  streamStartedAtMs = Date.now()
+  sawRunningForStream = false
   logText.value = ''
   logOffset.value = 0
   statusMessage.value = props.op === 'rebuild' ? 'Starting rebuild…' : 'Pulling from Git…'
