@@ -117,9 +117,14 @@ github_pull_into() {
     cd "${app_dir}"
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
       git config --local credential.helper "!f() { echo username=${git_user}; echo password=${GITHUB_TOKEN}; }; f" 2>/dev/null || true
-      if [[ "${GITHUB_URL:-}" =~ ^https://github\.com/(.+)$ ]]; then
-        local gh_path="${BASH_REMATCH[1]%.git}"
+    fi
+    # Always update origin when GITHUB_URL is set (URL change from panel; token optional for public repos).
+    if [[ "${GITHUB_URL:-}" =~ ^https://github\.com/(.+)$ ]]; then
+      gh_path="${BASH_REMATCH[1]%.git}"
+      if [[ -n "${GITHUB_TOKEN:-}" ]]; then
         git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${gh_path}.git" 2>/dev/null || true
+      else
+        git remote set-url origin "https://github.com/${gh_path}.git" 2>/dev/null || true
       fi
     fi
     git fetch origin 2>>"${pull_err}" || true

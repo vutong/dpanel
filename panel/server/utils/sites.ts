@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { stackRoot } from './stack'
 
@@ -10,6 +10,7 @@ export type SiteRecord = {
 }
 
 const DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/
+const GITHUB_URL_RE = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+?(?:\.git)?\/?$/i
 
 export function normalizeSiteDomain(raw: string): string {
   const domain = raw.trim().toLowerCase()
@@ -19,10 +20,24 @@ export function normalizeSiteDomain(raw: string): string {
   return domain
 }
 
+export function normalizeGithubUrl(raw: string): string {
+  const url = raw.trim().replace(/\/+$/, '')
+  if (!url || !GITHUB_URL_RE.test(url)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Repository URL must be https://github.com/owner/repo'
+    })
+  }
+  return url.endsWith('.git') ? url : `${url}.git`
+}
+
+function sitesPath() {
+  return join(stackRoot(), 'data/panel', 'sites.json')
+}
+
 export async function readSitesRegistry(): Promise<SiteRecord[]> {
-  const sitesPath = join(stackRoot(), 'data/panel', 'sites.json')
   try {
-    const sites = JSON.parse(await readFile(sitesPath, 'utf8')) as SiteRecord[]
+    const sites = JSON.parse(await readFile(sitesPath(), 'utf8')) as SiteRecord[]
     return Array.isArray(sites) ? sites : []
   } catch {
     throw createError({ statusCode: 500, statusMessage: 'sites.json not found' })
@@ -36,6 +51,19 @@ export async function getSite(domain: string): Promise<SiteRecord> {
     throw createError({ statusCode: 404, statusMessage: 'Site not found' })
   }
   return site
+}
+
+export async function updateSiteGithubUrl(domain: string, githubUrl: string): Promise<SiteRecord> {
+  const normalized = normalizeSiteDomain(domain)
+  const url = normalizeGithubUrl(githubUrl)
+  const sites = await readSitesRegistry()
+  const idx = sites.findIndex((s) => (s.domain || '').toLowerCase() === normalized)
+  if (idx < 0) {
+    throw createError({ statusCode: 404, statusMessage: 'Site not found' })
+  }
+  sites[idx] = { ...sites[idx], githubUrl: url }
+  await writeFile(sitesPath(), `${JSON.stringify(sites, null, 2)}\n`, 'utf8')
+  return sites[idx]
 }
 
 export async function assertNodeSite(domain: string): Promise<SiteRecord> {

@@ -18,10 +18,18 @@
           <option value="php">PHP (Laravel / WordPress)</option>
         </select>
       </div>
-      <div class="field">
-        <label class="label checkbox-label">
+      <div class="field github-row">
+        <label class="checkbox-label">
           <input v-model="cloneGithub" type="checkbox" />
-          Clone from GitHub
+          Github
+        </label>
+        <label v-if="cloneGithub" class="checkbox-label">
+          <input v-model="saveToken" type="checkbox" />
+          Save token
+        </label>
+        <label v-if="cloneGithub && runtime === 'node'" class="checkbox-label">
+          <input v-model="buildApp" type="checkbox" />
+          Build App
         </label>
       </div>
       <template v-if="cloneGithub">
@@ -47,15 +55,23 @@
             <strong>Public repo:</strong> leave token empty.<br>
             <strong>Private repo:</strong> use a <strong>classic PAT</strong> (<code>ghp_...</code>, scope <code>repo</code>) — most reliable.
             Fine-grained (<code>github_pat_...</code>): select this repo + <strong>Contents: Read</strong>; org repos may need owner approval.<br>
-            Token is sent via env for clone only (not saved). Revoke token if exposed.
+            Token is sent via env for clone only. Tick <strong>Save token</strong> to remember it in this browser. Revoke token if exposed.
           </p>
         </div>
       </template>
-      <button class="btn btn-primary" type="submit" :disabled="submitting">
+      <button class="btn btn-primary" type="submit" :disabled="submitting || streamOpen">
         {{ submitting ? 'Creating...' : 'Create & deploy' }}
       </button>
     </form>
     </template>
+
+    <SiteOpStreamModal
+      :open="streamOpen"
+      :domain="createdDomain"
+      op="rebuild"
+      @close="onBuildStreamClose"
+      @done="onBuildStreamDone"
+    />
   </div>
 </template>
 
@@ -64,11 +80,27 @@ const { loading: pageLoading } = usePageInit()
 const domain = ref('')
 const runtime = ref('')
 const cloneGithub = ref(false)
+const saveToken = ref(false)
+const buildApp = ref(false)
 const githubUrl = ref('')
 const githubToken = ref('')
 const submitting = ref(false)
 const message = ref('')
 const ok = ref(false)
+const gitTokenStorage = useGitHubTokenStorage()
+const streamOpen = ref(false)
+const createdDomain = ref('')
+
+watch(runtime, (v) => {
+  if (v !== 'node') buildApp.value = false
+})
+
+watch(cloneGithub, (v) => {
+  if (!v) {
+    saveToken.value = false
+    buildApp.value = false
+  }
+})
 
 async function submit() {
   message.value = ''
@@ -80,6 +112,7 @@ async function submit() {
       submitting.value = false
       return
     }
+    const domainNorm = domain.value.trim().toLowerCase()
     const url = cloneGithub.value ? githubUrl.value.trim() : ''
     const token = cloneGithub.value ? githubToken.value.trim() : ''
     if (cloneGithub.value && !url) {
@@ -90,13 +123,39 @@ async function submit() {
     await $fetch('/api/websites', {
       method: 'POST',
       body: {
-        domain: domain.value.trim(),
+        domain: domainNorm,
         runtime: runtime.value,
         githubUrl: url || undefined,
         githubToken: token || undefined
       }
     })
     ok.value = true
+
+    if (cloneGithub.value) {
+      gitTokenStorage.persist(domainNorm, token, saveToken.value)
+    }
+
+    const shouldBuild = cloneGithub.value && buildApp.value && runtime.value === 'node'
+    if (shouldBuild) {
+      message.value = 'Website created. Starting build…'
+      createdDomain.value = domainNorm
+      try {
+        await $fetch(`/api/websites/${encodeURIComponent(domainNorm)}/rebuild`, {
+          method: 'POST',
+          body: { nodeModulesMode: 'auto' }
+        })
+        streamOpen.value = true
+      } catch (e: unknown) {
+        const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+        message.value =
+          err.data?.statusMessage ||
+          err.statusMessage ||
+          'Website created but could not start build — open the site and use Rebuild.'
+        await navigateTo(`/websites/${encodeURIComponent(domainNorm)}`)
+      }
+      return
+    }
+
     message.value =
       runtime.value === 'node'
         ? 'Website created. Deploy code if needed, then use Rebuild to build and run the Nuxt app.'
@@ -126,11 +185,31 @@ async function submit() {
     submitting.value = false
   }
 }
+
+function onBuildStreamClose() {
+  streamOpen.value = false
+  void navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
+}
+
+function onBuildStreamDone(payload: { ok: boolean; message: string }) {
+  ok.value = payload.ok
+  message.value = payload.message
+  if (payload.ok) {
+    streamOpen.value = false
+    void navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
+  }
+}
 </script>
 
 <style scoped>
 .muted { color: var(--muted); margin: 0.5rem 0 1rem; }
 .form { max-width: 520px; margin-top: 1rem; }
+.github-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.25rem;
+}
 .checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; }
 .checkbox-label input { width: auto; }
 .hint {

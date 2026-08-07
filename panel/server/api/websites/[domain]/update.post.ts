@@ -1,17 +1,27 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { runScriptDetached, stackRoot, writeSiteOpStatus } from '../../../utils/stack'
+import { updateSiteGithubUrl } from '../../../utils/sites'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
   const domain = decodeURIComponent(getRouterParam(event, 'domain') || '').trim().toLowerCase()
-  const body = await readBody<{ githubToken?: string; gitDiscardLocal?: boolean }>(event).catch(() => ({}))
+  const body = await readBody<{
+    githubToken?: string
+    gitDiscardLocal?: boolean
+    githubUrl?: string
+  }>(event).catch(() => ({}))
   const githubToken = (body?.githubToken || '').trim()
   const gitDiscardLocal = body?.gitDiscardLocal === true
+  const githubUrl = (body?.githubUrl || '').trim()
 
   if (!domain) {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
+  }
+
+  if (githubUrl) {
+    await updateSiteGithubUrl(domain, githubUrl)
   }
 
   const script = join(stackRoot(), 'infra', 'scripts', 'site-update.sh')

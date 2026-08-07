@@ -68,6 +68,17 @@
             <span class="tile-title">Rebuild</span>
             <span class="tile-desc">npm install &amp; build</span>
           </button>
+          <button
+            v-if="site.runtime === 'node' && site.githubUrl"
+            type="button"
+            class="tile"
+            :disabled="busy"
+            @click="openFullUpdate"
+          >
+            <AppIcon name="layers" :size="22" />
+            <span class="tile-title">Update</span>
+            <span class="tile-desc">Pull from Git then rebuild</span>
+          </button>
           <div v-if="!site.githubUrl && site.runtime !== 'node'" class="tile tile--muted">
             <AppIcon name="git-pull" :size="22" />
             <span class="tile-title">No Git remote</span>
@@ -192,10 +203,27 @@
       </div>
     </div>
 
-    <div v-if="updateOpen" class="modal-backdrop" @click.self="updateOpen = false">
-      <div class="modal card" role="dialog">
-        <h2>Update from Git</h2>
-        <p class="muted">Pull latest code for <strong>{{ site?.domain }}</strong></p>
+    <div v-if="updateOpen" class="modal-backdrop" @click.self="closeUpdateModal">
+      <div class="modal card" :class="{ 'rebuild-modal': updateMode === 'full' }" role="dialog">
+        <h2>{{ updateMode === 'full' ? 'Update' : 'Update from Git' }}</h2>
+        <p class="muted">
+          <template v-if="updateMode === 'full'">
+            Pull latest code then rebuild <strong>{{ site?.domain }}</strong>
+          </template>
+          <template v-else>
+            Pull latest code for <strong>{{ site?.domain }}</strong>
+          </template>
+        </p>
+        <div class="field">
+          <label class="label">Repository URL</label>
+          <input
+            v-model="updateGithubUrl"
+            class="input"
+            type="url"
+            placeholder="https://github.com/user/repo.git"
+            autocomplete="off"
+          />
+        </div>
         <div class="field">
           <label class="label">GitHub token (PAT)</label>
           <input v-model="updateToken" class="input" type="password" autocomplete="off" />
@@ -215,9 +243,35 @@
             <code>package-lock.json</code>).
           </p>
         </div>
+        <fieldset v-if="updateMode === 'full'" class="rebuild-mode-group">
+          <legend class="label">node_modules</legend>
+          <label
+            v-for="opt in rebuildModeOptions"
+            :key="opt.value"
+            class="rebuild-mode-option"
+            :class="{ 'rebuild-mode-option--active': nodeModulesMode === opt.value }"
+          >
+            <input
+              v-model="nodeModulesMode"
+              class="rebuild-mode-input"
+              type="radio"
+              name="full-update-node-modules-mode"
+              :value="opt.value"
+            />
+            <span class="rebuild-mode-body">
+              <span class="rebuild-mode-title">
+                {{ opt.title }}
+                <span v-if="opt.recommended" class="rebuild-mode-badge">Recommended</span>
+              </span>
+              <span class="rebuild-mode-desc">{{ opt.desc }}</span>
+            </span>
+          </label>
+        </fieldset>
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" @click="updateOpen = false">Cancel</button>
-          <button type="button" class="btn btn-primary" @click="confirmUpdate">Pull from Git</button>
+          <button type="button" class="btn btn-ghost" @click="closeUpdateModal">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmUpdate">
+            {{ updateMode === 'full' ? 'Update' : 'Pull from Git' }}
+          </button>
         </div>
       </div>
     </div>
@@ -343,8 +397,11 @@ const logOpen = ref(false)
 const routingOpen = ref(false)
 const resourcesOpen = ref(false)
 const updateOpen = ref(false)
+const updateMode = ref<'pull' | 'full'>('pull')
+const chainRebuildAfterUpdate = ref(false)
 const rebuildOpen = ref(false)
 const nodeModulesMode = ref<NodeModulesMode>('auto')
+const updateGithubUrl = ref('')
 const updateToken = ref('')
 const updateSaveToken = ref(false)
 const updateGitCheckout = ref(false)
@@ -365,32 +422,62 @@ function formatDate(iso?: string) {
   return new Date(iso).toLocaleString('en-US')
 }
 
-function openUpdate() {
+function fillUpdateForm() {
   const domain = site.value?.domain || domainParam.value
-  updateOpen.value = true
+  updateGithubUrl.value = site.value?.githubUrl || ''
   updateSaveToken.value = gitTokenStorage.getSavePreference(domain)
   updateToken.value = gitTokenStorage.getSavedToken(domain)
   updateGitCheckout.value = false
+}
+
+function openUpdate() {
+  updateMode.value = 'pull'
+  updateOpen.value = true
+  fillUpdateForm()
   clearAlert()
+}
+
+function openFullUpdate() {
+  if (!site.value || site.value.runtime !== 'node') return
+  updateMode.value = 'full'
+  nodeModulesMode.value = 'auto'
+  updateOpen.value = true
+  fillUpdateForm()
+  clearAlert()
+}
+
+function closeUpdateModal() {
+  updateOpen.value = false
+  chainRebuildAfterUpdate.value = false
 }
 
 async function confirmUpdate() {
   if (!site.value) return
   clearAlert()
+  const url = updateGithubUrl.value.trim()
+  if (!url) {
+    showAlert('Repository URL is required', false)
+    return
+  }
   const token = updateToken.value.trim()
   gitTokenStorage.persist(site.value.domain, token, updateSaveToken.value)
+  const chainRebuild = updateMode.value === 'full'
   try {
     await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/update`, {
       method: 'POST',
       body: {
+        githubUrl: url,
         githubToken: token || undefined,
         gitDiscardLocal: updateGitCheckout.value
       }
     })
     updateOpen.value = false
+    chainRebuildAfterUpdate.value = chainRebuild
     busy.value = true
     streamOp.value = 'update'
+    await refresh()
   } catch (e: unknown) {
+    chainRebuildAfterUpdate.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start pull', false)
   }
@@ -424,10 +511,34 @@ async function confirmRebuild() {
 function onStreamClose() {
   busy.value = false
   streamOp.value = null
+  chainRebuildAfterUpdate.value = false
 }
 
-function onStreamDone(payload: { ok: boolean; message: string }) {
+async function onStreamDone(payload: { ok: boolean; message: string }) {
+  if (payload.ok && chainRebuildAfterUpdate.value && streamOp.value === 'update' && site.value) {
+    chainRebuildAfterUpdate.value = false
+    try {
+      await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/rebuild`, {
+        method: 'POST',
+        body: { nodeModulesMode: nodeModulesMode.value },
+      })
+      busy.value = true
+      streamOp.value = 'rebuild'
+      return
+    } catch (e: unknown) {
+      busy.value = false
+      streamOp.value = null
+      const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+      showAlert(
+        err.data?.statusMessage || err.statusMessage || 'Pull succeeded but could not start rebuild',
+        false
+      )
+      return
+    }
+  }
+
   busy.value = false
+  chainRebuildAfterUpdate.value = false
   if (payload.ok) streamOp.value = null
   showAlert(payload.message, payload.ok)
 }
