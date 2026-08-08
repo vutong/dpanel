@@ -1,4 +1,3 @@
-# Remove unused import
 import { requireAuth } from '../../../utils/auth-guard'
 import { getSite, normalizeSiteDomain, withPendingMeta } from '../../../utils/sites'
 import { getAppDirSizeBytes, readSiteResources } from '../../../utils/site-resources'
