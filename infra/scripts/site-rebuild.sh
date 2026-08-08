@@ -8,11 +8,21 @@ source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 
 DOMAIN="${1:-}"
 NODE_MODULES_MODE="${NODE_MODULES_MODE:-auto}"
+OP_FINALIZED=0
 
 die() {
+  OP_FINALIZED=1
   site_op_status_write "${DOMAIN}" "rebuild" "error" "$*" 2>/dev/null || true
   echo "{\"ok\":false,\"error\":\"$*\"}" >&2
   exit 1
+}
+
+on_exit() {
+  site_ops_lock_release
+  if [[ "${OP_FINALIZED}" -eq 0 && -n "${DOMAIN}" ]]; then
+    site_op_status_write "${DOMAIN}" "rebuild" "error" \
+      "Rebuild interrupted unexpectedly — retry Rebuild" 2>/dev/null || true
+  fi
 }
 
 log() { echo "[dpanel] $*" >&2; }
@@ -55,7 +65,7 @@ log "Rebuilding ${DOMAIN} (${SVC})…"
 cd "${STACK_ROOT}"
 
 site_ops_lock_acquire
-trap site_ops_lock_release EXIT
+trap on_exit EXIT
 
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
 if ! node_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
@@ -65,9 +75,17 @@ if ! node_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
   die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
 fi
 
+site_op_status_write "${DOMAIN}" "rebuild" "running" "Applying nginx routing…"
 log "Applying nginx routing (wildcard + custom domains)…"
 if ! site_apply_nginx_routing "${DOMAIN}"; then
   die "nginx routing apply failed — see log; run: sudo bash ${STACK_ROOT}/infra/scripts/site-routing-apply.sh ${DOMAIN}"
 fi
+
+# Mark complete + release lock before domain sync — sync must not block the console or pin the lock.
+OP_FINALIZED=1
 site_op_status_write "${DOMAIN}" "rebuild" "ok" "Rebuild complete — site should be online"
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"service\":\"${SVC}\",\"action\":\"rebuild\"}"
+site_ops_lock_release
+trap - EXIT
+
+site_sync_dpanel_routing_best_effort "${DOMAIN}" 90 || true

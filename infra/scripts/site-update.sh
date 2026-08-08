@@ -12,12 +12,23 @@ source "${STACK_ROOT}/infra/scripts/_github.sh"
 
 DOMAIN="${1:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+OP_FINALIZED=0
 
 die() {
+  OP_FINALIZED=1
   site_op_status_write "${DOMAIN}" "update" "error" "$*" 2>/dev/null || true
   echo "{\"ok\":false,\"error\":\"$*\"}" >&2
   exit 1
 }
+
+on_exit() {
+  if [[ "${OP_FINALIZED}" -eq 0 && -n "${DOMAIN}" ]]; then
+    site_op_status_write "${DOMAIN}" "update" "error" \
+      "Update interrupted unexpectedly — retry Update from Git" 2>/dev/null || true
+  fi
+}
+
+trap on_exit EXIT
 
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
@@ -80,6 +91,8 @@ else
   fi
 fi
 
+OP_FINALIZED=1
 site_op_status_write "${DOMAIN}" "update" "ok" "Pull complete"
+trap - EXIT
 
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\",\"action\":\"update\"}"

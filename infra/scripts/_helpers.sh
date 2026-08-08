@@ -628,17 +628,80 @@ node_container_build() {
     return 1
   fi
 
-  if docker exec "${node_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
-    echo "[dpanel] Syncing custom store domains from MongoDB (sync:dpanel-routing)…" >&2
-    if ! docker exec "${node_cid}" sh -c '
-      set -e
-      if [ -f .env ]; then set -a; . ./.env; set +a; fi
-      npm run sync:dpanel-routing
-    ' 2>&1; then
-      echo "[dpanel] Warning: custom domain sync failed — rebuild OK; fix MongoDB/dpanel env and run: npm run sync:dpanel-routing" >&2
+  # sync:dpanel-routing runs after rebuild marks ok (see site-rebuild.sh) so a hung
+  # MongoDB/API sync cannot keep the panel console on "Running" forever.
+  return 0
+}
+
+# Run a command with a wall-clock timeout (uses timeout(1) or portable background+kill).
+# Exit 124 on timeout (GNU timeout convention).
+run_with_timeout() {
+  local secs="$1"
+  shift
+  [[ "${secs}" =~ ^[0-9]+$ ]] || secs=90
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${secs}" "$@"
+    return $?
+  fi
+  # Portable fallback (Alpine/busybox without coreutils timeout).
+  "$@" &
+  local pid=$!
+  (
+    sleep "${secs}"
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill -TERM "${pid}" 2>/dev/null || true
+      sleep 2
+      kill -KILL "${pid}" 2>/dev/null || true
     fi
+  ) &
+  local watchdog=$!
+  local rc=0
+  wait "${pid}" || rc=$?
+  kill "${watchdog}" 2>/dev/null || true
+  wait "${watchdog}" 2>/dev/null || true
+  if [[ "${rc}" -eq 143 || "${rc}" -eq 137 ]]; then
+    return 124
+  fi
+  return "${rc}"
+}
+
+# Best-effort: npm run sync:dpanel-routing inside the site container (timeout), then refresh nginx.
+# Never fails the rebuild — console/UI completion must not wait on MongoDB sync.
+site_sync_dpanel_routing_best_effort() {
+  local domain="$1"
+  local sync_timeout="${2:-90}"
+  local slug cname node_cid
+  [[ -n "${domain}" ]] || return 0
+  slug="$(site_slug "${domain}")"
+  cname="$(_node_container_name "${slug}")"
+  node_cid="$(docker ps -aq -f "name=^${cname}$" 2>/dev/null | head -1)"
+  [[ -n "${node_cid}" ]] || return 0
+
+  if ! docker exec "${node_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
+    return 0
   fi
 
+  echo "[dpanel] Syncing custom store domains from MongoDB (sync:dpanel-routing, timeout ${sync_timeout}s)…" >&2
+  local sync_rc=0
+  run_with_timeout "${sync_timeout}" docker exec "${node_cid}" sh -c '
+    set -e
+    if [ -f .env ]; then set -a; . ./.env; set +a; fi
+    npm run sync:dpanel-routing
+  ' 2>&1 || sync_rc=$?
+
+  if [[ "${sync_rc}" -eq 124 ]]; then
+    echo "[dpanel] Warning: custom domain sync timed out after ${sync_timeout}s — rebuild already complete; run: npm run sync:dpanel-routing" >&2
+    return 0
+  fi
+  if [[ "${sync_rc}" -ne 0 ]]; then
+    echo "[dpanel] Warning: custom domain sync failed — rebuild already complete; fix MongoDB/dpanel env and run: npm run sync:dpanel-routing" >&2
+    return 0
+  fi
+
+  echo "[dpanel] Re-applying nginx routing after domain sync…" >&2
+  site_apply_nginx_routing "${domain}" 2>/dev/null || {
+    echo "[dpanel] Warning: nginx re-apply after sync failed — run: sudo bash ${STACK_ROOT}/infra/scripts/site-routing-apply.sh ${domain}" >&2
+  }
   return 0
 }
 

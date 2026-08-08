@@ -1,5 +1,14 @@
 import { execFile, spawn, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -234,6 +243,182 @@ export function writeSiteOpStatus(
     ),
     'utf8'
   )
+}
+
+export function siteOpStatusPath(domain: string): string {
+  return join(stackRoot(), 'data', 'panel', 'site-ops', `${domain}.json`)
+}
+
+export function siteOpsLockPath(): string {
+  return join(stackRoot(), 'data', 'panel', '.site-ops.lock')
+}
+
+/** True if update/rebuild for this domain looks alive. */
+export function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): boolean {
+  const safeDomain = domain.replace(/[^a-zA-Z0-9.-]/g, '')
+  if (!safeDomain) return false
+  const script =
+    op === 'update'
+      ? `site-update\\.sh ${safeDomain}`
+      : op === 'rebuild'
+        ? `site-rebuild\\.sh ${safeDomain}`
+        : `site-(update|rebuild)\\.sh ${safeDomain}`
+  try {
+    const r = spawnSync(
+      'bash',
+      ['-lc', `pgrep -af '${script}' >/dev/null 2>&1`],
+      { timeout: 8000, encoding: 'utf8' }
+    )
+    return r.status === 0
+  } catch {
+    return false
+  }
+}
+
+/** True if any site-update / site-rebuild script is running (any domain). */
+export function isAnySiteOpProcessAlive(): boolean {
+  try {
+    const r = spawnSync(
+      'bash',
+      ['-lc', "pgrep -af 'site-(update|rebuild)\\.sh ' >/dev/null 2>&1"],
+      { timeout: 8000, encoding: 'utf8' }
+    )
+    return r.status === 0
+  } catch {
+    return false
+  }
+}
+
+export type ClearStuckJobsResult = {
+  ok: true
+  killedProcesses: boolean
+  clearedUpdateLock: boolean
+  clearedSiteOpsLock: boolean
+  clearedSystemUpdateStatus: boolean
+  clearedSiteOps: number
+  clearedLogs: number
+}
+
+/**
+ * Kill hung Update Dpanel / Update website / Rebuild jobs, drop locks,
+ * mark running statuses as error, and truncate related logs.
+ */
+export function clearStuckJobs(): ClearStuckJobsResult {
+  spawnSync(
+    'bash',
+    [
+      '-lc',
+      [
+        "pkill -9 -f 'site-rebuild\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'site-update\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'infra/scripts/panel-update\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'infra/scripts/panel-update-host\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'infra/scripts/update\\.sh' 2>/dev/null || true",
+        `for id in $(docker ps -q 2>/dev/null); do
+           cmd=$(docker inspect -f '{{json .Config.Cmd}}' "$id" 2>/dev/null || true)
+           echo "$cmd" | grep -q 'panel-update-host' && docker kill "$id" 2>/dev/null || true
+         done`,
+        'sleep 0.2'
+      ].join('; ')
+    ],
+    { timeout: 20_000, encoding: 'utf8' }
+  )
+
+  let clearedUpdateLock = false
+  let clearedSiteOpsLock = false
+  try {
+    rmSync(systemUpdateLockPath(), { recursive: true, force: true })
+    clearedUpdateLock = true
+  } catch {
+    /* ignore */
+  }
+  try {
+    rmSync(siteOpsLockPath(), { recursive: true, force: true })
+    clearedSiteOpsLock = true
+  } catch {
+    /* ignore */
+  }
+
+  let clearedSystemUpdateStatus = false
+  try {
+    const path = systemUpdateStatusPath()
+    if (existsSync(path)) {
+      const raw = JSON.parse(readFileSync(path, 'utf8')) as { status?: string }
+      if (raw.status === 'running') {
+        writeSystemUpdateStatus('error', 'Cleared stuck update (Clean Job)')
+        clearedSystemUpdateStatus = true
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  let clearedSiteOps = 0
+  const siteOpsDir = join(stackRoot(), 'data', 'panel', 'site-ops')
+  try {
+    if (existsSync(siteOpsDir)) {
+      for (const name of readdirSync(siteOpsDir)) {
+        if (!name.endsWith('.json')) continue
+        const path = join(siteOpsDir, name)
+        try {
+          const data = JSON.parse(readFileSync(path, 'utf8')) as {
+            domain?: string
+            op?: string
+            status?: string
+          }
+          if (data.status !== 'running') continue
+          const domain = (data.domain || name.replace(/\.json$/, '')).trim().toLowerCase()
+          const op: SiteOpKind =
+            data.op === 'update' || data.op === 'rebuild' ? data.op : 'rebuild'
+          writeSiteOpStatus(domain, op, 'error', 'Cleared stuck job (Clean Job)')
+          clearedSiteOps += 1
+        } catch {
+          /* ignore one file */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  let clearedLogs = 0
+  const truncateLog = (path: string) => {
+    try {
+      mkdirSync(dirname(path), { recursive: true })
+      writeFileSync(path, '', 'utf8')
+      clearedLogs += 1
+    } catch {
+      /* ignore */
+    }
+  }
+  truncateLog(systemUpdateLogPath())
+
+  const nodeLogs = join(stackRoot(), 'logs', 'node')
+  try {
+    if (existsSync(nodeLogs)) {
+      for (const name of readdirSync(nodeLogs)) {
+        if (
+          name.startsWith('site-update-') ||
+          name.startsWith('site-rebuild-') ||
+          name.startsWith('site-create-')
+        ) {
+          truncateLog(join(nodeLogs, name))
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    ok: true,
+    killedProcesses: true,
+    clearedUpdateLock,
+    clearedSiteOpsLock,
+    clearedSystemUpdateStatus,
+    clearedSiteOps,
+    clearedLogs
+  }
 }
 
 /** Start a bash script in the background (panel API returns immediately — no 502 from long work). */

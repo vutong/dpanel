@@ -597,6 +597,21 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
   showAlert(payload.message, payload.ok)
 }
 
+// Resume console after refresh if update/rebuild is still running (same idea as Update Dpanel).
+onMounted(() => {
+  if (!import.meta.client || !domainParam.value) return
+  void $fetch<{ status?: string; op?: string }>(
+    `/api/websites/${encodeURIComponent(domainParam.value)}/operation`
+  )
+    .then((s) => {
+      if (s.status !== 'running') return
+      if (s.op !== 'update' && s.op !== 'rebuild') return
+      busy.value = true
+      streamOp.value = s.op
+    })
+    .catch(() => {})
+})
+
 function onEnvSaved(payload: { restarted: boolean }) {
   envOpen.value = false
   showAlert(

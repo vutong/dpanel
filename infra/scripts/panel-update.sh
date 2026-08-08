@@ -26,6 +26,9 @@ if ! mkdir "${LOCKDIR}" 2>/dev/null; then
     die "Could not acquire update lock — try again"
   fi
 fi
+# Only release lock here — do NOT write error on EXIT. The alpine host runner
+# (panel-update-host.sh) may outlive this process when dpanel restarts mid-update
+# and is responsible for the final ok/error status.
 trap 'rmdir "${LOCKDIR}" 2>/dev/null || true' EXIT
 
 {

@@ -146,6 +146,8 @@ if [[ "${DPANEL_UPDATE_REEXEC:-}" != 1 ]]; then
   trap cleanup EXIT
 
   export GIT_TERMINAL_PROMPT=0
+  export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+  export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-60}"
   log "Downloading source..."
   git clone --depth 1 --branch "${DPANEL_BRANCH}" "${DPANEL_REPO}" "${CLONE_TMP}" >> "${INSTALL_LOG}" 2>&1 \
     || die "git clone failed — check ${INSTALL_LOG}"

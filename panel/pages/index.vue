@@ -32,8 +32,17 @@
     <footer class="overview-footer">
       <button
         type="button"
+        class="btn btn-sm clean-btn"
+        :disabled="cleanBusy || updateBusy || rebooting"
+        @click="onCleanJobsClick"
+      >
+        <AppIcon name="broom" :size="14" />
+        {{ cleanBusy ? 'Cleaning…' : 'Clean Job' }}
+      </button>
+      <button
+        type="button"
         class="btn btn-sm update-btn"
-        :disabled="updateBusy"
+        :disabled="updateBusy || cleanBusy"
         @click="onUpdateClick"
       >
         <AppIcon name="git-pull" :size="14" />
@@ -42,7 +51,7 @@
       <button
         type="button"
         class="btn btn-sm reboot-btn"
-        :disabled="rebooting"
+        :disabled="rebooting || cleanBusy"
         @click="onRebootClick"
       >
         <AppIcon name="power" :size="14" />
@@ -70,6 +79,7 @@ const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
 const rebooting = ref(false)
 const updateOpen = ref(false)
 const updateBusy = ref(false)
+const cleanBusy = ref(false)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 let rebootPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -106,9 +116,51 @@ function startRebootWatch() {
   rebootPollTimer = setTimeout(() => void pollUntilOnline(0), 8000)
 }
 
+async function onCleanJobsClick() {
+  if (
+    cleanBusy.value ||
+    updateBusy.value ||
+    !import.meta.client ||
+    !confirm(
+      'Clean stuck jobs now?\n\nThis will kill hung Update/Rebuild processes, remove locks, clear related logs, and mark running operations as failed.'
+    )
+  ) {
+    return
+  }
+
+  cleanBusy.value = true
+  clearAlert()
+  updateOpen.value = false
+  try {
+    const res = await $fetch<{
+      clearedSiteOps: number
+      clearedLogs: number
+      clearedSystemUpdateStatus: boolean
+    }>('/api/system/clean-jobs', { method: 'POST' })
+    updateBusy.value = false
+    const bits = [
+      res.clearedSystemUpdateStatus ? 'Update Dpanel' : null,
+      res.clearedSiteOps > 0 ? `${res.clearedSiteOps} site job(s)` : null,
+      res.clearedLogs > 0 ? `${res.clearedLogs} log(s)` : null
+    ].filter(Boolean)
+    showAlert(
+      bits.length
+        ? `Cleaned stuck jobs (${bits.join(', ')}). You can retry Update or Rebuild.`
+        : 'Locks cleared and hung processes killed. No running jobs were marked.',
+      true
+    )
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not clean jobs', false)
+  } finally {
+    cleanBusy.value = false
+  }
+}
+
 async function onUpdateClick() {
   if (
     updateBusy.value ||
+    cleanBusy.value ||
     !import.meta.client ||
     !confirm(
       'Update dpanel from GitHub now? This runs sudo dpanel update — the panel may restart and take several minutes.'
@@ -250,6 +302,21 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.clean-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.clean-btn:hover:not(:disabled) {
+  background: var(--surface-elevated);
+  border-color: var(--muted);
+  color: var(--text);
 }
 
 .update-btn {

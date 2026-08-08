@@ -6,7 +6,7 @@ import {
   writeSystemUpdateStatus,
   type SystemUpdateStatus
 } from '../../../utils/stack'
-import { access, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { rmSync } from 'node:fs'
 
 /** Grace before treating a "running" update with no visible process as stuck. */
@@ -27,28 +27,16 @@ export default defineEventHandler(async (event) => {
     return status
   }
 
-  const alive = isSystemUpdateProcessAlive()
-  if (alive) {
-    return status
-  }
-
-  let lockPresent = false
-  try {
-    await access(systemUpdateLockPath())
-    lockPresent = true
-  } catch {
-    lockPresent = false
-  }
-
-  // Lock held = update script still owns the job (e.g. long docker build; pgrep can miss).
-  if (lockPresent) {
+  // Process alive (script or alpine host runner) ⇒ still working.
+  if (isSystemUpdateProcessAlive()) {
     return status
   }
 
   const updatedAtMs = status.updatedAt ? Date.parse(status.updatedAt) : 0
   const ageMs = Date.now() - (Number.isNaN(updatedAtMs) ? 0 : updatedAtMs)
 
-  // Fresh click: beginSystemUpdate clears lock before spawn — do not error immediately.
+  // Fresh click: beginSystemUpdate writes running before spawn — do not error immediately.
+  // Do NOT treat .update-lock alone as liveness: SIGKILL/OOM can orphan the lock forever.
   if (ageMs < STUCK_GRACE_MS) {
     return status
   }

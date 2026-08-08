@@ -187,6 +187,13 @@
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </template>
+    <!-- broom / clean -->
+    <template v-else-if="name === 'broom'">
+      <path d="M19.4 7.4 16 4l-2.5 2.5" />
+      <path d="m5 20 6.5-6.5" />
+      <path d="M9.5 11.5 18 3" />
+      <path d="M3 21c2.5-.5 4.5-1.5 6-3l-3-3c-1.5 1.5-2.5 3.5-3 6Z" />
+    </template>
   </svg>
 </template>
 

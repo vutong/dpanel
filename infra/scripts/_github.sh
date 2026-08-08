@@ -15,7 +15,7 @@ github_preflight() {
   [[ -n "${GITHUB_TOKEN:-}" ]] || return 0
   github_owner_repo "${GITHUB_URL:-}" || return 0
   local code
-  code="$(curl -sS -o /dev/null -w '%{http_code}' \
+  code="$(curl -sS --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' \
     -H "Authorization: bearer ${GITHUB_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}" 2>/dev/null || echo 000)"
@@ -59,6 +59,9 @@ github_clone_into() {
 
   rm -rf "${app_dir:?}"/*
   export GIT_TERMINAL_PROMPT=0
+  # Abort hung clones (stalled network) instead of blocking the panel console forever.
+  export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+  export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-60}"
   clone_err="$(mktemp)"
   git_user="${GITHUB_USER:-x-access-token}"
 
@@ -110,6 +113,8 @@ github_pull_into() {
 
   [[ -d "${app_dir}/.git" ]] || return 1
   export GIT_TERMINAL_PROMPT=0
+  export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+  export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-60}"
   pull_err="$(mktemp)"
   git_user="${GITHUB_USER:-x-access-token}"
 
