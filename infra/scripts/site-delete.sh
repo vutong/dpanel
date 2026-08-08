@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Usage: site-delete.sh <domain>
-# Full removal: sites.json, nginx, compose.d, container, apps/<domain>/ (no leftovers)
+# Full removal: sites.json, linked MariaDB DBs, nginx, compose.d, container,
+# apps/<domain>/, site-routing, site-resources, site-ops, site logs (no leftovers)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 # shellcheck source=_helpers.sh
 source "${STACK_ROOT}/infra/scripts/_helpers.sh"
+# shellcheck source=_db_registry.sh
+source "${STACK_ROOT}/infra/scripts/_db_registry.sh"
 
 DOMAIN="${1:-}"
 shift 2>/dev/null || true
@@ -39,7 +42,8 @@ PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 SLUG="$(site_slug "${DOMAIN}")"
 declare -a REMOVED=()
-HAD_NUXT=0
+declare -a DELETED_DBS=()
+HAD_NODE=0
 
 ensure_python3 || die "python3 required"
 export SITES_FILE DOMAIN="${DOMAIN}"
@@ -80,14 +84,27 @@ else
   die "sites.json not found"
 fi
 
-if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
-  HAD_NUXT=1
+# Drop MariaDB databases linked to this site (registry + DROP DATABASE/USER).
+while IFS= read -r db_name; do
+  [[ -n "${db_name}" ]] || continue
+  log "Deleting linked database: ${db_name}"
+  if bash "${STACK_ROOT}/infra/scripts/db-delete.sh" "${db_name}" >/dev/null; then
+    DELETED_DBS+=("${db_name}")
+    REMOVED+=("database:${db_name}")
+    log "Deleted database ${db_name}"
+  else
+    log "Warning: failed to delete database ${db_name}"
+  fi
+done < <(db_registry_names_for_site "${DOMAIN}" || true)
+
+if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/node-${SLUG}.yml" ]]; then
+  HAD_NODE=1
 fi
 
-if [[ -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml" ]]; then
-  rm -f "${STACK_ROOT}/compose.d/nuxt-${SLUG}.yml"
-  REMOVED+=("compose.d:nuxt-${SLUG}.yml")
-  log "Removed compose.d/nuxt-${SLUG}.yml"
+if [[ -f "${STACK_ROOT}/compose.d/node-${SLUG}.yml" ]]; then
+  rm -f "${STACK_ROOT}/compose.d/node-${SLUG}.yml"
+  REMOVED+=("compose.d:node-${SLUG}.yml")
+  log "Removed compose.d/node-${SLUG}.yml"
 fi
 
 routing_json="${STACK_ROOT}/data/panel/site-routing/${SLUG}.json"
@@ -95,6 +112,20 @@ if [[ -f "${routing_json}" ]]; then
   rm -f "${routing_json}"
   REMOVED+=("site-routing:${SLUG}.json")
   log "Removed ${routing_json}"
+fi
+
+resources_json="${STACK_ROOT}/data/panel/site-resources/${SLUG}.json"
+if [[ -f "${resources_json}" ]]; then
+  rm -f "${resources_json}"
+  REMOVED+=("site-resources:${SLUG}.json")
+  log "Removed ${resources_json}"
+fi
+
+ops_json="${STACK_ROOT}/data/panel/site-ops/${DOMAIN}.json"
+if [[ -f "${ops_json}" ]]; then
+  rm -f "${ops_json}"
+  REMOVED+=("site-ops:${DOMAIN}.json")
+  log "Removed ${ops_json}"
 fi
 
 for conf in \
@@ -107,16 +138,31 @@ for conf in \
   fi
 done
 
+# Site operation logs (create / rebuild / update). Delete log cleaned after background finish.
+for op in create rebuild update; do
+  log_file="${STACK_ROOT}/logs/node/site-${op}-${SLUG}.log"
+  if [[ -f "${log_file}" ]]; then
+    rm -f "${log_file}"
+    REMOVED+=("log:site-${op}-${SLUG}.log")
+    log "Removed ${log_file}"
+  fi
+done
+
 REMOVED_JSON="$(printf '%s\n' "${REMOVED[@]}" | "${PYBIN}" -c "
 import json, sys
 items = [l.strip() for l in sys.stdin if l.strip()]
 print(json.dumps(items))
 ")"
+DELETED_DBS_JSON="$(printf '%s\n' "${DELETED_DBS[@]}" | "${PYBIN}" -c "
+import json, sys
+items = [l.strip() for l in sys.stdin if l.strip()]
+print(json.dumps(items))
+")"
 
-printf '{"ok":true,"domain":"%s","purged":true,"removed":%s}\n' \
-  "${DOMAIN}" "${REMOVED_JSON}"
+printf '{"ok":true,"domain":"%s","purged":true,"removed":%s,"deletedDatabases":%s}\n' \
+  "${DOMAIN}" "${REMOVED_JSON}" "${DELETED_DBS_JSON}"
 
-# Slow work in background: rm apps/, docker stop Nuxt, nginx reload — never stack_compose up/stop (502 panel).
-site_delete_finish_background "${DOMAIN}" "${SLUG}" "${HAD_NUXT}"
+# Slow work in background: rm apps/, docker stop Node, nginx reload — never stack_compose up/stop (502 panel).
+site_delete_finish_background "${DOMAIN}" "${SLUG}" "${HAD_NODE}"
 
 log "Done — ${DOMAIN} unregistered (background: logs/node/site-delete-${SLUG}.log)" >&2

@@ -23,7 +23,7 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 APP_DIR="${STACK_ROOT}/apps/${DOMAIN}"
 SLUG="$(site_slug "${DOMAIN}")"
-NUXT_SVC=""
+NODE_SVC=""
 mkdir -p "$APP_DIR"
 
 if [[ -n "$GITHUB_URL" ]]; then
@@ -43,9 +43,9 @@ else
 fi
 
 if [[ "$RUNTIME" == "node" ]]; then
-  write_nuxt_compose_fragment "${DOMAIN}"
+  write_node_compose_fragment "${DOMAIN}"
   write_nginx_node_site "${DOMAIN}"
-  NUXT_SVC="nuxt-${SLUG}"
+  NODE_SVC="node-${SLUG}"
 else
   write_nginx_php_site "${DOMAIN}"
 fi
@@ -80,5 +80,5 @@ PY
 # JSON first — panel API must respond before async Docker work (full nginx-reload restarts dpanel → 502).
 echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\"}"
 
-site_finalize_async "site-create-${SLUG}" "${NUXT_SVC}"
-echo "[dpanel] Site ${DOMAIN} registered — nginx/Nuxt apply in background (see logs/node/site-create-${SLUG}.log)" >&2
+site_finalize_async "site-create-${SLUG}" "${NODE_SVC}"
+echo "[dpanel] Site ${DOMAIN} registered — nginx/Node apply in background (see logs/node/site-create-${SLUG}.log)" >&2

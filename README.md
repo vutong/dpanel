@@ -81,7 +81,7 @@ dpanel setpass 'Your_new_password'
 - Panel: `https://<panel-domain>` (Cloudflare) or `http://<server-ip>:8443` (bootstrap, no domain yet)
 - Summary file: `/opt/stack/CREDENTIALS.txt`
 - Default password: `12345678` → `dpanel setpass 'new-password'`
-- **MariaDB:** panel settings live in JSON files, not MySQL. MariaDB is for your PHP apps — create databases in the panel. New installs do not create a default `dpanel` database. Older VPS may still have an empty one; delete it in phpMyAdmin if you do not use it.
+- **MariaDB:** panel settings live in JSON files, not MySQL. MariaDB is for your **Node SSR** and **PHP** apps — create databases in the panel (each DB must be linked to a website). New installs do not create a default `dpanel` database. Older VPS may still have an empty one; delete it in phpMyAdmin if you do not use it.
 
 ## Update (when repo changes)
 
@@ -147,7 +147,7 @@ cat /opt/stack/data/panel/sites.json
 bash /opt/stack/infra/scripts/site-list.sh
 ```
 
-### Node (Nuxt) site — rebuild, restart, logs
+### Node SSR site — rebuild, restart, logs
 
 ```bash
 # Rebuild (npm install + build in site container; applies nginx routing at end)
@@ -192,8 +192,8 @@ docker exec "$(docker ps -q -f name=nginx)" nginx -t
 Sync custom domains from inside the site container (app must define `sync:dpanel-routing` in `package.json`):
 
 ```bash
-# Container name: <compose-project>-nuxt-<slug> (see: docker ps | grep nuxt)
-docker exec -it dpanel-nuxt-shop-example-com sh -c 'cd /app && set -a && [ -f .env ] && . ./.env; set +a && npm run sync:dpanel-routing'
+# Container name: <compose-project>-node-<slug> (see: docker ps | grep node-)
+docker exec -it dpanel-node-shop-example-com sh -c 'cd /app && set -a && [ -f .env ] && . ./.env; set +a && npm run sync:dpanel-routing'
 sudo bash /opt/stack/infra/scripts/site-routing-apply.sh shop.example.com
 ```
 

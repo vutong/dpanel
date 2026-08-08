@@ -49,7 +49,7 @@ _stack_compose_plugin_dirs() {
   fi
 }
 
-# docker compose with compose.yml + all compose.d/*.yml (per-site Nuxt services).
+# docker compose with compose.yml + all compose.d/*.yml (per-site Node SSR services).
 stack_compose() {
   local -a args=(-f "${STACK_ROOT}/compose.yml")
   local f plugin_dirs
@@ -108,9 +108,9 @@ _nginx_container_id() {
   [[ -n "${cid}" ]] && echo "${cid}"
 }
 
-_nuxt_container_name() {
+_node_container_name() {
   local slug="$1"
-  echo "$(_stack_project_name)-nuxt-${slug}"
+  echo "$(_stack_project_name)-node-${slug}"
 }
 
 docker_stop_container_by_name() {
@@ -266,21 +266,21 @@ print(float(d.get('cpuLimit') or 0), int(d.get('memoryMb') or 0), int(d.get('dis
   fi
 }
 
-write_nuxt_compose_fragment() {
+write_node_compose_fragment() {
   local domain="$1"
   local slug frag extras
   slug="$(site_slug "$domain")"
-  frag="${STACK_ROOT}/compose.d/nuxt-${slug}.yml"
+  frag="${STACK_ROOT}/compose.d/node-${slug}.yml"
   mkdir -p "${STACK_ROOT}/compose.d"
   # shellcheck source=/dev/null
   [[ -f "${STACK_ROOT}/.env" ]] && source "${STACK_ROOT}/.env"
   cat > "${frag}" <<EOF
 services:
-  nuxt-${slug}:
+  node-${slug}:
     build:
       context: ./infra/docker/node
       dockerfile: Dockerfile
-    container_name: ${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-dpanel}}-nuxt-${slug}
+    container_name: ${PROJECT_NAME:-${COMPOSE_PROJECT_NAME:-dpanel}}-node-${slug}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -371,8 +371,8 @@ server {
     resolver 127.0.0.11 valid=10s ipv6=off;
 
     location / {
-        set \$nuxt_upstream nuxt-${slug}:3000;
-        proxy_pass http://\$nuxt_upstream;
+        set \$node_upstream node-${slug}:3000;
+        proxy_pass http://\$node_upstream;
         proxy_http_version 1.1;
         proxy_connect_timeout 30s;
         proxy_send_timeout 300s;
@@ -442,7 +442,7 @@ sync_site_configs() {
   while IFS='|' read -r domain runtime; do
     [[ -n "${domain}" ]] || continue
     if [[ "${runtime}" == "node" ]]; then
-      write_nuxt_compose_fragment "${domain}"
+      write_node_compose_fragment "${domain}"
       write_nginx_node_site "${domain}"
     elif [[ "${runtime}" == "php" ]]; then
       write_nginx_php_site "${domain}"
@@ -463,8 +463,8 @@ stack_compose_up_sites() {
   stack_compose up -d --remove-orphans 2>/dev/null || true
 }
 
-# Wait until site Nuxt container is running and not in a restart loop.
-_nuxt_container_wait_ready() {
+# Wait until site Node container is running and not in a restart loop.
+_node_container_wait_ready() {
   local cname="$1"
   local max_wait="${2:-90}"
   local i cid status restarting
@@ -482,7 +482,7 @@ _nuxt_container_wait_ready() {
   return 1
 }
 
-_nuxt_container_log_tail() {
+_node_container_log_tail() {
   local cname="$1"
   local lines="${2:-60}"
   echo "[dpanel] --- docker logs ${cname} (last ${lines} lines) ---" >&2
@@ -490,15 +490,15 @@ _nuxt_container_log_tail() {
   echo "[dpanel] --- end docker logs ---" >&2
 }
 
-# npm install + build inside the per-site Nuxt container, then restart (caller should hold site_ops_lock).
-nuxt_container_build() {
+# npm install + build inside the per-site Node container, then restart (caller should hold site_ops_lock).
+node_container_build() {
   local domain="$1"
   local node_modules_mode="${2:-auto}"
-  local slug svc cname nuxt_cid app_dir
+  local slug svc cname node_cid app_dir
   [[ -n "${domain}" ]] || return 1
   slug="$(site_slug "${domain}")"
-  svc="nuxt-${slug}"
-  cname="$(_nuxt_container_name "${slug}")"
+  svc="node-${slug}"
+  cname="$(_node_container_name "${slug}")"
   app_dir="${STACK_ROOT}/apps/${domain}"
 
   [[ -f "${app_dir}/package.json" ]] || {
@@ -509,14 +509,14 @@ nuxt_container_build() {
   cd "${STACK_ROOT}"
   stack_compose up -d "${svc}" 2>/dev/null || true
 
-  nuxt_cid="$(_nuxt_container_wait_ready "${cname}" 90)" || {
-    echo "[dpanel] Nuxt container not ready (${cname}) — check: docker ps -a | grep ${slug}" >&2
-    _nuxt_container_log_tail "${cname}" 40
+  node_cid="$(_node_container_wait_ready "${cname}" 90)" || {
+    echo "[dpanel] Node container not ready (${cname}) — check: docker ps -a | grep ${slug}" >&2
+    _node_container_log_tail "${cname}" 40
     return 1
   }
 
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
-  docker exec -e DPANEL_NODE_MODULES_MODE="${node_modules_mode}" "${nuxt_cid}" bash -lc '
+  docker exec -e DPANEL_NODE_MODULES_MODE="${node_modules_mode}" "${node_cid}" bash -lc '
     set -euo pipefail
     if [ -f .env ]; then set -a; . ./.env; set +a; fi
     mode="${DPANEL_NODE_MODULES_MODE:-auto}"
@@ -553,7 +553,7 @@ nuxt_container_build() {
     fi
     npm run build
   ' || {
-    _nuxt_container_log_tail "${cname}" 40
+    _node_container_log_tail "${cname}" 40
     return 1
   }
 
@@ -565,27 +565,27 @@ nuxt_container_build() {
   echo "[dpanel] Restarting ${cname}…" >&2
   docker restart "${cname}" 2>/dev/null || return 1
 
-  nuxt_cid="$(_nuxt_container_wait_ready "${cname}" 90)" || {
+  node_cid="$(_node_container_wait_ready "${cname}" 90)" || {
     echo "[dpanel] Container did not become ready after restart" >&2
-    _nuxt_container_log_tail "${cname}" 80
+    _node_container_log_tail "${cname}" 80
     return 1
   }
 
   local i
   for ((i = 0; i < 45; i++)); do
-    if docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
-      || docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    if docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
+      || docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
       echo "[dpanel] App responding on :3000" >&2
       break
     fi
     sleep 2
   done
 
-  if ! docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
-    && ! docker exec "${nuxt_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+  if ! docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
+    && ! docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
     echo "[dpanel] Build OK but app not listening on :3000 yet" >&2
-    _nuxt_container_log_tail "${cname}" 80
-    if ! docker exec "${nuxt_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
+    _node_container_log_tail "${cname}" 80
+    if ! docker exec "${node_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
       echo "[dpanel] Hint: add mongoose to package.json (npm install mongoose) and Rebuild" >&2
     fi
     if [[ ! -f "${app_dir}/.env" ]]; then
@@ -594,9 +594,9 @@ nuxt_container_build() {
     return 1
   fi
 
-  if docker exec "${nuxt_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
+  if docker exec "${node_cid}" sh -c 'node -e "const p=require(\"./package.json\"); process.exit(p.scripts && p.scripts[\"sync:dpanel-routing\"] ? 0 : 1)"' 2>/dev/null; then
     echo "[dpanel] Syncing custom store domains from MongoDB (sync:dpanel-routing)…" >&2
-    if ! docker exec "${nuxt_cid}" sh -c '
+    if ! docker exec "${node_cid}" sh -c '
       set -e
       if [ -f .env ]; then set -a; . ./.env; set +a; fi
       npm run sync:dpanel-routing
@@ -608,10 +608,10 @@ nuxt_container_build() {
   return 0
 }
 
-# After site create from panel: start Nuxt service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).
+# After site create from panel: start Node service + reload nginx (never "compose up nginx" — depends_on dpanel → 502).
 site_finalize_async() {
   local log_name="${1:-site-ops}"
-  local nuxt_svc="${2:-}"
+  local node_svc="${2:-}"
   mkdir -p "${STACK_ROOT}/logs/node"
   nohup bash -c "
     sleep 0.5
@@ -620,7 +620,7 @@ site_finalize_async() {
     # shellcheck source=_helpers.sh
     source \"\${STACK_ROOT}/infra/scripts/_helpers.sh\"
     site_ops_lock_acquire
-    [[ -n \"${nuxt_svc}\" ]] && stack_compose up -d \"${nuxt_svc}\" 2>/dev/null || true
+    [[ -n \"${node_svc}\" ]] && stack_compose up -d \"${node_svc}\" 2>/dev/null || true
     nginx_reload_stack 2>/dev/null || true
     site_ops_lock_release
   " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
@@ -631,9 +631,10 @@ site_finalize_async() {
 site_delete_finish_background() {
   local domain="$1"
   local slug="$2"
-  local had_nuxt="${3:-0}"
+  local had_node="${3:-0}"
   local app_dir="${STACK_ROOT}/apps/${domain}"
   local log_name="site-delete-${slug}"
+  local delete_log="${STACK_ROOT}/logs/node/${log_name}.log"
   mkdir -p "${STACK_ROOT}/logs/node"
   nohup bash -c "
     sleep 0.3
@@ -646,14 +647,15 @@ site_delete_finish_background() {
       rm -rf '${app_dir}'
       echo '[dpanel] Deleted ${app_dir}/' >&2
     fi
-    if [[ ${had_nuxt} -eq 1 ]]; then
-      docker_stop_container_by_name \"\$(_nuxt_container_name '${slug}')\"
+    if [[ ${had_node} -eq 1 ]]; then
+      docker_stop_container_by_name \"\$(_node_container_name '${slug}')\"
     fi
     prune_orphan_site_artifacts --no-up --docker-only 2>/dev/null || true
     nginx_reload_stack 2>/dev/null || true
     site_ops_lock_release
     echo '[dpanel] Site delete background done: ${domain}' >&2
-  " >> "${STACK_ROOT}/logs/node/${log_name}.log" 2>&1 &
+    rm -f '${delete_log}' 2>/dev/null || true
+  " >> "${delete_log}" 2>&1 &
   disown 2>/dev/null || true
 }
 
@@ -711,11 +713,11 @@ nginx_reload_stack() {
   return 1
 }
 
-# Legacy v1 nginx: proxy_pass http://nuxt-<slug>:3000 (resolved at boot → fails if container down).
-is_legacy_nuxt_vhost() {
+# Legacy v1 nginx: proxy_pass http://node-<slug>:3000 (resolved at boot → fails if container down).
+is_legacy_node_vhost() {
   local f="$1"
   [[ -f "$f" ]] || return 1
-  grep -qE 'proxy_pass[[:space:]]+http://nuxt-' "$f" 2>/dev/null \
+  grep -qE 'proxy_pass[[:space:]]+http://node-' "$f" 2>/dev/null \
     && ! grep -q 'resolver 127.0.0.11' "$f" 2>/dev/null
 }
 
@@ -736,7 +738,7 @@ with open(os.environ['SITES_FILE']) as f:
 " 2>/dev/null || true
 }
 
-# Rewrite or quarantine old static-upstream Nuxt vhosts (safe when nuxt container is not up yet).
+# Rewrite or quarantine old static-upstream Node vhosts (safe when node container is not up yet).
 fix_legacy_nginx_vhosts() {
   local f domain runtime
   mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
@@ -745,7 +747,7 @@ fix_legacy_nginx_vhosts() {
     [[ -f "$f" ]] || continue
     domain="$(basename "$f" .conf)"
     [[ "${domain}" == "00-default-404" || "${domain}" == "10-panel" ]] && continue
-    is_legacy_nuxt_vhost "$f" || continue
+    is_legacy_node_vhost "$f" || continue
     runtime="$(site_runtime_from_registry "${domain}")"
     if [[ "${runtime}" == "node" ]]; then
       write_nginx_node_site "${domain}"
@@ -757,7 +759,7 @@ fix_legacy_nginx_vhosts() {
   shopt -u nullglob
 }
 
-quarantine_legacy_static_nuxt_vhosts() {
+quarantine_legacy_static_node_vhosts() {
   local f domain moved=0
   mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
   shopt -s nullglob
@@ -765,7 +767,7 @@ quarantine_legacy_static_nuxt_vhosts() {
     [[ -f "$f" ]] || continue
     domain="$(basename "$f" .conf)"
     [[ "${domain}" == "00-default-404" || "${domain}" == "10-panel" ]] && continue
-    is_legacy_nuxt_vhost "$f" || continue
+    is_legacy_node_vhost "$f" || continue
     mv -f "$f" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${domain}.conf"
     moved=$((moved + 1))
   done
@@ -842,15 +844,15 @@ print(' '.join(domains))
     fi
   done
 
-  for f in "${STACK_ROOT}"/compose.d/nuxt-*.yml; do
+  for f in "${STACK_ROOT}"/compose.d/node-*.yml; do
     [[ -f "$f" ]] || continue
-    slug="${f##*/nuxt-}"
+    slug="${f##*/node-}"
     slug="${slug%.yml}"
     if ! _is_registered_slug "${slug}"; then
       if [[ "${docker_only}" -eq 1 ]]; then
-        docker_stop_container_by_name "$(_nuxt_container_name "${slug}")"
+        docker_stop_container_by_name "$(_node_container_name "${slug}")"
       else
-        svc="nuxt-${slug}"
+        svc="node-${slug}"
         stack_compose stop "${svc}" 2>/dev/null || true
         stack_compose rm -f "${svc}" 2>/dev/null || true
       fi

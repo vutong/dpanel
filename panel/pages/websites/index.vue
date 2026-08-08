@@ -23,7 +23,7 @@
             <td><strong>{{ s.domain }}</strong></td>
             <td>
               <span :class="s.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
-                {{ s.runtime }}
+                {{ runtimeLabel(s.runtime) }}
               </span>
             </td>
             <td class="github-cell">{{ s.githubUrl || '—' }}</td>

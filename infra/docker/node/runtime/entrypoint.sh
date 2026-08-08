@@ -12,7 +12,7 @@ if [ -f .env ]; then
   . ./.env
   set +a
   # shellcheck disable=SC1091
-  . /nuxt-env-bridge.sh 2>/dev/null || true
+  . /node-env-bridge.sh 2>/dev/null || true
 fi
 
 if [ -f package.json ]; then

@@ -56,6 +56,7 @@ stack_compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
    FLUSH PRIVILEGES;" 2>/dev/null \
   || die "Failed to reset password for user ${DB_USER}"
 
+# Preserve existing siteDomain (third arg omitted).
 db_registry_upsert "${DB_NAME}" "${DB_USER}" 2>/dev/null || true
 
 python3 -c "import json; print(json.dumps({'ok':True,'name':'${DB_NAME}','user':'${DB_USER}','password':'${DB_PASS}','action':'modify'}))"

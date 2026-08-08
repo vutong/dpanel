@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: site-app-restart.sh <domain>  (Node sites — restart Nuxt container)
+# Usage: site-app-restart.sh <domain>  (Node sites — restart Node container)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -14,8 +14,8 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
 
 SLUG="$(site_slug "${DOMAIN}")"
-SVC="nuxt-${SLUG}"
-cname="$(_nuxt_container_name "${SLUG}")"
+SVC="node-${SLUG}"
+cname="$(_node_container_name "${SLUG}")"
 
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 ensure_python3 || die "python3 required"

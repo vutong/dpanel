@@ -36,7 +36,7 @@ sys.exit(1)
 mkdir -p "${STACK_ROOT}/logs/node"
 
 if [[ "${OP}" == "container" ]]; then
-  cname="$(_nuxt_container_name "${SLUG}")"
+  cname="$(_node_container_name "${SLUG}")"
   if ! docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "${cname}"; then
     die "Container ${cname} not found"
   fi

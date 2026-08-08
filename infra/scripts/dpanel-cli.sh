@@ -46,7 +46,7 @@ Services
 
 Websites
   site-remove <domain>
-                             Remove site completely (nginx, apps/, compose.d, container)
+                             Remove site completely (nginx, apps/, compose.d, container, linked DBs)
 
 Security
   setpass <password>         Change panel login password

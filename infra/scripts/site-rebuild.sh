@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: site-rebuild.sh <domain>  (Node / Nuxt sites only)
+# Usage: site-rebuild.sh <domain>  (Node SSR sites only)
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -24,7 +24,7 @@ log() { echo "[dpanel] $*" >&2; }
 ensure_python3 || die "python3 required — run: sudo dpanel update"
 
 SLUG="$(site_slug "${DOMAIN}")"
-SVC="nuxt-${SLUG}"
+SVC="node-${SLUG}"
 LOG="${STACK_ROOT}/logs/node/site-rebuild-${SLUG}.log"
 
 mkdir -p "${STACK_ROOT}/logs/node"
@@ -48,7 +48,7 @@ with open(os.environ['SITES_FILE']) as f:
 sys.exit(1)
 " 2>/dev/null)" || die "Site not found"
 
-[[ "${RUNTIME}" == "node" ]] || die "Rebuild is only available for Node (Nuxt) sites"
+[[ "${RUNTIME}" == "node" ]] || die "Rebuild is only available for Node SSR sites"
 [[ -f "${APP_DIR}/package.json" ]] || die "No package.json in apps/${DOMAIN}/ — deploy code first"
 
 log "Rebuilding ${DOMAIN} (${SVC})…"
@@ -58,7 +58,7 @@ site_ops_lock_acquire
 trap site_ops_lock_release EXIT
 
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
-if ! nuxt_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
+if ! node_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
   if [[ -f "${APP_DIR}/.output/server/index.mjs" ]]; then
     die "Build finished but app did not start — check App logs (Eye), Edit .env (MONGODB_URI), and mongoose in package.json"
   fi

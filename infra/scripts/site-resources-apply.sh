@@ -13,9 +13,9 @@ export STACK_ROOT
 cd "${STACK_ROOT}"
 
 SLUG="$(site_slug "${DOMAIN}")"
-SVC="nuxt-${SLUG}"
+SVC="node-${SLUG}"
 
-write_nuxt_compose_fragment "${DOMAIN}"
+write_node_compose_fragment "${DOMAIN}"
 
 stack_compose up -d "${SVC}" 2>/dev/null || stack_compose up -d "${SVC}"
 

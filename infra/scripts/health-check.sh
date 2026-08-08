@@ -185,7 +185,7 @@ else
     prune_orphan_site_artifacts 2>/dev/null || true
     sync_site_configs 2>/dev/null || true
     fix_legacy_nginx_vhosts 2>/dev/null || true
-    quarantine_legacy_static_nuxt_vhosts 2>/dev/null || true
+    quarantine_legacy_static_node_vhosts 2>/dev/null || true
   fi
 
   step "Checking Docker services..."

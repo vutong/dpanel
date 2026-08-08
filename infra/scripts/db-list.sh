@@ -60,9 +60,11 @@ for name in sorted(mysql_dbs):
     if not user:
         candidates = grant_users.get(name) or []
         user = name if name in candidates else (candidates[0] if candidates else name)
+    site = (reg.get("siteDomain") or "").strip() or None
     out.append({
         "name": name,
         "user": user,
+        "siteDomain": site,
         "createdAt": reg.get("createdAt"),
     })
 

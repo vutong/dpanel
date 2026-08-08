@@ -193,7 +193,7 @@ preflight_checks() {
   local mem_kb
   mem_kb="$(grep MemTotal /proc/meminfo | awk '{print $2}')"
   if [[ "${mem_kb}" -lt 1800000 ]]; then
-    log "Warning: less than 2 GB RAM — Nuxt build may need swap (see README)"
+    log "Warning: less than 2 GB RAM — panel build may need swap (see README)"
   fi
   if [[ "${mem_kb}" -lt 1200000 && ! -f /swapfile ]]; then
     log "Tip: add swap before build: fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile"

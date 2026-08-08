@@ -14,7 +14,7 @@
         <div class="site-header-main">
           <h1>{{ site.domain }}</h1>
           <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
-            {{ site.runtime }}
+            {{ runtimeLabel(site.runtime) }}
           </span>
         </div>
         <dl class="meta-grid">
@@ -286,6 +286,8 @@
           <ul class="delete-list">
             <li>Panel registry, nginx, <code>apps/{{ site?.domain }}/</code></li>
             <li v-if="site?.runtime === 'node'">Docker service &amp; compose fragment</li>
+            <li>Linked MariaDB databases &amp; users</li>
+            <li>Routing, resource limits, site logs</li>
           </ul>
           <div class="field">
             <label class="label" :for="deleteInputId">

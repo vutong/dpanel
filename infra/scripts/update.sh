@@ -198,6 +198,10 @@ if [[ -f "${STACK_ROOT}/.env" ]]; then
   sed -i '/^MARIADB_DATABASE=/d; /^MARIADB_USER=/d; /^MARIADB_PASSWORD=/d' "${STACK_ROOT}/.env" 2>/dev/null || true
 fi
 
+log "Migrating compose nuxt-* → node-* (if any)..."
+bash "${STACK_ROOT}/infra/scripts/migrate-nuxt-to-node.sh" >> "${INSTALL_LOG}" 2>&1 \
+  || log "Warning: nuxt→node migrate had issues — see ${INSTALL_LOG}"
+
 run_nginx_reload() {
   [[ "${SKIP_NGINX_RELOAD}" -eq 0 ]] || return 0
   log "dpanel nginx-reload"

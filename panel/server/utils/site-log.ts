@@ -17,9 +17,9 @@ async function composeProjectName(): Promise<string> {
   return 'dpanel'
 }
 
-async function nuxtContainerNameAsync(domain: string): Promise<string> {
+async function nodeContainerNameAsync(domain: string): Promise<string> {
   const project = await composeProjectName()
-  return `${project}-nuxt-${domainSlug(domain)}`
+  return `${project}-node-${domainSlug(domain)}`
 }
 
 export async function clearSiteLog(domain: string, op: SiteLogKind) {
@@ -27,7 +27,7 @@ export async function clearSiteLog(domain: string, op: SiteLogKind) {
   await assertNodeSite(normalized)
 
   if (op === 'container') {
-    const cname = await nuxtContainerNameAsync(normalized)
+    const cname = await nodeContainerNameAsync(normalized)
     let logpath = ''
     try {
       const { stdout } = await execFileAsync('docker', ['inspect', '--format', '{{.LogPath}}', cname], {

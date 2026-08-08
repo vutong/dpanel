@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: site-app-logs.sh <domain> [lines]
-# Prints Docker logs for the site's Nuxt container (stdout for panel API).
+# Prints Docker logs for the site's Node container (stdout for panel API).
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -17,7 +17,7 @@ die() { echo "[dpanel] ERROR: $*" >&2; exit 1; }
 [[ "${LINES}" =~ ^[0-9]+$ ]] || die "lines must be a number"
 
 SLUG="$(site_slug "${DOMAIN}")"
-cname="$(_nuxt_container_name "${SLUG}")"
+cname="$(_node_container_name "${SLUG}")"
 
 if ! docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "${cname}"; then
   echo "[dpanel] Container ${cname} not found — create the site or run Rebuild first."

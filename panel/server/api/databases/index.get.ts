@@ -4,6 +4,7 @@ import { runScript, scriptErrorMessage } from '../../utils/stack'
 export type DatabaseEntry = {
   name: string
   user: string
+  siteDomain?: string | null
   createdAt?: string | null
 }
 

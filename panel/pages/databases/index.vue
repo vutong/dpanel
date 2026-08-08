@@ -16,6 +16,7 @@
           <tr>
             <th>Database</th>
             <th>User</th>
+            <th>Website</th>
             <th class="col-actions">Actions</th>
           </tr>
         </thead>
@@ -23,6 +24,16 @@
           <tr v-for="db in databases" :key="db.name">
             <td><strong>{{ db.name }}</strong></td>
             <td><code>{{ db.user }}</code></td>
+            <td>
+              <NuxtLink
+                v-if="db.siteDomain"
+                :to="`/websites/${encodeURIComponent(db.siteDomain)}`"
+                class="site-link"
+              >
+                {{ db.siteDomain }}
+              </NuxtLink>
+              <span v-else class="muted">—</span>
+            </td>
             <td class="col-actions">
               <div class="action-btns">
                 <IconButton
@@ -120,7 +131,12 @@
 </template>
 
 <script setup lang="ts">
-type DatabaseRow = { name: string; user: string; createdAt?: string | null }
+type DatabaseRow = {
+  name: string
+  user: string
+  siteDomain?: string | null
+  createdAt?: string | null
+}
 
 const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[] }>('/api/databases')
 const databases = computed(() => data.value?.databases ?? [])
@@ -239,6 +255,12 @@ async function confirmDelete() {
   overflow: visible;
 }
 code { font-size: 0.88rem; color: var(--muted); }
+.site-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.site-link:hover { text-decoration: underline; }
 .modal-backdrop {
   position: fixed;
   inset: 0;

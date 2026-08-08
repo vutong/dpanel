@@ -3,15 +3,33 @@ import { parseScriptJson, runScript } from '../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
-  const body = await readBody<{ name?: string; user?: string; password?: string }>(event)
+  const body = await readBody<{
+    name?: string
+    siteDomain?: string
+    user?: string
+    password?: string
+  }>(event)
   const name = (body.name || '').trim()
+  const siteDomain = (body.siteDomain || '').trim().toLowerCase()
+  const user = (body.user || '').trim()
+  const password = typeof body.password === 'string' ? body.password : ''
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: 'Database name is required' })
   }
+  if (!siteDomain) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Website is required — every database must belong to a site'
+    })
+  }
 
-  const args = [name]
-  if (body.user) args.push(body.user)
-  if (body.password) args.push(body.password)
+  const args = [name, siteDomain]
+  if (user) {
+    args.push(user)
+    if (password) args.push(password)
+  } else if (password) {
+    args.push('', password)
+  }
 
   try {
     const out = await runScript('db-create.sh', args)

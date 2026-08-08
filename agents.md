@@ -12,8 +12,8 @@ Ubuntu 24.04 LTS
     └── docker-compose stack (/opt/stack)
         ├── nginx (reverse proxy + phpMyAdmin /mariadb/)
         ├── dpanel (Nuxt SSR — control panel)
+        ├── node-<slug> (mỗi site Node SSR — compose.d/)
         ├── php-fpm (các site PHP)
-        ├── nuxt-<slug> (mỗi site Node — compose.d/)
         ├── mariadb
         ├── phpmyadmin
         └── redis
@@ -84,7 +84,7 @@ dpanel/
     │   │   ├── Dockerfile
     │   │   └── runtime/
     │   │       ├── entrypoint.sh
-    │   │       └── nuxt-env-bridge.sh
+    │   │       └── node-env-bridge.sh
     │   ├── site-resources-apply.sh
     │   ├── docker-stats.sh
     │   └── php/
@@ -110,7 +110,7 @@ dpanel/
 ├── install.sh                 # Bản copy từ repo
 ├── compose.yml
 ├── compose.d/                 # Mỗi site Node → 1 file (tự sinh)
-│   └── nuxt-<slug>.yml        # vd: nuxt-app-example-com.yml
+│   └── node-<slug>.yml        # vd: node-app-example-com.yml
 ├── .env                       # Mật khẩu DB, Redis, PANEL_DOMAIN, …
 │
 ├── panel/                     # Mã nguồn panel (để build lại)
@@ -141,7 +141,7 @@ dpanel/
 │   │   │   └── app/public/    # upload / media Laravel
 │   │   └── …
 │   │
-│   └── app.example.com/       # Ví dụ Node — Nuxt site
+│   └── app.example.com/       # Ví dụ Node SSR site
 │       ├── package.json
 │       ├── public/              # static / file tùy app
 │       ├── .output/
@@ -186,7 +186,7 @@ dpanel/
 |------------|---------|
 | Thư mục site | `apps/<domain>/` — domain thật, vd `shop.mydomain.com` |
 | Nginx vhost | `infra/nginx/conf.d/<domain>.conf` |
-| Site Node (Docker) | `compose.d/nuxt-<slug>.yml`, `<slug>` = domain đổi `.` → `-` |
+| Site Node (Docker) | `compose.d/node-<slug>.yml`, `<slug>` = domain đổi `.` → `-` |
 | Upload | **Không** có `data/uploads/` — mỗi framework tự quản trong `apps/<domain>/` |
 | Panel | Luôn 1 domain riêng → `apps/<PANEL_DOMAIN>/` |
 
@@ -197,10 +197,10 @@ dpanel/
 - Panel API gọi script trong `infra/scripts/` — không shell tùy ý từ UI.
 - Hub multi-store: app có `npm run sync:dpanel-routing` → sau Rebuild (app đã chạy) reconcile `extraDomains` từ MongoDB (`POST /api/internal/routing-reconcile` với API key headers); cuối Rebuild `site_apply_nginx_routing` ghi wildcard + extraDomains vào nginx. Wildcard chỉ cấu hình ở panel (globe), không qua sync script.
 - Site PHP: nginx → php-fpm, root `apps/<domain>/public`.
-- Site Node: service `nuxt-<slug>` trong `compose.d/`.
-- **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Nuxt: `public/` hoặc tùy app).
+- Site Node: service `node-<slug>` trong `compose.d/`.
+- **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Node SSR: `public/` hoặc tùy app).
 - Mật khẩu nhạy cảm chỉ trong `.env` và `data/panel/auth.json`.
-- **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB chỉ cho site PHP + menu tạo DB; **không** tạo database/user mặc định `dpanel` khi cài mới.
+- **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB dùng được cho **Node SSR** và **PHP** (mỗi DB bắt buộc gắn 1 website — `siteDomain` trong `databases.json`); xóa website → xóa luôn DB/user liên kết. **Không** tạo database/user mặc định `dpanel` khi cài mới.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
 - **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` with headers `x-dpanel-api-key` + `x-dpanel-api-secret` (Settings → API Keys, Read & Write). Host check: `GET /api/sites/check?domain=`.

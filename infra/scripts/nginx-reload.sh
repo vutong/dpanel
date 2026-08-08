@@ -14,6 +14,9 @@ source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-panel.local}"
 
+log "Migrating compose nuxt-* → node-* (if any)..."
+bash "${STACK_ROOT}/infra/scripts/migrate-nuxt-to-node.sh" || true
+
 PMA_ABSOLUTE_URI="http://${PANEL_DOMAIN}/mariadb/"
 if grep -q '^PMA_ABSOLUTE_URI=' "${STACK_ROOT}/.env" 2>/dev/null; then
   sed -i "s|^PMA_ABSOLUTE_URI=.*|PMA_ABSOLUTE_URI=${PMA_ABSOLUTE_URI}|" "${STACK_ROOT}/.env"
@@ -30,9 +33,9 @@ prune_orphan_site_artifacts
 log "Syncing site configs from sites.json..."
 sync_site_configs
 
-log "Migrating legacy Nuxt nginx vhosts (static upstream → resolver)..."
+log "Migrating legacy Node nginx vhosts (static upstream → resolver)..."
 fix_legacy_nginx_vhosts
-if quarantine_legacy_static_nuxt_vhosts; then
+if quarantine_legacy_static_node_vhosts; then
   log "Quarantined remaining legacy vhosts under conf.d/disabled/"
 fi
 

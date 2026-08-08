@@ -14,7 +14,7 @@
         <label class="label">Runtime</label>
         <select v-model="runtime" class="select" required>
           <option disabled value="">Select runtime</option>
-          <option value="node">Node (Nuxt SSR)</option>
+          <option value="node">Node (Nuxt, Next..)</option>
           <option value="php">PHP (Laravel / WordPress)</option>
         </select>
       </div>
@@ -158,7 +158,7 @@ async function submit() {
 
     message.value =
       runtime.value === 'node'
-        ? 'Website created. Deploy code if needed, then use Rebuild to build and run the Nuxt app.'
+        ? 'Website created. Deploy code if needed, then use Rebuild to build and run the Node SSR app.'
         : 'Website created successfully.'
     await navigateTo('/websites')
   } catch (e: unknown) {
