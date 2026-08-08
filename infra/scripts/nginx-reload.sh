@@ -14,6 +14,9 @@ source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 
 PANEL_DOMAIN="${PANEL_DOMAIN:-panel.local}"
 
+log "Purging expired soft-deleted sites..."
+bash "${STACK_ROOT}/infra/scripts/site-purge-expired.sh" || true
+
 log "Migrating compose nuxt-* → node-* (if any)..."
 bash "${STACK_ROOT}/infra/scripts/migrate-nuxt-to-node.sh" || true
 

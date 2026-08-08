@@ -1,6 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { beginSiteOp, runScriptDetached, stackRoot } from '../../../utils/stack'
-import { updateSiteGithubUrl } from '../../../utils/sites'
+import { assertSiteNotPending, getSite, updateSiteGithubUrl } from '../../../utils/sites'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -19,6 +19,8 @@ export default defineEventHandler(async (event) => {
   if (!domain) {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
   }
+
+  assertSiteNotPending(await getSite(domain))
 
   if (githubUrl) {
     await updateSiteGithubUrl(domain, githubUrl)

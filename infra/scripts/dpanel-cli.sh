@@ -45,8 +45,9 @@ Services
   restart [service]        Restart one or all services
 
 Websites
-  site-remove <domain>
-                             Remove site completely (nginx, apps/, compose.d, container, linked DBs)
+  site-remove <domain> [--soft|--purge]
+                             Soft-delete (default, 24h) or purge immediately
+  site-restore <domain>      Restore a soft-deleted site within 24h
 
 Security
   setpass <password>         Change panel login password
@@ -134,6 +135,9 @@ case "${CMD}" in
     ;;
   site-remove|site-delete)
     exec bash "${STACK_ROOT}/infra/scripts/site-delete.sh" "${@:2}"
+    ;;
+  site-restore)
+    exec bash "${STACK_ROOT}/infra/scripts/site-restore.sh" "${@:2}"
     ;;
   setpass)
     exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"

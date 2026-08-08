@@ -1,11 +1,12 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { normalizeSiteDomain } from '../../../utils/sites'
+import { assertSiteNotPending, getSite, normalizeSiteDomain } from '../../../utils/sites'
 import { writeSiteEnv } from '../../../utils/site-env'
 import { parseScriptJson, runScript } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
   const domain = normalizeSiteDomain(decodeURIComponent(getRouterParam(event, 'domain') || ''))
+  assertSiteNotPending(await getSite(domain))
   const body = await readBody<{ content?: string; restart?: boolean }>(event).catch(() => ({}))
 
   const result = await writeSiteEnv(domain, body?.content ?? '')

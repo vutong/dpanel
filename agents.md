@@ -93,6 +93,8 @@ dpanel/
     └── scripts/
         ├── site-create.sh
         ├── site-delete.sh
+        ├── site-restore.sh
+        ├── site-purge-expired.sh
         ├── site-list.sh
         ├── db-list.sh
         ├── db-create.sh
@@ -200,7 +202,8 @@ dpanel/
 - Site Node: service `node-<slug>` trong `compose.d/`.
 - **Upload:** không có `data/uploads/` — mỗi site tự quản trong `apps/<domain>/` (WordPress: `wp-content/uploads`, Laravel: `storage/app/public`, Node SSR: `public/` hoặc tùy app).
 - Mật khẩu nhạy cảm chỉ trong `.env` và `data/panel/auth.json`.
-- **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB dùng được cho **Node SSR** và **PHP** (mỗi DB bắt buộc gắn 1 website — `siteDomain` trong `databases.json`); xóa website → xóa luôn DB/user liên kết. **Không** tạo database/user mặc định `dpanel` khi cài mới.
+- **MariaDB:** panel không dùng MySQL (`sites.json`, `auth.json`). MariaDB dùng được cho **Node SSR** và **PHP** (mỗi DB bắt buộc gắn 1 website — `siteDomain` trong `databases.json`); xóa website → soft-delete 24h rồi purge (DB/user liên kết giữ đến lúc xóa vĩnh viễn). **Không** tạo database/user mặc định `dpanel` khi cài mới.
+- **Website delete:** soft 24h (`pendingDeleteAt`) — offline nginx/container, có Restore; hết hạn hoặc Delete forever → purge sạch như trước.
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
 - **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` with headers `x-dpanel-api-key` + `x-dpanel-api-secret` (Settings → API Keys, Read & Write). Host check: `GET /api/sites/check?domain=`.

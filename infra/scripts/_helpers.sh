@@ -433,6 +433,7 @@ EOF
 }
 
 # Regenerate site nginx + compose.d from panel registry (fixes stale upstream configs).
+# Skips sites with pendingDeleteAt (soft-deleted — stay offline until restore or purge).
 sync_site_configs() {
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
   [[ -f "${sites_file}" ]] || return 0
@@ -453,7 +454,7 @@ with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         d = s.get('domain') or ''
         r = s.get('runtime') or ''
-        if d:
+        if d and not (s.get('pendingDeleteAt') or '').strip():
             print(f'{d}|{r}')
 " 2>/dev/null)
 }

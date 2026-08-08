@@ -7,6 +7,38 @@ export type SiteRecord = {
   runtime: string
   githubUrl?: string
   createdAt?: string
+  /** ISO UTC — set when soft-deleted; purge after 24h */
+  pendingDeleteAt?: string | null
+}
+
+export const SITE_PENDING_DELETE_HOURS = 24
+
+export function pendingDeleteExpiresAt(pendingDeleteAt: string): string {
+  const t = Date.parse(pendingDeleteAt)
+  if (Number.isNaN(t)) return pendingDeleteAt
+  return new Date(t + SITE_PENDING_DELETE_HOURS * 60 * 60 * 1000).toISOString()
+}
+
+export function isSitePendingDelete(site: SiteRecord): boolean {
+  return !!(site.pendingDeleteAt || '').trim()
+}
+
+export function assertSiteNotPending(site: SiteRecord): void {
+  if (isSitePendingDelete(site)) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Site is pending delete — Restore it first, or wait for permanent removal'
+    })
+  }
+}
+
+export function withPendingMeta<T extends SiteRecord>(site: T) {
+  const pending = (site.pendingDeleteAt || '').trim() || null
+  return {
+    ...site,
+    pendingDeleteAt: pending,
+    pendingDeleteExpiresAt: pending ? pendingDeleteExpiresAt(pending) : null
+  }
 }
 
 const DOMAIN_RE = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/

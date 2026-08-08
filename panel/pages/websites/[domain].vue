@@ -16,6 +16,9 @@
           <span :class="site.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
             {{ runtimeLabel(site.runtime) }}
           </span>
+          <span v-if="site.pendingDeleteAt" class="badge badge-pending">
+            Pending delete — expires {{ formatDate(site.pendingDeleteExpiresAt || undefined) }}
+          </span>
         </div>
         <dl class="meta-grid">
           <div>
@@ -43,7 +46,7 @@
 
       <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-      <section class="section">
+      <section v-if="!site.pendingDeleteAt" class="section">
         <h2 class="section-title">Deploy &amp; code</h2>
         <div class="tile-grid">
           <!-- PHP: Update from Git only. Node: pull / rebuild / pull+rebuild. -->
@@ -88,7 +91,27 @@
         </div>
       </section>
 
-      <section v-if="site.runtime === 'node'" class="section">
+      <section v-if="site.pendingDeleteAt" class="section">
+        <h2 class="section-title">Pending deletion</h2>
+        <p class="section-intro">
+          This site is offline. Restore within 24 hours or it will be permanently deleted
+          (including apps, containers, and linked MariaDB databases).
+        </p>
+        <div class="tile-grid">
+          <button type="button" class="tile" :disabled="busy" @click="restoreSite">
+            <AppIcon name="git-pull" :size="22" />
+            <span class="tile-title">Restore</span>
+            <span class="tile-desc">Bring site back online</span>
+          </button>
+          <button type="button" class="tile tile--danger" :disabled="busy" @click="openPurge">
+            <AppIcon name="trash" :size="22" />
+            <span class="tile-title">Delete forever</span>
+            <span class="tile-desc">Purge now — cannot undo</span>
+          </button>
+        </div>
+      </section>
+
+      <section v-if="site.runtime === 'node' && !site.pendingDeleteAt" class="section">
         <h2 class="section-title">Configuration</h2>
         <div class="tile-grid">
           <button type="button" class="tile" :disabled="busy" @click="routingOpen = true">
@@ -133,7 +156,7 @@
         </div>
       </section>
 
-      <section class="section section--danger">
+      <section v-if="!site.pendingDeleteAt" class="section section--danger">
         <button type="button" class="btn-delete-quiet" :disabled="busy" @click="openDelete">
           Delete website…
         </button>
@@ -285,17 +308,30 @@
 
     <div v-if="deleteOpen" class="modal-backdrop" @click.self="closeDelete">
       <div class="modal card" role="dialog" aria-labelledby="delete-title">
-        <h2 id="delete-title">Delete website</h2>
+        <h2 id="delete-title">{{ deleteForever ? 'Delete forever' : 'Delete website' }}</h2>
         <template v-if="deletePhase === 'confirm'">
-          <p class="muted">
-            This permanently removes <strong>{{ site?.domain }}</strong> and cannot be undone.
-          </p>
-          <ul class="delete-list">
-            <li>Panel registry, nginx, <code>apps/{{ site?.domain }}/</code></li>
-            <li v-if="site?.runtime === 'node'">Docker service &amp; compose fragment</li>
-            <li>Linked MariaDB databases &amp; users</li>
-            <li>Routing, resource limits, site logs</li>
-          </ul>
+          <template v-if="deleteForever">
+            <p class="muted">
+              Permanently remove <strong>{{ site?.domain }}</strong> now. This cannot be undone.
+            </p>
+            <ul class="delete-list">
+              <li>Panel registry, nginx, <code>apps/{{ site?.domain }}/</code></li>
+              <li v-if="site?.runtime === 'node'">Docker service &amp; compose fragment</li>
+              <li>Linked MariaDB databases &amp; users</li>
+              <li>Routing, resource limits, site logs</li>
+            </ul>
+          </template>
+          <template v-else>
+            <p class="muted">
+              <strong>{{ site?.domain }}</strong> will go offline and wait <strong>24 hours</strong> before
+              permanent deletion. You can Restore anytime within that window.
+            </p>
+            <ul class="delete-list">
+              <li>Public access stops (nginx + container offline)</li>
+              <li>Apps, compose, routing, and linked MariaDB are kept until purge</li>
+              <li>After 24 hours (or Delete forever), everything is removed</li>
+            </ul>
+          </template>
           <div class="field">
             <label class="label" :for="deleteInputId">
               Type <code>{{ site?.domain }}</code> to confirm
@@ -312,7 +348,9 @@
             />
           </div>
         </template>
-        <p v-else class="alert alert-info">Deletion is running…</p>
+        <p v-else class="alert alert-info">
+          {{ deleteForever ? 'Permanent deletion is running…' : 'Site marked for deletion…' }}
+        </p>
         <div class="modal-actions">
           <button v-if="deletePhase === 'confirm'" type="button" class="btn btn-ghost" @click="closeDelete">
             Cancel
@@ -324,7 +362,7 @@
             :disabled="!deleteConfirmMatches"
             @click="confirmDelete"
           >
-            Delete permanently
+            {{ deleteForever ? 'Delete forever' : 'Schedule delete (24h)' }}
           </button>
           <button v-else type="button" class="btn btn-primary" @click="closeDelete">Close</button>
         </div>
@@ -334,7 +372,14 @@
 </template>
 
 <script setup lang="ts">
-type Site = { domain: string; runtime: string; githubUrl?: string; createdAt?: string }
+type Site = {
+  domain: string
+  runtime: string
+  githubUrl?: string
+  createdAt?: string
+  pendingDeleteAt?: string | null
+  pendingDeleteExpiresAt?: string | null
+}
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
 type SiteOpKind = 'update' | 'rebuild'
 type NodeModulesMode = 'auto' | 'keep' | 'clean'
@@ -571,7 +616,18 @@ async function onResourcesSaved() {
   showAlert('Resource limits saved and container updated', true)
 }
 
+const deleteForever = ref(false)
+
 function openDelete() {
+  deleteForever.value = false
+  deleteOpen.value = true
+  deletePhase.value = 'confirm'
+  deleteConfirm.value = ''
+  clearAlert()
+}
+
+function openPurge() {
+  deleteForever.value = true
   deleteOpen.value = true
   deletePhase.value = 'confirm'
   deleteConfirm.value = ''
@@ -582,16 +638,43 @@ function closeDelete() {
   deleteOpen.value = false
   deletePhase.value = 'confirm'
   deleteConfirm.value = ''
+  deleteForever.value = false
+}
+
+async function restoreSite() {
+  if (!site.value || busy.value) return
+  busy.value = true
+  clearAlert()
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/restore`, { method: 'POST' })
+    showAlert(`Restored ${site.value.domain}`, true)
+    await refresh()
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Restore failed', false)
+  } finally {
+    busy.value = false
+  }
 }
 
 function confirmDelete() {
   if (!site.value || deletePhase.value !== 'confirm' || !deleteConfirmMatches.value) return
   const domain = site.value.domain
+  const forever = deleteForever.value
   deletePhase.value = 'background'
-  void $fetch(`/api/websites/${encodeURIComponent(domain)}`, { method: 'DELETE' })
-    .then(() => {
-      showAlert(`Deleting ${domain}…`, true)
-      setTimeout(() => navigateTo('/websites'), 2500)
+  const url = forever
+    ? `/api/websites/${encodeURIComponent(domain)}?forever=1`
+    : `/api/websites/${encodeURIComponent(domain)}`
+  void $fetch(url, { method: 'DELETE' })
+    .then(async () => {
+      if (forever) {
+        showAlert(`Purging ${domain}…`, true)
+        setTimeout(() => navigateTo('/websites'), 2500)
+      } else {
+        showAlert(`${domain} scheduled for deletion (24h). You can Restore anytime.`, true)
+        closeDelete()
+        await refresh()
+      }
     })
     .catch((e: unknown) => {
       const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -705,6 +788,13 @@ button.tile:hover:not(:disabled) {
 .tile--muted {
   cursor: default;
   opacity: 0.75;
+}
+.tile--danger {
+  border-color: rgba(220, 38, 38, 0.35);
+}
+.tile--danger:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.65);
+  background: rgba(220, 38, 38, 0.06);
 }
 .tile--soon {
   cursor: default;

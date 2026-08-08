@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Usage: site-delete.sh <domain>
-# Full removal: sites.json, linked MariaDB DBs, nginx, compose.d, container,
-# apps/<domain>/, site-routing, site-resources, site-ops, site logs (no leftovers)
+# Usage: site-delete.sh <domain> [--soft|--purge]
+#   --soft  (default) Mark pendingDeleteAt, offline nginx, stop Node — keep apps/DB 24h
+#   --purge Full removal: registry, DBs, nginx, compose, apps/, routing, logs
 set -euo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/stack}"
@@ -11,22 +11,24 @@ source "${STACK_ROOT}/infra/scripts/_helpers.sh"
 source "${STACK_ROOT}/infra/scripts/_db_registry.sh"
 
 DOMAIN="${1:-}"
+MODE="soft"
+
+log() { echo "[dpanel] $*" >&2; }
+die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
+
 shift 2>/dev/null || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --purge) ;; # legacy flag, always purges app files
+    --soft) MODE="soft" ;;
+    --purge) MODE="purge" ;;
     -h|--help)
-      echo "Usage: site-delete.sh <domain>" >&2
+      echo "Usage: site-delete.sh <domain> [--soft|--purge]" >&2
       exit 0
       ;;
     *) die "Unknown option: $1" ;;
   esac
   shift
 done
-
-log() { echo "[dpanel] $*" >&2; }
-
-die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 [[ -n "${DOMAIN}" ]] || die "Missing domain"
 [[ "${DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || die "Invalid domain"
@@ -49,19 +51,77 @@ ensure_python3 || die "python3 required"
 export SITES_FILE DOMAIN="${DOMAIN}"
 
 RUNTIME=""
+PENDING=""
 if [[ -f "${SITES_FILE}" ]]; then
-  RUNTIME="$("${PYBIN}" -c "
+  read -r RUNTIME PENDING < <("${PYBIN}" -c "
 import json, os
 domain = os.environ['DOMAIN']
 with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         if s.get('domain') == domain:
-            print(s.get('runtime') or '')
+            print((s.get('runtime') or '').strip())
+            print((s.get('pendingDeleteAt') or '').strip())
             break
-" 2>/dev/null || true)"
+" 2>/dev/null || true)
 fi
 
-log "Removing website: ${DOMAIN} (runtime=${RUNTIME:-unknown}, full purge)"
+[[ -n "${RUNTIME}" || -f "${SITES_FILE}" ]] || die "sites.json not found"
+
+# --- Soft delete: keep site in registry, offline only ---
+if [[ "${MODE}" == "soft" ]]; then
+  [[ -f "${SITES_FILE}" ]] || die "sites.json not found"
+  export SITES_FILE DOMAIN
+  EXPIRES="$("${PYBIN}" <<'PY'
+import json, os
+from datetime import datetime, timezone, timedelta
+
+path = os.environ["SITES_FILE"]
+domain = os.environ["DOMAIN"]
+now = datetime.now(timezone.utc)
+pending = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+expires = (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+with open(path) as f:
+    sites = json.load(f)
+found = False
+for s in sites:
+    if s.get("domain") == domain:
+        s["pendingDeleteAt"] = pending
+        found = True
+        break
+if not found:
+    raise SystemExit(1)
+with open(path, "w") as f:
+    json.dump(sites, f, indent=2)
+print(expires)
+PY
+)" || die "Site not found in sites.json"
+
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+  active_conf="${STACK_ROOT}/infra/nginx/conf.d/${DOMAIN}.conf"
+  if [[ -f "${active_conf}" ]]; then
+    mv -f "${active_conf}" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${DOMAIN}.conf"
+    REMOVED+=("nginx:quarantined")
+    log "Quarantined nginx vhost for ${DOMAIN}"
+  fi
+
+  if [[ "${RUNTIME}" == "node" ]] || [[ -f "${STACK_ROOT}/compose.d/node-${SLUG}.yml" ]]; then
+    docker_stop_container_by_name "$(_node_container_name "${SLUG}")"
+    REMOVED+=("container:stopped")
+    log "Stopped Node container for ${DOMAIN}"
+  fi
+
+  nginx_reload_stack 2>/dev/null || true
+
+  printf '{"ok":true,"domain":"%s","soft":true,"expiresAt":"%s"}\n' \
+    "${DOMAIN}" "${EXPIRES}"
+
+  log "Done — ${DOMAIN} pending delete until ${EXPIRES} (Restore within 24h)"
+  exit 0
+fi
+
+# --- Purge: full removal ---
+log "Purging website: ${DOMAIN} (runtime=${RUNTIME:-unknown})"
 
 if [[ -f "${SITES_FILE}" ]]; then
   if ! "${PYBIN}" <<'PY'; then
@@ -84,7 +144,6 @@ else
   die "sites.json not found"
 fi
 
-# Drop MariaDB databases linked to this site (registry + DROP DATABASE/USER).
 while IFS= read -r db_name; do
   [[ -n "${db_name}" ]] || continue
   log "Deleting linked database: ${db_name}"
@@ -138,7 +197,6 @@ for conf in \
   fi
 done
 
-# Site operation logs (create / rebuild / update). Delete log cleaned after background finish.
 for op in create rebuild update; do
   log_file="${STACK_ROOT}/logs/node/site-${op}-${SLUG}.log"
   if [[ -f "${log_file}" ]]; then
@@ -162,7 +220,6 @@ print(json.dumps(items))
 printf '{"ok":true,"domain":"%s","purged":true,"removed":%s,"deletedDatabases":%s}\n' \
   "${DOMAIN}" "${REMOVED_JSON}" "${DELETED_DBS_JSON}"
 
-# Slow work in background: rm apps/, docker stop Node, nginx reload — never stack_compose up/stop (502 panel).
 site_delete_finish_background "${DOMAIN}" "${SLUG}" "${HAD_NODE}"
 
-log "Done — ${DOMAIN} unregistered (background: logs/node/site-delete-${SLUG}.log)" >&2
+log "Done — ${DOMAIN} purged (background: logs/node/site-delete-${SLUG}.log)" >&2

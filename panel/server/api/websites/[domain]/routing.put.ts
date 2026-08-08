@@ -1,5 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { assertNodeSite, normalizeSiteDomain } from '../../../utils/sites'
+import { assertNodeSite, assertSiteNotPending, getSite, normalizeSiteDomain } from '../../../utils/sites'
 import { readSiteRouting, writeSiteRouting } from '../../../utils/site-routing'
 import { runScript } from '../../../utils/stack'
 
@@ -7,6 +7,7 @@ export default defineEventHandler(async (event) => {
   requireAuth(event)
   const domain = normalizeSiteDomain(decodeURIComponent(getRouterParam(event, 'domain') || ''))
   await assertNodeSite(domain)
+  assertSiteNotPending(await getSite(domain))
 
   const body = await readBody<{ wildcardBase?: string }>(event).catch(() => ({}))
 
