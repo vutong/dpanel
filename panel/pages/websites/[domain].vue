@@ -46,8 +46,9 @@
       <section class="section">
         <h2 class="section-title">Deploy &amp; code</h2>
         <div class="tile-grid">
+          <!-- PHP: Update from Git only. Node: pull / rebuild / pull+rebuild. -->
           <button
-            v-if="site.githubUrl"
+            v-if="site.runtime === 'php' || site.githubUrl"
             type="button"
             class="tile"
             :disabled="busy"
@@ -55,7 +56,7 @@
           >
             <AppIcon name="git-pull" :size="22" />
             <span class="tile-title">Update from Git</span>
-            <span class="tile-desc">Pull latest commit</span>
+            <span class="tile-desc">{{ site.runtime === 'php' ? 'Pull latest from GitHub' : 'Pull latest commit' }}</span>
           </button>
           <button
             v-if="site.runtime === 'node'"
@@ -79,10 +80,10 @@
             <span class="tile-title">Update</span>
             <span class="tile-desc">Pull from Git then rebuild</span>
           </button>
-          <div v-if="!site.githubUrl && site.runtime !== 'node'" class="tile tile--muted">
+          <div v-if="site.runtime === 'node' && !site.githubUrl" class="tile tile--muted">
             <AppIcon name="git-pull" :size="22" />
             <span class="tile-title">No Git remote</span>
-            <span class="tile-desc">Upload files to apps/{{ site.domain }}/</span>
+            <span class="tile-desc">Add a GitHub URL via Update, or deploy to apps/{{ site.domain }}/</span>
           </div>
         </div>
       </section>
@@ -239,8 +240,14 @@
             Checkout (git)
           </label>
           <p class="hint">
-            Run <code>git restore .</code> before pull — discards local changes (e.g. after Rebuild modified
-            <code>package-lock.json</code>).
+            <template v-if="site?.runtime === 'node'">
+              Run <code>git restore .</code> before pull — discards local changes (e.g. after Rebuild modified
+              <code>package-lock.json</code>).
+            </template>
+            <template v-else>
+              Run <code>git restore .</code> before pull — discards local changes in
+              <code>apps/{{ site?.domain }}/</code>.
+            </template>
           </p>
         </div>
         <fieldset v-if="updateMode === 'full'" class="rebuild-mode-group">

@@ -21,15 +21,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { alreadyRunning } = beginSystemUpdate('Starting dpanel update…')
-  if (!alreadyRunning) {
-    runScriptDetached('panel-update.sh', [], {}, undefined, undefined)
-  }
+  // Always force-kill prior job, clear lock + log, then start fresh.
+  beginSystemUpdate('Starting dpanel update…')
+  runScriptDetached('panel-update.sh', [], {}, undefined, undefined)
 
   return {
     ok: true,
-    accepted: !alreadyRunning,
-    alreadyRunning,
+    accepted: true,
     background: true,
     op: 'update' as const,
     script: scriptPath('panel-update.sh').replace(`${stackRoot()}/`, '')

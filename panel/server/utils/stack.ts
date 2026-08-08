@@ -1,5 +1,5 @@
 import { execFile, spawn, spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, openSync, rmdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -78,20 +78,34 @@ export type SystemUpdateStatus = {
 }
 
 /**
- * Clear any stuck prior run (log + lock + status) before starting update/rebuild.
- * Avoids the stream modal hanging on a stale `running` / leftover `{"ok":false}` log.
+ * Clear any prior run (force-kill + lock + log) before starting update/rebuild.
+ * Always restarts from scratch — never attaches to a stuck job.
  */
 export function beginSiteOp(domain: string, op: SiteOpKind, message: string): void {
+  const safeDomain = domain.replace(/[^a-zA-Z0-9.-]/g, '')
+  // Kill in-flight pull/rebuild for this site (and shared site-ops lock holders).
+  spawnSync(
+    'bash',
+    [
+      '-lc',
+      [
+        `pkill -9 -f 'site-update\\.sh ${safeDomain}' 2>/dev/null || true`,
+        `pkill -9 -f 'site-rebuild\\.sh ${safeDomain}' 2>/dev/null || true`,
+        'sleep 0.2'
+      ].join('; ')
+    ],
+    { timeout: 12_000, encoding: 'utf8' }
+  )
+
+  try {
+    rmSync(join(stackRoot(), 'data', 'panel', '.site-ops.lock'), { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+
   const logPath = siteOpLogPath(domain, op)
   mkdirSync(dirname(logPath), { recursive: true })
   writeFileSync(logPath, '', 'utf8')
-
-  // Stale lock from a killed rebuild can block the next build for minutes.
-  try {
-    rmdirSync(join(stackRoot(), 'data', 'panel', '.site-ops.lock'))
-  } catch {
-    /* not held or not empty — ignore */
-  }
 
   writeSiteOpStatus(domain, op, 'running', message)
 }
@@ -108,7 +122,7 @@ export function systemUpdateLockPath(): string {
   return join(stackRoot(), 'data', 'panel', '.update-lock')
 }
 
-/** True if an update.sh / panel-update-host process is alive on the host. */
+/** True if an update.sh / panel-update-host process is alive. */
 export function isSystemUpdateProcessAlive(): boolean {
   try {
     const r = spawnSync(
@@ -126,34 +140,38 @@ export function isSystemUpdateProcessAlive(): boolean {
 }
 
 /**
- * Prepare a fresh UI-triggered update: clear stale lock/log, mark running.
- * If a real update is already in progress, returns alreadyRunning without wiping the log.
+ * Force-restart a UI-triggered dpanel update: kill any in-flight job, drop lock, clear log.
  */
-export function beginSystemUpdate(message: string): { alreadyRunning: boolean } {
-  const alive = isSystemUpdateProcessAlive()
-  const lockPath = systemUpdateLockPath()
+export function beginSystemUpdate(message: string): void {
+  spawnSync(
+    'bash',
+    [
+      '-lc',
+      [
+        "pkill -9 -f 'infra/scripts/panel-update\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'infra/scripts/panel-update-host\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'infra/scripts/update\\.sh' 2>/dev/null || true",
+        // Alpine chroot runner from panel-update.sh
+        `for id in $(docker ps -q 2>/dev/null); do
+           cmd=$(docker inspect -f '{{json .Config.Cmd}}' "$id" 2>/dev/null || true)
+           echo "$cmd" | grep -q 'panel-update-host' && docker kill "$id" 2>/dev/null || true
+         done`,
+        'sleep 0.3'
+      ].join('; ')
+    ],
+    { timeout: 20_000, encoding: 'utf8' }
+  )
 
-  if (alive) {
-    writeSystemUpdateStatus('running', message || 'Update already in progress…')
-    return { alreadyRunning: true }
-  }
-
-  // Stale lock from a killed/crashed update blocks every later click.
   try {
-    rmdirSync(lockPath)
+    rmSync(systemUpdateLockPath(), { recursive: true, force: true })
   } catch {
-    try {
-      rmSync(lockPath, { recursive: true, force: true })
-    } catch {
-      /* ignore */
-    }
+    /* ignore */
   }
 
   const logPath = systemUpdateLogPath()
   mkdirSync(dirname(logPath), { recursive: true })
   writeFileSync(logPath, '', 'utf8')
   writeSystemUpdateStatus('running', message)
-  return { alreadyRunning: false }
 }
 
 export function writeSystemUpdateStatus(
