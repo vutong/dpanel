@@ -1,16 +1,13 @@
 import { requireAuth } from '../../utils/auth-guard'
 import { parseScriptJson, runScript, runScriptDetached, stackRoot } from '../../utils/stack'
+import { getSite, isSitePendingDelete, normalizeSiteDomain } from '../../utils/sites'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
-  const domain = decodeURIComponent(getRouterParam(event, 'domain') || '').trim().toLowerCase()
+  const domain = normalizeSiteDomain(decodeURIComponent(getRouterParam(event, 'domain') || ''))
   const forever = String(getQuery(event).forever || '') === '1'
-
-  if (!domain) {
-    throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
-  }
 
   const script = join(stackRoot(), 'infra', 'scripts', 'site-delete.sh')
   try {
@@ -19,7 +16,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: 'site-delete.sh not found — run: sudo dpanel update' })
   }
 
+  const site = await getSite(domain)
+
   if (forever) {
+    if (!isSitePendingDelete(site)) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: 'Delete forever is only allowed while the site is pending delete — soft-delete first'
+      })
+    }
     runScriptDetached('site-delete.sh', [domain, '--purge'])
     return {
       ok: true,

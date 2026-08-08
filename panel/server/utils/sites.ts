@@ -11,7 +11,10 @@ export type SiteRecord = {
   pendingDeleteAt?: string | null
 }
 
-export const SITE_PENDING_DELETE_HOURS = 24
+export const SITE_PENDING_DELETE_HOURS = Math.max(
+  1,
+  Number(process.env.SITE_PENDING_DELETE_HOURS) || 24
+)
 
 export function pendingDeleteExpiresAt(pendingDeleteAt: string): string {
   const t = Date.parse(pendingDeleteAt)

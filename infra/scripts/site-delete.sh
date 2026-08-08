@@ -71,28 +71,43 @@ fi
 if [[ "${MODE}" == "soft" ]]; then
   [[ -f "${SITES_FILE}" ]] || die "sites.json not found"
   export SITES_FILE DOMAIN
+  export SITE_PENDING_DELETE_HOURS="${SITE_PENDING_DELETE_HOURS:-24}"
   EXPIRES="$("${PYBIN}" <<'PY'
 import json, os
 from datetime import datetime, timezone, timedelta
 
 path = os.environ["SITES_FILE"]
 domain = os.environ["DOMAIN"]
+hours = int(os.environ.get("SITE_PENDING_DELETE_HOURS") or "24")
 now = datetime.now(timezone.utc)
-pending = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-expires = (now + timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 with open(path) as f:
     sites = json.load(f)
 found = False
+pending_raw = ""
 for s in sites:
     if s.get("domain") == domain:
-        s["pendingDeleteAt"] = pending
         found = True
+        existing = (s.get("pendingDeleteAt") or "").strip()
+        if existing:
+            # Idempotent: keep original timestamp (do not reset 24h window)
+            pending_raw = existing
+        else:
+            pending_raw = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            s["pendingDeleteAt"] = pending_raw
         break
 if not found:
     raise SystemExit(1)
 with open(path, "w") as f:
     json.dump(sites, f, indent=2)
+
+try:
+    ts = datetime.fromisoformat(pending_raw.replace("Z", "+00:00"))
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+except ValueError:
+    ts = now
+expires = (ts + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
 print(expires)
 PY
 )" || die "Site not found in sites.json"

@@ -459,9 +459,42 @@ with open(os.environ['SITES_FILE']) as f:
 " 2>/dev/null)
 }
 
+# Soft-deleted sites must stay offline: quarantine any active nginx + stop Node containers.
+ensure_pending_sites_offline() {
+  local sites_file="${STACK_ROOT}/data/panel/sites.json"
+  [[ -f "${sites_file}" ]] || return 0
+  ensure_python3 >/dev/null 2>&1 || return 0
+
+  export SITES_FILE="${sites_file}"
+  mkdir -p "${STACK_ROOT}/infra/nginx/conf.d/disabled"
+
+  while IFS='|' read -r domain runtime; do
+    [[ -n "${domain}" ]] || continue
+    local active="${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf"
+    if [[ -f "${active}" ]]; then
+      mv -f "${active}" "${STACK_ROOT}/infra/nginx/conf.d/disabled/${domain}.conf" 2>/dev/null || true
+    fi
+    if [[ "${runtime}" == "node" ]]; then
+      local slug
+      slug="$(site_slug "${domain}")"
+      docker_stop_container_by_name "$(_node_container_name "${slug}")"
+    fi
+  done < <("${PYBIN}" -c "
+import json, os
+with open(os.environ['SITES_FILE']) as f:
+    for s in json.load(f):
+        d = (s.get('domain') or '').strip()
+        if d and (s.get('pendingDeleteAt') or '').strip():
+            r = (s.get('runtime') or '').strip()
+            print(f'{d}|{r}')
+" 2>/dev/null)
+}
+
 stack_compose_up_sites() {
   cd "${STACK_ROOT}"
   stack_compose up -d --remove-orphans 2>/dev/null || true
+  # Soft-deleted sites stay in sites.json + compose.d — compose up would restart them.
+  ensure_pending_sites_offline
 }
 
 # Wait until site Node container is running and not in a restart loop.
@@ -865,4 +898,5 @@ print(' '.join(domains))
   [[ "${skip_up}" -eq 1 ]] && return 0
   cd "${STACK_ROOT}"
   stack_compose up -d --remove-orphans 2>/dev/null || true
+  ensure_pending_sites_offline
 }

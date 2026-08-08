@@ -77,7 +77,20 @@ if [[ "${MATCH_DOMAIN}" == "AMBIGUOUS" ]]; then
   die "Host maps to multiple sites: ${RUNTIME} — pass the primary site domain"
 fi
 DOMAIN="${MATCH_DOMAIN}"
+export DOMAIN
 [[ "${RUNTIME}" == "node" ]] || die "Routing apply is only available for Node sites"
+
+# Soft-deleted sites must not regain an active nginx vhost.
+PENDING="$("${PYBIN}" -c "
+import json, os
+domain = os.environ.get('DOMAIN', '')
+with open(os.environ['SITES_FILE']) as f:
+    for s in json.load(f):
+        if (s.get('domain') or '').strip().lower() == domain.strip().lower():
+            print((s.get('pendingDeleteAt') or '').strip())
+            break
+" 2>/dev/null || true)"
+[[ -z "${PENDING}" ]] || die "Site is pending delete — restore before applying routing"
 
 site_apply_nginx_routing "${DOMAIN}" || die "nginx routing apply failed"
 

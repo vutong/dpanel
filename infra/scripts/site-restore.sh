@@ -58,7 +58,9 @@ if [[ "${RUNTIME}" == "node" ]]; then
   write_node_compose_fragment "${DOMAIN}"
   write_nginx_node_site "${DOMAIN}"
   cd "${STACK_ROOT}"
-  stack_compose up -d "node-${SLUG}" 2>/dev/null || true
+  if ! stack_compose up -d "node-${SLUG}"; then
+    die "Failed to start Node container for ${DOMAIN}"
+  fi
 elif [[ "${RUNTIME}" == "php" ]]; then
   write_nginx_php_site "${DOMAIN}"
 else

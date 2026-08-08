@@ -1,5 +1,6 @@
 import { requireAuth } from '../../utils/auth-guard'
 import { parseScriptJson, runScript } from '../../utils/stack'
+import { assertSiteNotPending, getSite, normalizeSiteDomain } from '../../utils/sites'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -10,18 +11,21 @@ export default defineEventHandler(async (event) => {
     password?: string
   }>(event)
   const name = (body.name || '').trim()
-  const siteDomain = (body.siteDomain || '').trim().toLowerCase()
-  const user = (body.user || '').trim()
-  const password = typeof body.password === 'string' ? body.password : ''
+  const rawSiteDomain = (body.siteDomain || '').trim()
   if (!name) {
     throw createError({ statusCode: 400, statusMessage: 'Database name is required' })
   }
-  if (!siteDomain) {
+  if (!rawSiteDomain) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Website is required — every database must belong to a site'
     })
   }
+  const siteDomain = normalizeSiteDomain(rawSiteDomain)
+  const user = (body.user || '').trim()
+  const password = typeof body.password === 'string' ? body.password : ''
+
+  assertSiteNotPending(await getSite(siteDomain))
 
   const args = [name, siteDomain]
   if (user) {
