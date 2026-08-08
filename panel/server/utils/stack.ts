@@ -1,5 +1,5 @@
-import { execFile, spawn } from 'node:child_process'
-import { chmodSync, mkdirSync, openSync, rmdirSync, writeFileSync } from 'node:fs'
+import { execFile, spawn, spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, openSync, rmdirSync, rmSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -102,6 +102,58 @@ export function systemUpdateLogPath(): string {
 
 export function systemUpdateStatusPath(): string {
   return join(stackRoot(), 'data', 'panel', 'system-update.json')
+}
+
+export function systemUpdateLockPath(): string {
+  return join(stackRoot(), 'data', 'panel', '.update-lock')
+}
+
+/** True if an update.sh / panel-update-host process is alive on the host. */
+export function isSystemUpdateProcessAlive(): boolean {
+  try {
+    const r = spawnSync(
+      'bash',
+      [
+        '-lc',
+        "pgrep -af 'infra/scripts/(update\\.sh|panel-update-host\\.sh|panel-update\\.sh)' >/dev/null 2>&1"
+      ],
+      { timeout: 5000, encoding: 'utf8' }
+    )
+    return r.status === 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Prepare a fresh UI-triggered update: clear stale lock/log, mark running.
+ * If a real update is already in progress, returns alreadyRunning without wiping the log.
+ */
+export function beginSystemUpdate(message: string): { alreadyRunning: boolean } {
+  const alive = isSystemUpdateProcessAlive()
+  const lockPath = systemUpdateLockPath()
+
+  if (alive) {
+    writeSystemUpdateStatus('running', message || 'Update already in progress…')
+    return { alreadyRunning: true }
+  }
+
+  // Stale lock from a killed/crashed update blocks every later click.
+  try {
+    rmdirSync(lockPath)
+  } catch {
+    try {
+      rmSync(lockPath, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const logPath = systemUpdateLogPath()
+  mkdirSync(dirname(logPath), { recursive: true })
+  writeFileSync(logPath, '', 'utf8')
+  writeSystemUpdateStatus('running', message)
+  return { alreadyRunning: false }
 }
 
 export function writeSystemUpdateStatus(

@@ -43,7 +43,9 @@ done
 
 log() {
   local line="[dpanel] $(date '+%Y-%m-%d %H:%M:%S') $*"
-  printf '%s\n' "$line" | tee -a "${INSTALL_LOG}" >&2
+  # File + stderr once each (avoid tee — outer redirects would duplicate lines).
+  printf '%s\n' "$line" >> "${INSTALL_LOG}" 2>/dev/null || true
+  printf '%s\n' "$line" >&2
 }
 
 die() {

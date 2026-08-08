@@ -13,14 +13,21 @@ mkdir -p "${STACK_ROOT}/logs/panel"
 
 die() {
   system_update_status_write "error" "$*" 2>/dev/null || true
-  echo "[dpanel] ERROR: $*" >&2
+  echo "[dpanel] ERROR: $*" | tee -a "${LOG}" >&2
   exit 1
 }
 
-system_update_status_write "running" "Running dpanel update…" || true
+{
+  echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') host: running update.sh (same as sudo dpanel update)"
+  echo "[dpanel] Phases: sync → rebuild panel → docker up → health → nginx-reload"
+} | tee -a "${LOG}" >&2
 
+system_update_status_write "running" "Downloading & applying update…" || true
+
+# update.sh appends to INSTALL_LOG (this file) and prints to stderr for the terminal.
 if bash "${STACK_ROOT}/infra/scripts/update.sh"; then
   system_update_status_write "ok" "Update complete — panel may have restarted briefly"
+  echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') Update complete" | tee -a "${LOG}" >&2
   exit 0
 fi
 

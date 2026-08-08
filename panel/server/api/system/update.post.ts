@@ -1,23 +1,12 @@
 import { requireAuth } from '../../utils/auth-guard'
 import {
+  beginSystemUpdate,
   runScriptDetached,
   scriptPath,
-  stackRoot,
-  systemUpdateStatusPath,
-  writeSystemUpdateStatus,
-  type SystemUpdateStatus
+  stackRoot
 } from '../../utils/stack'
-import { access, readFile } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
 import { join } from 'node:path'
-
-async function readSystemUpdateStatus(): Promise<SystemUpdateStatus> {
-  try {
-    const raw = await readFile(systemUpdateStatusPath(), 'utf8')
-    return JSON.parse(raw) as SystemUpdateStatus
-  } catch {
-    return { status: 'none' }
-  }
-}
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -32,23 +21,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const current = await readSystemUpdateStatus()
-  if (current.status === 'running') {
-    return {
-      ok: true,
-      accepted: false,
-      alreadyRunning: true,
-      background: true,
-      op: 'update' as const
-    }
+  const { alreadyRunning } = beginSystemUpdate('Starting dpanel update…')
+  if (!alreadyRunning) {
+    runScriptDetached('panel-update.sh', [], {}, undefined, undefined)
   }
-
-  writeSystemUpdateStatus('running', 'Starting dpanel update…')
-  runScriptDetached('panel-update.sh', [], {}, undefined, undefined)
 
   return {
     ok: true,
-    accepted: true,
+    accepted: !alreadyRunning,
+    alreadyRunning,
     background: true,
     op: 'update' as const,
     script: scriptPath('panel-update.sh').replace(`${stackRoot()}/`, '')

@@ -66,6 +66,7 @@ type SystemUpdateStatus = {
   op?: string
   status: 'none' | 'running' | 'ok' | 'error'
   message?: string
+  updatedAt?: string
 }
 
 const props = defineProps<{
@@ -86,6 +87,8 @@ const phase = ref<'running' | 'ok' | 'error'>('running')
 let logTimer: ReturnType<typeof setInterval> | undefined
 let statusTimer: ReturnType<typeof setInterval> | undefined
 let pollGen = 0
+let streamStartedAtMs = 0
+let sawRunningForStream = false
 const logViewport = ref<HTMLElement | null>(null)
 
 const statusLabel = computed(() => {
@@ -101,7 +104,9 @@ const badgeClass = computed(() => ({
 }))
 
 const waitingHint = computed(() =>
-  phase.value === 'running' ? 'Waiting for log output from the server…' : ''
+  phase.value === 'running'
+    ? 'Waiting for log output… (same stream as sudo dpanel update)'
+    : ''
 )
 
 const closeLabel = computed(() => {
@@ -140,7 +145,17 @@ async function fetchLogChunk() {
 async function fetchStatus() {
   const s = await $fetch<SystemUpdateStatus>('/api/system/update/operation')
   if (s.message) statusMessage.value = s.message
-  if (s.status === 'running' || s.status === 'none') return
+  if (s.status === 'running') {
+    sawRunningForStream = true
+    return
+  }
+  if (s.status === 'none') return
+
+  const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN
+  const isFresh =
+    sawRunningForStream ||
+    (!Number.isNaN(updatedAtMs) && updatedAtMs >= streamStartedAtMs - 1500)
+  if (!isFresh) return
 
   phase.value = s.status === 'ok' ? 'ok' : 'error'
   stopTimers()
@@ -161,6 +176,8 @@ function startStreaming() {
   stopTimers()
   pollGen += 1
   const gen = pollGen
+  streamStartedAtMs = Date.now()
+  sawRunningForStream = false
   logText.value = ''
   logOffset.value = 0
   statusMessage.value = 'Starting dpanel update…'
