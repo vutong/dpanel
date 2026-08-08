@@ -7,7 +7,10 @@ import {
   type SystemUpdateStatus
 } from '../../../utils/stack'
 import { access, readFile } from 'node:fs/promises'
-import { rmdirSync, rmSync } from 'node:fs'
+import { rmSync } from 'node:fs'
+
+/** Grace before treating a "running" update with no visible process as stuck. */
+const STUCK_GRACE_MS = 3 * 60_000
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -20,42 +23,48 @@ export default defineEventHandler(async (event) => {
     return { op: 'update', status: 'none' as const } satisfies SystemUpdateStatus
   }
 
-  // Heal stuck "running" when nothing is actually updating (stale lock / crashed job).
-  if (status.status === 'running' && !isSystemUpdateProcessAlive()) {
-    let lockPresent = false
-    try {
-      await access(systemUpdateLockPath())
-      lockPresent = true
-    } catch {
-      lockPresent = false
-    }
-
-    const updatedAtMs = status.updatedAt ? Date.parse(status.updatedAt) : 0
-    const ageMs = Date.now() - (Number.isNaN(updatedAtMs) ? 0 : updatedAtMs)
-    // Give a fresh start a few seconds; after that treat as stuck.
-    if (!lockPresent || ageMs > 15_000) {
-      try {
-        rmdirSync(systemUpdateLockPath())
-      } catch {
-        try {
-          rmSync(systemUpdateLockPath(), { recursive: true, force: true })
-        } catch {
-          /* ignore */
-        }
-      }
-      writeSystemUpdateStatus(
-        'error',
-        'Update was interrupted or stuck (no process running). Click Update Dpanel to try again.'
-      )
-      return {
-        op: 'update' as const,
-        status: 'error' as const,
-        message:
-          'Update was interrupted or stuck (no process running). Click Update Dpanel to try again.',
-        updatedAt: new Date().toISOString()
-      }
-    }
+  if (status.status !== 'running') {
+    return status
   }
 
-  return status
+  const alive = isSystemUpdateProcessAlive()
+  if (alive) {
+    return status
+  }
+
+  let lockPresent = false
+  try {
+    await access(systemUpdateLockPath())
+    lockPresent = true
+  } catch {
+    lockPresent = false
+  }
+
+  // Lock held = update script still owns the job (e.g. long docker build; pgrep can miss).
+  if (lockPresent) {
+    return status
+  }
+
+  const updatedAtMs = status.updatedAt ? Date.parse(status.updatedAt) : 0
+  const ageMs = Date.now() - (Number.isNaN(updatedAtMs) ? 0 : updatedAtMs)
+
+  // Fresh click: beginSystemUpdate clears lock before spawn — do not error immediately.
+  if (ageMs < STUCK_GRACE_MS) {
+    return status
+  }
+
+  try {
+    rmSync(systemUpdateLockPath(), { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
+  const message =
+    'Update was interrupted or stuck (no process running). Click Update Dpanel to try again.'
+  writeSystemUpdateStatus('error', message)
+  return {
+    op: 'update' as const,
+    status: 'error' as const,
+    message,
+    updatedAt: new Date().toISOString()
+  }
 })

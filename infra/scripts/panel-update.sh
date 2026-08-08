@@ -19,9 +19,13 @@ die() {
 
 mkdir -p "${STACK_ROOT}/logs/panel" "${STACK_ROOT}/data/panel"
 
-# Force-take the lock (UI always restarts from scratch).
-rm -rf "${LOCKDIR}" 2>/dev/null || true
-mkdir "${LOCKDIR}" 2>/dev/null || die "Could not acquire update lock — try again"
+# Take lock (beginSystemUpdate may have already created it as a "starting" marker).
+if ! mkdir "${LOCKDIR}" 2>/dev/null; then
+  # Already held by beginSystemUpdate in this same run — keep it.
+  if [[ ! -d "${LOCKDIR}" ]]; then
+    die "Could not acquire update lock — try again"
+  fi
+fi
 trap 'rmdir "${LOCKDIR}" 2>/dev/null || true' EXIT
 
 {

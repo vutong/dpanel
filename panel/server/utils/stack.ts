@@ -122,16 +122,22 @@ export function systemUpdateLockPath(): string {
   return join(stackRoot(), 'data', 'panel', '.update-lock')
 }
 
-/** True if an update.sh / panel-update-host process is alive. */
+/** True if a panel/system update process (or its docker runner) looks alive. */
 export function isSystemUpdateProcessAlive(): boolean {
   try {
     const r = spawnSync(
       'bash',
       [
         '-lc',
-        "pgrep -af 'infra/scripts/(update\\.sh|panel-update-host\\.sh|panel-update\\.sh)' >/dev/null 2>&1"
+        [
+          "pgrep -af 'panel-update\\.sh' >/dev/null 2>&1",
+          "|| pgrep -af 'panel-update-host' >/dev/null 2>&1",
+          "|| pgrep -af 'infra/scripts/update\\.sh' >/dev/null 2>&1",
+          // docker run alpine … panel-update-host (compose build can take a long time)
+          "|| docker ps --format '{{.Command}}' 2>/dev/null | grep -q 'panel-update-host'"
+        ].join(' ')
       ],
-      { timeout: 5000, encoding: 'utf8' }
+      { timeout: 8000, encoding: 'utf8' }
     )
     return r.status === 0
   } catch {
@@ -166,6 +172,13 @@ export function beginSystemUpdate(message: string): void {
     rmSync(systemUpdateLockPath(), { recursive: true, force: true })
   } catch {
     /* ignore */
+  }
+
+  // Create lock immediately so status polls don't treat the spawn gap as "stuck".
+  try {
+    mkdirSync(systemUpdateLockPath())
+  } catch {
+    /* race with panel-update.sh — fine */
   }
 
   const logPath = systemUpdateLogPath()
