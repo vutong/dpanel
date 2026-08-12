@@ -27,18 +27,28 @@
             type="file"
             class="sr-only"
             multiple
-            :disabled="readOnly"
+            :disabled="mutationsLocked"
             @change="onFilePick"
           />
+          <button
+            v-if="listing.runtime === 'php' && !readOnly"
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="opRunning || busy"
+            @click="startFixPermissions"
+          >
+            <AppIcon name="lock" :size="16" />
+            Fix permissions
+          </button>
           <button type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="refresh()">
             <AppIcon name="refresh" :size="16" />
             Refresh
           </button>
-          <button type="button" class="btn btn-ghost btn-sm" :disabled="readOnly || busy" @click="openMkdir">
+          <button type="button" class="btn btn-ghost btn-sm" :disabled="mutationsLocked || busy" @click="openMkdir">
             <AppIcon name="folder-plus" :size="16" />
             New folder
           </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="readOnly || busy" @click="fileInput?.click()">
+          <button type="button" class="btn btn-primary btn-sm" :disabled="mutationsLocked || busy" @click="fileInput?.click()">
             <AppIcon name="upload" :size="16" />
             Upload
           </button>
@@ -53,7 +63,7 @@
         dpanel).
       </div>
       <div v-if="opRunning" class="alert alert-info">
-        A Git pull or Rebuild is running. Changing files now can race the job — wait until it finishes if you can.
+        A site operation is running. Changing files now can race the job — wait until it finishes if you can.
       </div>
       <div v-if="listing.runtime === 'php' && !listing.hasPublicDir" class="alert alert-info">
         Nginx document root is <code>apps/{{ listing.domain }}/public</code>. Create a <code>public</code> folder or PHP
@@ -94,7 +104,7 @@
         @dragleave="onDragLeave"
         @drop.prevent="onDrop"
       >
-        <div v-if="dragOver && !readOnly" class="drop-hint">Drop files to upload into this folder</div>
+        <div v-if="dragOver && !mutationsLocked" class="drop-hint">Drop files to upload into this folder</div>
         <div v-if="selected.size" class="bulk-bar">
           <span>{{ selected.size }} selected</span>
           <button
@@ -108,12 +118,12 @@
           <button
             type="button"
             class="btn btn-ghost btn-sm"
-            :disabled="readOnly || busy || selected.size !== 1"
+            :disabled="mutationsLocked || busy || selected.size !== 1"
             @click="openRename"
           >
             Rename
           </button>
-          <button type="button" class="btn btn-danger btn-sm" :disabled="readOnly || busy" @click="openDelete">
+          <button type="button" class="btn btn-danger btn-sm" :disabled="mutationsLocked || busy" @click="openDelete">
             Delete
           </button>
         </div>
@@ -178,14 +188,14 @@
                   <IconButton
                     icon="edit"
                     title="Rename"
-                    :disabled="readOnly || busy || e.escaped"
+                    :disabled="mutationsLocked || busy || e.escaped"
                     @click="openRenameOne(e.name)"
                   />
                   <IconButton
                     icon="trash"
                     title="Delete"
                     variant="danger"
-                    :disabled="readOnly || busy"
+                    :disabled="mutationsLocked || busy"
                     @click="openDeleteOne(e.name)"
                   />
                 </div>
@@ -281,6 +291,14 @@
         </div>
       </div>
     </div>
+
+    <SiteOpStreamModal
+      :open="!!streamOp"
+      :domain="domainParam"
+      :op="streamOp ?? 'fix-permissions'"
+      @close="onStreamClose"
+      @done="onStreamDone"
+    />
   </div>
 </template>
 
@@ -343,13 +361,16 @@ const loadError = computed(() => {
   return e.data?.statusMessage || e.statusMessage || 'Cannot list files'
 })
 
-const { data: opData } = await useFetch<{ status?: string }>(
+const { data: opData, refresh: refreshOp } = await useFetch<{ status?: string; op?: string }>(
   () => `/api/websites/${encodeURIComponent(domainParam.value)}/operation`,
   { watch: [domainParam] }
 )
 const opRunning = computed(() => opData.value?.status === 'running')
 
+const streamOp = ref<'fix-permissions' | null>(null)
+
 const readOnly = computed(() => !!listing.value?.pendingDelete)
+const mutationsLocked = computed(() => readOnly.value || opRunning.value)
 const pathSegs = computed(() => (cwd.value ? cwd.value.split('/').filter(Boolean) : []))
 const diskLabel = computed(() => {
   const d = listing.value?.disk
@@ -381,6 +402,53 @@ const previewImageUrl = ref('')
 const previewError = ref('')
 const previewTruncated = ref(false)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
+
+async function startFixPermissions() {
+  if (listing.value?.runtime !== 'php' || readOnly.value) return
+  clearAlert()
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(domainParam.value)}/fix-permissions`, {
+      method: 'POST'
+    })
+    busy.value = true
+    streamOp.value = 'fix-permissions'
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start fix permissions', false)
+  }
+}
+
+function onStreamClose() {
+  busy.value = false
+  streamOp.value = null
+}
+
+function onStreamDone(payload: { ok: boolean; message: string }) {
+  busy.value = false
+  streamOp.value = null
+  showAlert(payload.message, payload.ok)
+  void refreshOp()
+  if (payload.ok) void refresh()
+}
+
+let opPollTimer: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  if (!import.meta.client || !domainParam.value) return
+  const resumeStream = () => {
+    const s = opData.value
+    if (s?.status === 'running' && s.op === 'fix-permissions') {
+      busy.value = true
+      streamOp.value = 'fix-permissions'
+    }
+  }
+  void refreshOp().then(resumeStream)
+  opPollTimer = setInterval(() => void refreshOp(), 3000)
+})
+
+onUnmounted(() => {
+  if (opPollTimer) clearInterval(opPollTimer)
+})
 
 watch(cwd, () => {
   selected.value = new Set()
@@ -548,6 +616,7 @@ function openMkdir() {
 }
 
 async function confirmMkdir() {
+  if (mutationsLocked.value) return
   const name = mkdirName.value.trim()
   if (!name || name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
     showAlert('Invalid folder name', false)
@@ -581,6 +650,7 @@ function openRename() {
 }
 
 async function confirmRename() {
+  if (mutationsLocked.value) return
   const toName = renameTo.value.trim()
   if (!toName || !renameFrom.value) return
   if (toName.includes('/') || toName.includes('\\') || toName === '.' || toName === '..') {
@@ -618,6 +688,7 @@ function openDelete() {
 }
 
 async function confirmDelete() {
+  if (mutationsLocked.value) return
   if (deleteNeedsType.value && !deleteTypedOk.value) return
   busy.value = true
   clearAlert()
@@ -639,7 +710,7 @@ async function confirmDelete() {
 
 async function uploadFiles(files: FileList | File[]) {
   const list = [...files]
-  if (!list.length || readOnly.value) return
+  if (!list.length || mutationsLocked.value) return
   busy.value = true
   clearAlert()
   try {
@@ -664,11 +735,13 @@ function onFilePick(ev: Event) {
 }
 
 function onDragEnter() {
+  if (mutationsLocked.value) return
   dragDepth.value += 1
   dragOver.value = true
 }
 
 function onDragOver() {
+  if (mutationsLocked.value) return
   dragOver.value = true
 }
 
@@ -680,6 +753,7 @@ function onDragLeave() {
 function onDrop(ev: DragEvent) {
   dragDepth.value = 0
   dragOver.value = false
+  if (mutationsLocked.value) return
   const files = ev.dataTransfer?.files
   if (files?.length) uploadFiles(files)
 }

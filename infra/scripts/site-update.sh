@@ -91,6 +91,13 @@ else
   fi
 fi
 
+if [[ "${RUNTIME}" == "php" ]]; then
+  site_op_status_write "${DOMAIN}" "update" "running" "Fixing permissions…"
+  if ! site_fix_permissions "${DOMAIN}" "quick"; then
+    echo "[dpanel] WARNING: permission fix after pull had errors — use Fix permissions in Deploy & code" >&2
+  fi
+fi
+
 OP_FINALIZED=1
 site_op_status_write "${DOMAIN}" "update" "ok" "Pull complete"
 trap - EXIT

@@ -61,7 +61,7 @@ function siteLogBasename(domain: string, op: string): string {
   return `site-${op}-${slug}.log`
 }
 
-export type SiteOpKind = 'update' | 'rebuild'
+export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
 
 /** Log sources for the site log viewer (Eye). */
 export type SiteLogKind = SiteOpKind | 'create' | 'container'
@@ -100,6 +100,7 @@ export function beginSiteOp(domain: string, op: SiteOpKind, message: string): vo
       [
         `pkill -9 -f 'site-update\\.sh ${safeDomain}' 2>/dev/null || true`,
         `pkill -9 -f 'site-rebuild\\.sh ${safeDomain}' 2>/dev/null || true`,
+        `pkill -9 -f 'site-fix-permissions\\.sh ${safeDomain}' 2>/dev/null || true`,
         'sleep 0.2'
       ].join('; ')
     ],
@@ -262,7 +263,9 @@ export function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): boolean {
       ? `site-update\\.sh ${safeDomain}`
       : op === 'rebuild'
         ? `site-rebuild\\.sh ${safeDomain}`
-        : `site-(update|rebuild)\\.sh ${safeDomain}`
+        : op === 'fix-permissions'
+          ? `site-fix-permissions\\.sh ${safeDomain}`
+          : `site-(update|rebuild|fix-permissions)\\.sh ${safeDomain}`
   try {
     const r = spawnSync(
       'bash',
@@ -280,7 +283,7 @@ export function isAnySiteOpProcessAlive(): boolean {
   try {
     const r = spawnSync(
       'bash',
-      ['-lc', "pgrep -af 'site-(update|rebuild)\\.sh ' >/dev/null 2>&1"],
+      ['-lc', "pgrep -af 'site-(update|rebuild|fix-permissions)\\.sh ' >/dev/null 2>&1"],
       { timeout: 8000, encoding: 'utf8' }
     )
     return r.status === 0
@@ -311,6 +314,7 @@ export function clearStuckJobs(): ClearStuckJobsResult {
       [
         "pkill -9 -f 'site-rebuild\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'site-update\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'site-fix-permissions\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/panel-update\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/panel-update-host\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/update\\.sh' 2>/dev/null || true",
@@ -369,7 +373,9 @@ export function clearStuckJobs(): ClearStuckJobsResult {
           if (data.status !== 'running') continue
           const domain = (data.domain || name.replace(/\.json$/, '')).trim().toLowerCase()
           const op: SiteOpKind =
-            data.op === 'update' || data.op === 'rebuild' ? data.op : 'rebuild'
+            data.op === 'update' || data.op === 'rebuild' || data.op === 'fix-permissions'
+              ? data.op
+              : 'rebuild'
           writeSiteOpStatus(domain, op, 'error', 'Cleared stuck job (Clean Job)')
           clearedSiteOps += 1
         } catch {
@@ -400,6 +406,7 @@ export function clearStuckJobs(): ClearStuckJobsResult {
         if (
           name.startsWith('site-update-') ||
           name.startsWith('site-rebuild-') ||
+          name.startsWith('site-fix-permissions-') ||
           name.startsWith('site-create-')
         ) {
           truncateLog(join(nodeLogs, name))

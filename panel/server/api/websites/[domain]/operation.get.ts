@@ -41,9 +41,11 @@ export default defineEventHandler(async (event) => {
     return status
   }
 
-  const op = (status.op === 'update' || status.op === 'rebuild' ? status.op : undefined) as
-    | SiteOpKind
-    | undefined
+  const op = (
+    status.op === 'update' || status.op === 'rebuild' || status.op === 'fix-permissions'
+      ? status.op
+      : undefined
+  ) as SiteOpKind | undefined
 
   // This domain's update/rebuild process is alive ⇒ still working.
   if (isSiteOpProcessAlive(domain, op)) {

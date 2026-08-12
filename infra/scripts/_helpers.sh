@@ -176,6 +176,121 @@ with open(path, "w", encoding="utf-8") as f:
 PY
 }
 
+# PHP-FPM www-data on Alpine php:8.3-fpm-alpine (must match panel/server/utils/site-files.ts).
+PHP_FPM_UID=82
+PHP_FPM_GID=82
+
+# Fix owner/mode for PHP sites after Git pull or manual FTP/upload.
+# mode: quick (chown wrong-owner + .env) | full (+ chmod writable dirs). No-op for Node. Returns 0 on ok.
+site_fix_permissions() {
+  local domain="$1"
+  local mode="${2:-full}"
+  local app_dir runtime chowned chown_failed env_fixed rc
+  [[ -n "${domain}" ]] || return 0
+  [[ "${mode}" == "quick" || "${mode}" == "full" ]] || mode="full"
+
+  ensure_python3 >/dev/null 2>&1 || {
+    echo "[dpanel] site_fix_permissions: python3 unavailable — skipped" >&2
+    return 0
+  }
+
+  SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
+  export SITES_FILE DOMAIN="${domain}"
+  runtime="$("${PYBIN}" -c "
+import json, os, sys
+path = os.environ.get('SITES_FILE', '')
+domain = os.environ.get('DOMAIN', '')
+if not path or not os.path.isfile(path):
+    sys.exit(1)
+with open(path) as f:
+    for s in json.load(f):
+        if s.get('domain') == domain:
+            print(s.get('runtime') or '')
+            sys.exit(0)
+sys.exit(1)
+" 2>/dev/null)" || return 0
+
+  [[ "${runtime}" == "php" ]] || {
+    echo "[dpanel] site_fix_permissions: skipped (runtime=${runtime:-unknown})" >&2
+    return 0
+  }
+
+  app_dir="${STACK_ROOT}/apps/${domain}"
+  [[ -d "${app_dir}" ]] || {
+    echo "[dpanel] site_fix_permissions: app dir missing — skipped" >&2
+    return 0
+  }
+
+  chowned=0
+  chown_failed=0
+  while IFS= read -r -d '' f; do
+    if chown "${PHP_FPM_UID}:${PHP_FPM_GID}" "${f}" 2>/dev/null; then
+      chowned=$((chowned + 1))
+    else
+      chown_failed=$((chown_failed + 1))
+      echo "[dpanel] site_fix_permissions: chown failed: ${f}" >&2
+    fi
+  done < <(
+    find "${app_dir}" -xdev \
+      \( -path '*/node_modules' -o -path '*/node_modules/*' \
+         -o -path '*/.git' -o -path '*/.git/*' \
+         -o -path '*/vendor' -o -path '*/vendor/*' \
+         -o -path '*/.output' -o -path '*/.output/*' \) -prune \
+      -o \( ! -user "${PHP_FPM_UID}" -o ! -group "${PHP_FPM_GID}" \) -print0 2>/dev/null
+  )
+
+  env_fixed=0
+  while IFS= read -r -d '' f; do
+    if chmod 600 "${f}" 2>/dev/null; then
+      env_fixed=$((env_fixed + 1))
+    fi
+  done < <(
+    find "${app_dir}" -xdev \
+      \( -path '*/node_modules' -o -path '*/node_modules/*' \
+         -o -path '*/.git' -o -path '*/.git/*' \
+         -o -path '*/vendor' -o -path '*/vendor/*' \
+         -o -path '*/.output' -o -path '*/.output/*' \) -prune \
+      -o -name '.env' -type f -print0 2>/dev/null
+  )
+
+  if [[ "${mode}" == "full" ]]; then
+    _site_fix_writable_tree() {
+      local rel="$1"
+      local tree="${app_dir}/${rel}"
+      local dirs files
+      [[ -d "${tree}" ]] || return 0
+      dirs=0
+      files=0
+      while IFS= read -r -d '' d; do
+        if chmod 775 "${d}" 2>/dev/null; then
+          dirs=$((dirs + 1))
+        fi
+      done < <(find "${tree}" -xdev -type d -print0 2>/dev/null)
+      while IFS= read -r -d '' f; do
+        if chmod 664 "${f}" 2>/dev/null; then
+          files=$((files + 1))
+        fi
+      done < <(find "${tree}" -xdev -type f -print0 2>/dev/null)
+      echo "[dpanel] site_fix_permissions: ${rel}/ modes — ${dirs} dir(s), ${files} file(s)" >&2
+    }
+
+    for rel in storage bootstrap/cache wp-content/uploads wp-content/cache; do
+      _site_fix_writable_tree "${rel}"
+    done
+  fi
+
+  echo "[dpanel] site_fix_permissions (${mode}): chown ${chowned} path(s), chown failed ${chown_failed}, .env chmod ${env_fixed}" >&2
+
+  rc=0
+  if [[ "${chown_failed}" -gt 0 ]]; then
+    echo "[dpanel] WARNING: site_fix_permissions: ${chown_failed} path(s) could not be chowned" >&2
+    if [[ "${chown_failed}" -ge 5 || ( "${chown_failed}" -gt 0 && "${chowned}" -eq 0 ) ]]; then
+      rc=1
+    fi
+  fi
+  return "${rc}"
+}
+
 system_update_status_file() {
   mkdir -p "${STACK_ROOT}/data/panel"
   echo "${STACK_ROOT}/data/panel/system-update.json"

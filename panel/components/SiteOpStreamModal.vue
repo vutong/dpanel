@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-export type SiteOpKind = 'update' | 'rebuild'
+export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
 
 type SiteOpStatus = {
   op?: string
@@ -93,7 +93,11 @@ let streamStartedAtMs = 0
 let sawRunningForStream = false
 const logViewport = ref<HTMLElement | null>(null)
 
-const title = computed(() => (props.op === 'rebuild' ? 'Rebuild' : 'Update from Git'))
+const title = computed(() => {
+  if (props.op === 'rebuild') return 'Rebuild'
+  if (props.op === 'fix-permissions') return 'Fix permissions'
+  return 'Update from Git'
+})
 
 const statusLabel = computed(() => {
   if (phase.value === 'ok') return 'Complete'
@@ -173,7 +177,9 @@ async function fetchStatus() {
     (s.status === 'ok'
       ? props.op === 'rebuild'
         ? 'Rebuild complete'
-        : 'Pull complete'
+        : props.op === 'fix-permissions'
+          ? 'Permissions fixed'
+          : 'Pull complete'
       : 'Operation failed')
   emit('done', { ok: s.status === 'ok', message: `${props.domain}: ${msg}` })
 }
@@ -193,7 +199,12 @@ function startStreaming() {
   sawRunningForStream = false
   logText.value = ''
   logOffset.value = 0
-  statusMessage.value = props.op === 'rebuild' ? 'Starting rebuild…' : 'Pulling from Git…'
+  statusMessage.value =
+    props.op === 'rebuild'
+      ? 'Starting rebuild…'
+      : props.op === 'fix-permissions'
+        ? 'Fixing permissions…'
+        : 'Pulling from Git…'
   phase.value = 'running'
 
   void fetchLogChunk()

@@ -4,7 +4,7 @@ import { domainSlug, runScript, siteOpLogPath, type SiteLogKind } from '../../..
 import { readFile, stat } from 'node:fs/promises'
 
 const MAX_CHUNK = 96 * 1024
-const FILE_OPS = new Set<SiteLogKind>(['update', 'rebuild', 'create'])
+const FILE_OPS = new Set<SiteLogKind>(['update', 'rebuild', 'create', 'fix-permissions'])
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   if (!FILE_OPS.has(op) && op !== 'container') {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Query op must be rebuild, update, create, or container'
+      statusMessage: 'Query op must be rebuild, update, create, fix-permissions, or container'
     })
   }
 

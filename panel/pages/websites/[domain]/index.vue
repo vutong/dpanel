@@ -62,6 +62,17 @@
             <span class="tile-desc">{{ site.runtime === 'php' ? 'Pull latest from GitHub' : 'Pull latest commit' }}</span>
           </button>
           <button
+            v-if="site.runtime === 'php'"
+            type="button"
+            class="tile"
+            :disabled="busy"
+            @click="startFixPermissions"
+          >
+            <AppIcon name="lock" :size="22" />
+            <span class="tile-title">Fix permissions</span>
+            <span class="tile-desc">Repair owner/mode after FTP or manual upload</span>
+          </button>
+          <button
             v-if="site.runtime === 'node'"
             type="button"
             class="tile"
@@ -412,7 +423,7 @@ type Site = {
   pendingDeleteExpiresAt?: string | null
 }
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
-type SiteOpKind = 'update' | 'rebuild'
+type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
 type NodeModulesMode = 'auto' | 'keep' | 'clean'
 
 const rebuildModeOptions: {
@@ -568,6 +579,21 @@ async function confirmUpdate() {
   }
 }
 
+async function startFixPermissions() {
+  if (!site.value || site.value.runtime !== 'php') return
+  clearAlert()
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/fix-permissions`, {
+      method: 'POST'
+    })
+    busy.value = true
+    streamOp.value = 'fix-permissions'
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Could not start fix permissions', false)
+  }
+}
+
 function openRebuild() {
   if (!site.value || site.value.runtime !== 'node') return
   nodeModulesMode.value = 'auto'
@@ -636,9 +662,9 @@ onMounted(() => {
   )
     .then((s) => {
       if (s.status !== 'running') return
-      if (s.op !== 'update' && s.op !== 'rebuild') return
+      if (s.op !== 'update' && s.op !== 'rebuild' && s.op !== 'fix-permissions') return
       busy.value = true
-      streamOp.value = s.op
+      streamOp.value = s.op as SiteOpKind
     })
     .catch(() => {})
 })
