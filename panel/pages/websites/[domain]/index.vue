@@ -46,20 +46,6 @@
 
       <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-      <section class="section">
-        <h2 class="section-title">Files</h2>
-        <div class="tile-grid">
-          <NuxtLink
-            :to="`/websites/${encodeURIComponent(site.domain)}/files`"
-            class="tile"
-          >
-            <AppIcon name="folder" :size="22" />
-            <span class="tile-title">File manager</span>
-            <span class="tile-desc">Browse apps/{{ site.domain }}/</span>
-          </NuxtLink>
-        </div>
-      </section>
-
       <section v-if="!site.pendingDeleteAt" class="section">
         <h2 class="section-title">Deploy &amp; code</h2>
         <div class="tile-grid">
@@ -143,6 +129,20 @@
             <span class="tile-title">Resources</span>
             <span class="tile-desc">CPU, RAM, disk limits</span>
           </button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Files</h2>
+        <div class="tile-grid">
+          <NuxtLink
+            :to="`/websites/${encodeURIComponent(site.domain)}/files`"
+            class="tile"
+          >
+            <AppIcon name="folder" :size="22" />
+            <span class="tile-title">File manager</span>
+            <span class="tile-desc">Browse apps/{{ site.domain }}/</span>
+          </NuxtLink>
         </div>
       </section>
 
