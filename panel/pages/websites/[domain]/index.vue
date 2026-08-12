@@ -140,11 +140,11 @@
             <pre class="php-tree" aria-label="Example directory tree">├── .gitignore
 ├── README.md
 └── public/
-    └── index.php</pre>
+    └── wp-config.php</pre>
           </li>
           <li>
-            Set <code>DB_HOST</code> to <code>mariadb</code> — not <code>localhost</code> or
-            <code>127.0.0.1</code>.
+            Set <code>DB_HOST</code> to <code>mariadb</code> (not <code>localhost</code>). Example:
+            <pre class="php-tree" aria-label="DB_HOST example">define( 'DB_HOST', 'mariadb' );</pre>
           </li>
         </ol>
       </section>
