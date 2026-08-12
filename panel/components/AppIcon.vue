@@ -195,12 +195,49 @@
       <path d="M3 5h4" />
       <path d="M17 19h4" />
     </template>
+    <!-- scan / virus scan -->
+    <template v-else-if="name === 'scan'">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="m16 16-1.5-1.5" />
+    </template>
     <!-- broom / clean -->
     <template v-else-if="name === 'broom'">
       <path d="M19.4 7.4 16 4l-2.5 2.5" />
       <path d="m5 20 6.5-6.5" />
       <path d="M9.5 11.5 18 3" />
       <path d="M3 21c2.5-.5 4.5-1.5 6-3l-3-3c-1.5 1.5-2.5 3.5-3 6Z" />
+    </template>
+    <!-- upload -->
+    <template v-else-if="name === 'upload'">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </template>
+    <!-- download -->
+    <template v-else-if="name === 'download'">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </template>
+    <!-- file -->
+    <template v-else-if="name === 'file'">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </template>
+    <!-- folder-plus -->
+    <template v-else-if="name === 'folder-plus'">
+      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9L9.6 4.9A2 2 0 0 0 7.93 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z" />
+      <line x1="12" y1="11" x2="12" y2="17" />
+      <line x1="9" y1="14" x2="15" y2="14" />
+    </template>
+    <!-- refresh -->
+    <template v-else-if="name === 'refresh'">
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
     </template>
   </svg>
 </template>

@@ -144,6 +144,20 @@
       </section>
 
       <section class="section">
+        <h2 class="section-title">Files</h2>
+        <div class="tile-grid">
+          <NuxtLink
+            :to="`/websites/${encodeURIComponent(site.domain)}/files`"
+            class="tile"
+          >
+            <AppIcon name="folder" :size="22" />
+            <span class="tile-title">File manager</span>
+            <span class="tile-desc">Browse apps/{{ site.domain }}/</span>
+          </NuxtLink>
+        </div>
+      </section>
+
+      <section class="section">
         <h2 class="section-title">Coming soon</h2>
         <p class="section-intro">Planned areas for future releases — not available yet.</p>
         <div class="tile-grid tile-grid--soon">
@@ -438,10 +452,10 @@ const limitsSummary = computed(() => {
 
 const comingSoon = [
   { icon: 'shield', title: 'SSL / TLS', desc: 'Origin certificates' },
-  { icon: 'folder', title: 'File manager', desc: 'Browse apps folder' },
   { icon: 'clock', title: 'Cron jobs', desc: 'Scheduled tasks' },
   { icon: 'database', title: 'Linked database', desc: 'Attach MariaDB' },
-  { icon: 'mail', title: 'Email', desc: 'SMTP / mailboxes' }
+  { icon: 'mail', title: 'Email', desc: 'SMTP / mailboxes' },
+  { icon: 'scan', title: 'Scan Virus', desc: 'Malware scan' }
 ]
 
 const busy = ref(false)
@@ -795,10 +809,16 @@ button.tile:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-button.tile:hover:not(:disabled) {
+button.tile:hover:not(:disabled),
+a.tile:hover {
   border-color: var(--accent);
   box-shadow: var(--shadow-sm);
   background: var(--surface-elevated);
+  text-decoration: none;
+}
+a.tile {
+  text-decoration: none;
+  color: inherit;
 }
 .tile--muted {
   cursor: default;
