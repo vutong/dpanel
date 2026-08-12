@@ -49,6 +49,14 @@
                   {{ busy === s.domain ? 'Restoring…' : 'Restore' }}
                 </button>
                 <NuxtLink
+                  :to="`/websites/${encodeURIComponent(s.domain)}/files`"
+                  class="manager-link"
+                  title="File manager"
+                >
+                  <AppIcon name="folder" :size="18" />
+                  <span>Files</span>
+                </NuxtLink>
+                <NuxtLink
                   :to="`/websites/${encodeURIComponent(s.domain)}`"
                   class="manager-link"
                   title="Manager"

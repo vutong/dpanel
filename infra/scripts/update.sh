@@ -169,6 +169,8 @@ if [[ "${DPANEL_UPDATE_REEXEC:-}" != 1 ]]; then
     "${CLONE_TMP}/" "${STACK_ROOT}/"
 
   chmod +x "${STACK_ROOT}/infra/scripts/"*.sh
+  # See build-panel.sh — leftover flat page hides /websites/:domain/files.
+  rm -f "${STACK_ROOT}/panel/pages/websites/[domain].vue"
   ln -sf "${STACK_ROOT}/infra/scripts/dpanel-cli.sh" /usr/local/bin/dpanel
 
   mkdir -p "${STACK_ROOT}/data/panel" "${STACK_ROOT}/infra/nginx/conf.d" "${STACK_ROOT}/compose.d"

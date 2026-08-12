@@ -14,6 +14,11 @@ log() { echo "[dpanel] $*" >&2; }
   exit 1
 }
 
+# Old flat page + new [domain]/index.vue together makes Nuxt treat [domain].vue as
+# a parent layout (no <NuxtPage />) — File manager route never renders.
+# rsync update does not --delete, so this leftover can survive on VPS.
+rm -f "${PANEL_SRC}/pages/websites/[domain].vue"
+
 if command -v free >/dev/null 2>&1; then
   avail="$(free -m | awk '/^Mem:/ {print $7}')"
   if [[ "${avail:-0}" -lt 800 ]]; then
