@@ -134,33 +134,19 @@
 
       <section v-if="site.runtime === 'php' && !site.pendingDeleteAt" class="section">
         <h2 class="section-title">PHP setup</h2>
-        <div class="php-notes">
-          <div class="php-note card">
-            <h3 class="php-note-title">Document root</h3>
-            <p class="php-note-body">
-              Your site source must live under <code>public/</code>. Nginx serves
-              <code>apps/{{ site.domain }}/public</code> only — files next to
-              <code>public/</code> are not web-accessible.
-            </p>
-            <pre class="php-tree" aria-label="Example directory tree">apps/{{ site.domain }}/
-├── .gitignore
+        <ol class="php-setup">
+          <li>
+            Web root is <code>public/</code>. Example:
+            <pre class="php-tree" aria-label="Example directory tree">├── .gitignore
 ├── README.md
 └── public/
-    ├── index.php
-    ├── wp-config.php
-    └── wp-content/</pre>
-          </div>
-          <div class="php-note card">
-            <h3 class="php-note-title">MariaDB host</h3>
-            <p class="php-note-body">
-              In <code>wp-config.php</code> or your app config, set
-              <code>DB_HOST</code> to <code>mariadb</code> — not
-              <code>localhost</code> or <code>127.0.0.1</code>. PHP runs in a
-              separate container and reaches MariaDB by that Docker service name.
-            </p>
-            <pre class="php-tree" aria-label="DB_HOST example">define( 'DB_HOST', 'mariadb' );</pre>
-          </div>
-        </div>
+    └── index.php</pre>
+          </li>
+          <li>
+            Set <code>DB_HOST</code> to <code>mariadb</code> — not <code>localhost</code> or
+            <code>127.0.0.1</code>.
+          </li>
+        </ol>
       </section>
 
       <section class="section">
@@ -816,37 +802,31 @@ function confirmDelete() {
   color: var(--muted);
   margin: -0.35rem 0 0.75rem;
 }
-.php-notes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.75rem;
-}
-.php-note {
-  padding: 1rem 1.1rem;
+.php-setup {
   margin: 0;
-}
-.php-note-title {
-  font-size: 0.9rem;
-  margin: 0 0 0.45rem;
-}
-.php-note-body {
+  padding-left: 1.25rem;
   font-size: 0.85rem;
   color: var(--muted);
-  margin: 0 0 0.75rem;
   line-height: 1.45;
 }
-.php-note-body code {
+.php-setup li {
+  margin-bottom: 0.65rem;
+}
+.php-setup li:last-child {
+  margin-bottom: 0;
+}
+.php-setup code {
   font-size: 0.8rem;
   color: var(--text);
 }
 .php-tree {
-  margin: 0;
-  padding: 0.75rem 0.85rem;
-  border-radius: 8px;
+  margin: 0.4rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.76rem;
+  line-height: 1.4;
   overflow-x: auto;
   white-space: pre;
 }
