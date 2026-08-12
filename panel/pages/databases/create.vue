@@ -32,7 +32,34 @@
       </div>
       <div class="field">
         <label class="label">Password (optional, auto-generated if empty)</label>
-        <input v-model="password" class="input" type="password" />
+        <div class="input-wrap">
+          <input
+            v-model="password"
+            class="input input-with-actions"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+          />
+          <div class="input-actions">
+            <button
+              type="button"
+              class="input-action"
+              :title="showPassword ? 'Hide password' : 'Show password'"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              @click="showPassword = !showPassword"
+            >
+              <AppIcon :name="showPassword ? 'eye-off' : 'eye'" :size="16" />
+            </button>
+            <button
+              type="button"
+              class="input-action"
+              title="Generate password"
+              aria-label="Generate password"
+              @click="generatePassword"
+            >
+              <AppIcon name="sparkles" :size="16" />
+            </button>
+          </div>
+        </div>
       </div>
       <button class="btn btn-primary" type="submit" :disabled="submitting || !sites.length">
         {{ submitting ? 'Creating…' : 'Create database' }}
@@ -66,6 +93,7 @@ const siteDomain = ref(
 const name = ref('')
 const user = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const submitting = ref(false)
 const message = ref('')
 const ok = ref(false)
@@ -75,6 +103,24 @@ const created = ref<{
   password: string
   siteDomain?: string
 } | null>(null)
+
+function generatePassword() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const length = 16
+  const maxUnbiased = 256 - (256 % chars.length)
+  let out = ''
+  while (out.length < length) {
+    const bytes = new Uint8Array(length - out.length)
+    crypto.getRandomValues(bytes)
+    for (const b of bytes) {
+      if (b >= maxUnbiased) continue
+      out += chars[b % chars.length]
+      if (out.length === length) break
+    }
+  }
+  password.value = out
+  showPassword.value = true
+}
 
 async function submit() {
   message.value = ''
@@ -120,4 +166,36 @@ async function submit() {
   line-height: 1.4;
 }
 .hint a { color: var(--accent); }
+.input-wrap {
+  position: relative;
+}
+.input-with-actions {
+  padding-right: 4.75rem;
+}
+.input-actions {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.input-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.input-action:hover {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
 </style>

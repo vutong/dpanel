@@ -68,13 +68,35 @@
         </p>
         <div v-if="modifyPhase === 'confirm'" class="field">
           <label class="label">New password (optional)</label>
-          <input
-            v-model="modifyPassword"
-            class="input"
-            type="password"
-            placeholder="Leave empty to auto-generate"
-            autocomplete="new-password"
-          />
+          <div class="input-wrap">
+            <input
+              v-model="modifyPassword"
+              class="input input-with-actions"
+              :type="showModifyPassword ? 'text' : 'password'"
+              placeholder="Leave empty to auto-generate"
+              autocomplete="new-password"
+            />
+            <div class="input-actions">
+              <button
+                type="button"
+                class="input-action"
+                :title="showModifyPassword ? 'Hide password' : 'Show password'"
+                :aria-label="showModifyPassword ? 'Hide password' : 'Show password'"
+                @click="showModifyPassword = !showModifyPassword"
+              >
+                <AppIcon :name="showModifyPassword ? 'eye-off' : 'eye'" :size="16" />
+              </button>
+              <button
+                type="button"
+                class="input-action"
+                title="Generate password"
+                aria-label="Generate password"
+                @click="generateModifyPassword"
+              >
+                <AppIcon name="sparkles" :size="16" />
+              </button>
+            </div>
+          </div>
         </div>
         <div v-else-if="modifyResult" class="creds">
           <p><strong>User:</strong> {{ modifyResult.user }}</p>
@@ -144,6 +166,7 @@ const databases = computed(() => data.value?.databases ?? [])
 const modifyTarget = ref<DatabaseRow | null>(null)
 const modifyPhase = ref<'confirm' | 'done'>('confirm')
 const modifyPassword = ref('')
+const showModifyPassword = ref(false)
 const modifyResult = ref<{ user: string; password: string } | null>(null)
 const deleteTarget = ref<DatabaseRow | null>(null)
 const busy = ref('')
@@ -153,8 +176,27 @@ function openModify(db: DatabaseRow) {
   modifyTarget.value = db
   modifyPhase.value = 'confirm'
   modifyPassword.value = ''
+  showModifyPassword.value = false
   modifyResult.value = null
   clearAlert()
+}
+
+function generateModifyPassword() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const length = 16
+  const maxUnbiased = 256 - (256 % chars.length)
+  let out = ''
+  while (out.length < length) {
+    const bytes = new Uint8Array(length - out.length)
+    crypto.getRandomValues(bytes)
+    for (const b of bytes) {
+      if (b >= maxUnbiased) continue
+      out += chars[b % chars.length]
+      if (out.length === length) break
+    }
+  }
+  modifyPassword.value = out
+  showModifyPassword.value = true
 }
 
 function closeModify() {
@@ -290,6 +332,38 @@ code { font-size: 0.88rem; color: var(--muted); }
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+.input-wrap {
+  position: relative;
+}
+.input-with-actions {
+  padding-right: 4.75rem;
+}
+.input-actions {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+.input-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.input-action:hover {
+  color: var(--accent);
+  background: var(--accent-muted);
 }
 .creds p { margin-bottom: 0.5rem; }
 .creds code {

@@ -23,6 +23,8 @@ source "${STACK_ROOT}/infra/scripts/_db_registry.sh"
 # shellcheck source=/dev/null
 source .env
 
+ensure_python3 || die "python3 required"
+
 SITES_FILE="${STACK_ROOT}/data/panel/sites.json"
 [[ -f "${SITES_FILE}" ]] || die "sites.json not found"
 export SITES_FILE SITE_DOMAIN
@@ -46,4 +48,4 @@ stack_compose exec -T mariadb mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e \
 
 db_registry_upsert "${DB_NAME}" "${DB_USER}" "${SITE_DOMAIN}" 2>/dev/null || true
 
-python3 -c "import json; print(json.dumps({'ok':True,'name':'${DB_NAME}','user':'${DB_USER}','password':'${DB_PASS}','siteDomain':'${SITE_DOMAIN}'}))"
+"${PYBIN}" -c "import json; print(json.dumps({'ok':True,'name':'${DB_NAME}','user':'${DB_USER}','password':'${DB_PASS}','siteDomain':'${SITE_DOMAIN}'}))"
