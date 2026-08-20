@@ -84,17 +84,12 @@
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </template>
-    <!-- layout-dashboard (brand) -->
+    <!-- layout-dashboard -->
     <template v-else-if="name === 'dashboard'">
       <rect x="3" y="3" width="7" height="9" rx="1" />
       <rect x="14" y="3" width="7" height="5" rx="1" />
       <rect x="14" y="12" width="7" height="9" rx="1" />
       <rect x="3" y="16" width="7" height="5" rx="1" />
-    </template>
-    <!-- overview (home summary — distinct from dashboard grid) -->
-    <template v-else-if="name === 'overview'">
-      <path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9.5Z" />
-      <path d="M9 21V12h6v9" />
     </template>
     <!-- git-pull -->
     <template v-else-if="name === 'git-pull'">

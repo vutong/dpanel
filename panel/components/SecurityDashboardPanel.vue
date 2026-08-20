@@ -1,5 +1,5 @@
 <template>
-  <div class="card security-overview">
+  <div class="card security-dashboard">
     <div class="head">
       <h2>
         <AppIcon name="shield" :size="18" />
@@ -58,11 +58,11 @@ type Status = {
 }
 
 const { data: status, pending: statusPending } = useFetch<Status>('/api/security/status', {
-  key: 'security-status-overview'
+  key: 'security-status-dashboard'
 })
 const { data: evData, pending: evPending } = useFetch<{ events?: SecurityEvent[] }>(
   '/api/security/events?limit=5',
-  { key: 'security-events-overview' }
+  { key: 'security-events-dashboard' }
 )
 
 const pending = computed(() => statusPending.value || evPending.value)
@@ -112,7 +112,7 @@ function kindLabel(kind: string) {
 </script>
 
 <style scoped>
-.security-overview {
+.security-dashboard {
   margin-top: 1.25rem;
 }
 

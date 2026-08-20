@@ -1,11 +1,11 @@
 <template>
-  <div class="overview">
-    <h1>Overview</h1>
+  <div class="dashboard">
+    <h1>Dashboard</h1>
     <p class="page-desc">Manage websites and MariaDB on this VPS.</p>
 
     <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-    <PageLoader v-if="loading" label="Loading overview…" />
+    <PageLoader v-if="loading" label="Loading dashboard…" />
     <div v-else class="grid stat-grid">
       <NuxtLink to="/websites" class="card stat-card">
         <div class="stat-icon">
@@ -29,9 +29,9 @@
 
     <DockerStatsPanel />
 
-    <SecurityOverviewPanel />
+    <SecurityDashboardPanel />
 
-    <footer class="overview-footer">
+    <footer class="dashboard-footer">
       <button
         type="button"
         class="btn btn-sm clean-btn"
@@ -299,7 +299,7 @@ onUnmounted(() => {
   color: var(--muted);
 }
 
-.overview-footer {
+.dashboard-footer {
   margin-top: 2rem;
   display: flex;
   justify-content: flex-end;

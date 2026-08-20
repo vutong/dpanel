@@ -106,7 +106,7 @@ Lưu tại `data/panel/security-events.json` (tối đa ~500 bản ghi).
 
 Route: `/security/events` — bảng sự kiện gần nhất.
 
-Overview hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV).
+Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV).
 
 ---
 

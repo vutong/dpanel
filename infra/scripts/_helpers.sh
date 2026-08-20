@@ -296,7 +296,7 @@ system_update_status_file() {
   echo "${STACK_ROOT}/data/panel/system-update.json"
 }
 
-# Panel polls data/panel/system-update.json for dpanel update progress (Overview).
+# Panel polls data/panel/system-update.json for dpanel update progress (Dashboard).
 system_update_status_write() {
   local status="$1" message="${2:-}"
   ensure_python3 >/dev/null 2>&1 || {

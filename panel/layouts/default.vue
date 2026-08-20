@@ -14,8 +14,8 @@
 
       <nav class="nav">
         <NuxtLink to="/" class="nav-section nav-section--link">
-          <AppIcon name="overview" :size="14" class="section-icon" />
-          Overview
+          <AppIcon name="dashboard" :size="14" class="section-icon" />
+          Dashboard
         </NuxtLink>
         <hr class="nav-divider" aria-hidden="true" />
 

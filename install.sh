@@ -390,7 +390,7 @@ probe_host_disk() {
   fi
   log "Probing disk type (rotational + read speed)"
   bash "${STACK_ROOT}/infra/scripts/host-disk-probe.sh" >/dev/null 2>&1 \
-    || log "Warning: disk probe failed — will retry from panel Overview"
+    || log "Warning: disk probe failed — will retry from panel Dashboard"
 }
 
 step "Deploy stack"
