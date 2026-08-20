@@ -1,5 +1,5 @@
-import { requireAuth } from '../../utils/auth-guard'
-import { parseScriptJson, runScript } from '../../utils/stack'
+import { requireAuth } from '../../../utils/auth-guard'
+import { parseScriptJson, runScript } from '../../../utils/stack'
 
 export type HostHardware = {
   ok?: boolean
