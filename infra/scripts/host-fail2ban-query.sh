@@ -16,7 +16,11 @@ case "$MODE" in
     ;;
 esac
 
-die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
+die() {
+  local msg="${*//\"/\\\"}"
+  echo "{\"ok\":false,\"error\":\"${msg}\"}"
+  exit 1
+}
 
 command -v python3 >/dev/null 2>&1 || die "python3 required"
 
@@ -26,7 +30,9 @@ QUERY_PY="${STACK_ROOT}/infra/scripts/host-fail2ban-query.py"
 # Short command — python logic lives in .py file (avoids ARG_MAX / heredoc in host_exec).
 HOST_CMD="export FAIL2BAN_QUERY_MODE='${MODE}'; python3 '${QUERY_PY}'"
 
-OUT="$(host_exec_capture "${HOST_CMD}")" || die "${OUT:-Fail2ban host query failed}"
+if ! OUT="$(host_exec_capture "${HOST_CMD}")"; then
+  die "${OUT:-Fail2ban host query failed}"
+fi
 
 JSON_LINE="$(echo "${OUT}" | grep -E '^\{.*\}$' | tail -1 || true)"
 if [[ -z "${JSON_LINE}" ]]; then
