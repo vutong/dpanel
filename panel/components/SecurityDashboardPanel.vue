@@ -5,7 +5,7 @@
         <AppIcon name="shield" :size="18" />
         Security
       </h2>
-      <NuxtLink to="/security/events" class="link-sm">All events</NuxtLink>
+      <NuxtLink to="/settings/fail2ban" class="link-sm">Fail2ban</NuxtLink>
     </div>
 
     <PageLoader v-if="pending" label="Loading security…" />
@@ -27,31 +27,12 @@
         <NuxtLink to="/settings/clamav">ClamAV</NuxtLink>
       </p>
 
-      <div v-if="events.length" class="events-mini">
-        <p class="sub">Recent events</p>
-        <ul>
-          <li v-for="ev in events" :key="ev.id">
-            <span class="ev-time">{{ formatTime(ev.at) }}</span>
-            <span class="ev-kind">{{ kindLabel(ev.kind) }}</span>
-            <span v-if="ev.ip" class="ev-meta">{{ ev.ip }}</span>
-            <span v-if="ev.domain" class="ev-meta">{{ ev.domain }}</span>
-          </li>
-        </ul>
-      </div>
-      <p v-else class="muted">No security events yet.</p>
+      <p v-else class="muted">Use Fail2ban and ClamAV pages to manage host security.</p>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-type SecurityEvent = {
-  id: string
-  at: string
-  kind: string
-  ip?: string | null
-  domain?: string | null
-}
-
 type Status = {
   fail2ban?: { installed?: boolean; active?: boolean }
   clamav?: { installed?: boolean; daemonActive?: boolean }
@@ -60,13 +41,8 @@ type Status = {
 const { data: status, pending: statusPending } = useFetch<Status>('/api/security/status', {
   key: 'security-status-dashboard'
 })
-const { data: evData, pending: evPending } = useFetch<{ events?: SecurityEvent[] }>(
-  '/api/security/events?limit=5',
-  { key: 'security-events-dashboard' }
-)
 
-const pending = computed(() => statusPending.value || evPending.value)
-const events = computed(() => evData.value?.events ?? [])
+const pending = computed(() => statusPending.value)
 
 const fail2banOk = computed(
   () => status.value?.fail2ban?.installed && status.value?.fail2ban?.active
@@ -87,28 +63,6 @@ const clamLabel = computed(() => {
   return status.value.clamav.daemonActive ? 'active' : 'inactive'
 })
 
-function formatTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
-}
-
-function kindLabel(kind: string) {
-  switch (kind) {
-    case 'fail2ban_ban':
-      return 'IP banned'
-    case 'login_brute':
-      return 'Login failed'
-    case 'malware_found':
-      return 'Malware'
-    case 'security_install':
-      return 'Installed'
-    default:
-      return kind
-  }
-}
 </script>
 
 <style scoped>
@@ -162,40 +116,6 @@ function kindLabel(kind: string) {
 .hint {
   font-size: 0.875rem;
   margin: 0 0 0.75rem;
-}
-
-.sub {
-  font-size: 0.8125rem;
-  color: var(--muted);
-  margin: 0 0 0.375rem;
-}
-
-.events-mini ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.events-mini li {
-  font-size: 0.8125rem;
-  padding: 0.25rem 0;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.ev-time {
-  color: var(--muted);
-  min-width: 8rem;
-}
-
-.ev-kind {
-  font-weight: 500;
-}
-
-.ev-meta {
-  color: var(--muted);
 }
 
 .muted {

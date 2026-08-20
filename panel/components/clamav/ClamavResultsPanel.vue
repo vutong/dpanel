@@ -40,7 +40,7 @@
       <div v-if="scan.infected?.length" class="card hits-card">
         <div class="section-head">
           <h3 class="section-title">Infected files</h3>
-          <NuxtLink to="/security/events?source=clamav" class="link-sm">Security events</NuxtLink>
+          <NuxtLink to="/settings/clamav" class="link-sm">ClamAV settings</NuxtLink>
         </div>
         <ul class="hits">
           <li v-for="(h, i) in scan.infected" :key="i">

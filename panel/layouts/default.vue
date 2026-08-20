@@ -45,7 +45,6 @@
           <AppIcon name="shield" :size="14" class="section-icon" />
           Security
         </p>
-        <SidebarNavLink to="/security/events" icon="bell" label="Events" />
         <SidebarNavLink to="/settings/fail2ban" icon="ban" label="Fail2ban" />
         <SidebarNavLink to="/settings/clamav" icon="scan" label="ClamAV" />
       </nav>

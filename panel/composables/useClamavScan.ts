@@ -83,7 +83,7 @@ export function useClamavScan(options?: {
       if (scan.status === 'error') {
         options.showAlert(scan.error || 'Scan failed', false)
       } else if (infected > 0) {
-        options.showAlert(`${infected} infected file(s) — see Results or Security events`, false)
+        options.showAlert(`${infected} infected file(s) — see Results for details`, false)
       } else {
         options.showAlert('Scan complete — no infections found', true)
       }

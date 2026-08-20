@@ -41,7 +41,7 @@
         <li><strong>Settings → ClamAV → Scan</strong> — all apps or pick one website</li>
         <li><strong>Websites → [domain] → Scan Virus</strong> — scan that site only</li>
         <li>Only one scan runs at a time (global lock)</li>
-        <li>Results appear under <strong>Results</strong> and in <strong>Security events</strong> when infected</li>
+        <li>Results appear under <strong>Results</strong> when infected</li>
       </ul>
     </details>
 

@@ -95,7 +95,7 @@
         <div class="card section">
           <div class="section-head">
             <h2 class="section-title">Recent Fail2ban events</h2>
-            <NuxtLink to="/security/events?source=fail2ban" class="link-sm">All events</NuxtLink>
+            <span class="section-badge">Last 5</span>
           </div>
           <PageLoader v-if="eventsPending" label="Loading events…" />
           <ul v-else-if="recentEvents.length" class="events-list">

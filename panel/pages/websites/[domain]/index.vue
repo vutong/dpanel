@@ -518,6 +518,7 @@ const lastSiteScan = ref<{
   finishedAt?: string
   startedAt: string
 } | null>(null)
+const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 const {
   activeScan,
@@ -588,7 +589,6 @@ const deleteOpen = ref(false)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const deleteConfirm = ref('')
 const deleteInputId = `delete-confirm-${Math.random().toString(36).slice(2, 9)}`
-const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 const deleteConfirmMatches = computed(() => {
   const expected = site.value?.domain?.trim().toLowerCase() || ''
