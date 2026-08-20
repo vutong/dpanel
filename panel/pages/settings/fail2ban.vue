@@ -82,7 +82,7 @@
             >
               Unban my IP
             </button>
-            <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshBusy" @click="load">
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshBusy" @click="refreshAll">
               <AppIcon name="refresh" :size="14" />
               Refresh
             </button>
@@ -112,10 +112,11 @@
       <!-- Jails & Settings -->
       <div v-show="activeTab === 'jails'" class="tab-panel">
         <div v-if="!data?.installed" class="card muted">Install Fail2ban first.</div>
+        <PageLoader v-else-if="jailsLoading" label="Loading jails…" />
         <Fail2banJailForm
           v-else
           :settings="data.settings ?? { ignoreip: ['127.0.0.1/8', '::1'], jails: {} }"
-          :jails="data.jails || []"
+          :jails="jailsForForm"
           :installed="!!data?.installed"
           :client-ip="data?.clientIp"
           :saving="saveBusy"
@@ -127,11 +128,16 @@
       <!-- Banned IPs -->
       <div v-show="activeTab === 'banned'" class="tab-panel">
         <div v-if="!data?.installed" class="card muted">Install Fail2ban first.</div>
+        <PageLoader v-else-if="bannedLoading" label="Loading banned IPs…" />
         <Fail2banBannedTable
           v-else
-          :jails="data.jails || []"
-          :banned-ips="data.bannedIps"
+          :jails="bannedJails"
+          :banned-ips="bannedIpsList"
+          :ip-geo="bannedIpGeo"
+          :geoip="bannedGeoip"
+          :sync-busy="syncGeoBusy"
           @unban="unban"
+          @sync-geoip="onSyncGeoip"
         />
       </div>
 
@@ -159,29 +165,53 @@ type JailSettings = {
   bantime: number
 }
 
-type Fail2banData = {
+type JailRow = {
+  name: string
+  managedBy?: 'dpanel' | 'system'
+  enabled?: boolean
+  filter?: string | null
+  logpath?: string | null
+  maxretry?: number
+  findtime?: number
+  bantime?: number
+  currentlyFailed?: number
+  totalFailed?: number
+  totalBanned?: number
+  bannedIps?: { ip: string; bannedAt: string | null }[]
+}
+
+type Fail2banSummary = {
   ok?: boolean
   installed?: boolean
   active?: boolean
   version?: string | null
-  jails?: {
-    name: string
-    managedBy?: 'dpanel' | 'system'
-    enabled?: boolean
-    filter?: string | null
-    logpath?: string | null
-    maxretry?: number
-    findtime?: number
-    bantime?: number
-    currentlyFailed?: number
-    totalFailed?: number
-    bannedIps?: { ip: string; bannedAt: string | null }[]
-  }[]
+  jails?: JailRow[]
   bannedIps?: string[]
   settings?: { ignoreip: string[]; jails: Record<string, JailSettings> }
   clientIp?: string | null
   installStatus?: 'none' | 'running' | 'ok' | 'error'
   installMessage?: string
+}
+
+type Fail2banJailsPayload = {
+  jails?: JailRow[]
+  global?: { ignoreip: string[] }
+  settings?: Fail2banSummary['settings']
+}
+
+type Fail2banBannedPayload = {
+  jails?: JailRow[]
+  bannedIps?: string[]
+  ipGeo?: Record<
+    string,
+    { countryCode: string | null; countryName: string | null; flag: string }
+  >
+  geoip?: {
+    ready: boolean
+    syncedAt: string | null
+    buildDate?: string | null
+    edition?: string | null
+  }
 }
 
 type SecurityEvent = {
@@ -193,13 +223,22 @@ type SecurityEvent = {
 
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
-const data = ref<Fail2banData | null>(null)
+const data = ref<Fail2banSummary | null>(null)
+const jailsDetail = ref<JailRow[] | null>(null)
+const bannedPayload = ref<Fail2banBannedPayload | null>(null)
+
 const loading = ref(true)
+const jailsLoading = ref(false)
+const bannedLoading = ref(false)
+const jailsLoaded = ref(false)
+const bannedLoaded = ref(false)
+
 const installBusy = ref(false)
 const refreshBusy = ref(false)
 const reloadBusy = ref(false)
 const startBusy = ref(false)
 const saveBusy = ref(false)
+const syncGeoBusy = ref(false)
 const activeTab = ref<Fail2banTabId>('overview')
 
 const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEvent[] }>(
@@ -226,18 +265,32 @@ const failedCount = computed(() =>
   (data.value?.jails || []).reduce((n, j) => n + (j.currentlyFailed || 0), 0)
 )
 
+const jailsForForm = computed(() => jailsDetail.value ?? data.value?.jails ?? [])
+const bannedJails = computed(() => bannedPayload.value?.jails ?? [])
+const bannedIpsList = computed(() => bannedPayload.value?.bannedIps ?? data.value?.bannedIps ?? [])
+const bannedIpGeo = computed(() => bannedPayload.value?.ipGeo ?? {})
+const bannedGeoip = computed(() => bannedPayload.value?.geoip ?? null)
+
 const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
-  load: () => load(true),
+  load: () => refreshAll(true),
   data,
   installBusy,
   showAlert,
   successMessage: 'Fail2ban installed'
 })
 
-async function load(silent = false) {
+function invalidateTabData() {
+  jailsLoaded.value = false
+  bannedLoaded.value = false
+  jailsDetail.value = null
+  bannedPayload.value = null
+}
+
+async function loadSummary(silent = false) {
   if (!silent) refreshBusy.value = true
   try {
-    data.value = await $fetch<Fail2banData>('/api/security/fail2ban')
+    data.value = await $fetch<Fail2banSummary>('/api/security/fail2ban')
+    invalidateTabData()
   } catch (e: unknown) {
     if (!silent) {
       showAlert(e instanceof Error ? e.message : 'Could not load Fail2ban', false)
@@ -248,12 +301,56 @@ async function load(silent = false) {
   }
 }
 
+async function loadJails(silent = false) {
+  if (!data.value?.installed || jailsLoading.value) return
+  jailsLoading.value = true
+  try {
+    const res = await $fetch<Fail2banJailsPayload>('/api/security/fail2ban/jails')
+    jailsDetail.value = res.jails ?? []
+    if (res.settings) data.value = { ...data.value, settings: res.settings }
+    jailsLoaded.value = true
+  } catch (e: unknown) {
+    if (!silent) showAlert(fetchErrorMessage(e), false)
+  } finally {
+    jailsLoading.value = false
+  }
+}
+
+async function loadBanned(silent = false) {
+  if (!data.value?.installed || bannedLoading.value) return
+  bannedLoading.value = true
+  try {
+    bannedPayload.value = await $fetch<Fail2banBannedPayload>('/api/security/fail2ban/banned')
+    bannedLoaded.value = true
+  } catch (e: unknown) {
+    if (!silent) showAlert(fetchErrorMessage(e), false)
+  } finally {
+    bannedLoading.value = false
+  }
+}
+
+async function refreshAll(silent = false) {
+  await loadSummary(silent)
+  if (activeTab.value === 'jails' && data.value?.installed) {
+    await loadJails(silent)
+  }
+  if (activeTab.value === 'banned' && data.value?.installed) {
+    await loadBanned(silent)
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (!data.value?.installed || loading.value) return
+  if (tab === 'jails' && !jailsLoaded.value) void loadJails(true)
+  if (tab === 'banned' && !bannedLoaded.value) void loadBanned(true)
+})
+
 async function onInstall() {
   if (!confirm('Install Fail2ban on this VPS?')) return
   try {
     await $fetch('/api/security/fail2ban/install', { method: 'POST' })
     showAlert('Installation started in the background', true)
-    await load(true)
+    await loadSummary(true)
     startPoll()
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Could not start install', false)
@@ -265,7 +362,7 @@ async function onStart() {
   try {
     await $fetch('/api/security/fail2ban/start', { method: 'POST' })
     showAlert('Fail2ban service started', true)
-    await load(true)
+    await refreshAll(true)
   } catch (e: unknown) {
     showAlert(fetchErrorMessage(e), false)
   } finally {
@@ -278,7 +375,7 @@ async function onReload() {
   try {
     await $fetch('/api/security/fail2ban/reload', { method: 'POST' })
     showAlert('Fail2ban reloaded', true)
-    await load(true)
+    await refreshAll(true)
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Reload failed', false)
   } finally {
@@ -291,9 +388,30 @@ async function unban(ip: string) {
   try {
     await $fetch('/api/security/fail2ban/unban', { method: 'POST', body: { ip } })
     showAlert(`Unbanned ${ip}`, true)
-    await load(true)
+    await refreshAll(true)
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Unban failed', false)
+  }
+}
+
+async function onSyncGeoip() {
+  syncGeoBusy.value = true
+  try {
+    const res = await $fetch<{ ok?: boolean; syncedAt?: string }>('/api/security/geoip/sync', {
+      method: 'POST'
+    })
+    showAlert(
+      res.syncedAt
+        ? `Country database synced (${new Date(res.syncedAt).toLocaleString()})`
+        : 'Country database synced',
+      true
+    )
+    bannedLoaded.value = false
+    await loadBanned(true)
+  } catch (e: unknown) {
+    showAlert(fetchErrorMessage(e), false)
+  } finally {
+    syncGeoBusy.value = false
   }
 }
 
@@ -311,7 +429,8 @@ async function onSaveSettings(settings: {
     const warn = res.warnings?.length ? ` (${res.warnings.join('; ')})` : ''
     const message = `Settings applied${warn}`
     showAlert(message, true)
-    await load(true)
+    jailsLoaded.value = false
+    await refreshAll(true)
     return { ok: true, message }
   } catch (e: unknown) {
     const message = fetchErrorMessage(e)
@@ -326,13 +445,14 @@ async function onResetJail(jail: string) {
   if (!confirm(`Reset ${jail} to default settings?`)) return
   saveBusy.value = true
   try {
-    const res = await $fetch<{ settings: Fail2banData['settings'] }>(
+    const res = await $fetch<{ settings: Fail2banSummary['settings'] }>(
       '/api/security/fail2ban/settings',
       { method: 'PUT', body: { resetJail: jail } }
     )
     if (res.settings) data.value = { ...data.value, settings: res.settings }
     showAlert(`${jail} reset to defaults`, true)
-    await load(true)
+    jailsLoaded.value = false
+    await refreshAll(true)
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Reset failed', false)
   } finally {
@@ -360,11 +480,11 @@ function fetchErrorMessage(e: unknown): string {
     if (err.data?.message) return err.data.message
     if (err.message && !err.message.startsWith('[PUT]')) return err.message
   }
-  return 'Save failed'
+  return 'Request failed'
 }
 
 onMounted(async () => {
-  await load()
+  await loadSummary()
   resumePollIfRunning()
 })
 </script>

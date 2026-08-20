@@ -63,12 +63,15 @@ Config: [`infra/security/fail2ban/`](../infra/security/fail2ban/)
 - Route: `/settings/fail2ban` — tabs: **Overview**, **Jails & Settings**, **Banned IPs**, **Logs**, **Guide**
 - Overview: service status, reload, recent Fail2ban events, unban my IP
 - Jails & Settings: edit `enabled`, `maxretry`, `findtime`, `bantime` for all jails (including `sshd`); global `ignoreip` whitelist
-- Banned IPs: searchable table with jail names and unban
+- Banned IPs: searchable table with jail names, country (offline MaxMind GeoLite2), and unban
+- Country DB: click **Sync** in the Banned IPs table header → downloads `GeoLite2-Country.mmdb` to `data/panel/geoip/`; sync state in `maxmind.json` (set `GEOIP_MAXMIND_LICENSE_KEY` in `/opt/stack/.env`; IP lookups cached in `lookup-cache.json`)
 - Logs: tail `/var/log/fail2ban.log` with line count and filter
 - Guide: in-panel help (jails, Cloudflare, whitelist, rate limit vs Fail2ban, CLI)
 - **Unban** IP (gọi `host-fail2ban-unban.sh`)
 
 Settings persist in `data/panel/fail2ban-settings.json`; panel regenerates `/etc/fail2ban/jail.d/dpanel*.conf` on save.
+
+**Performance:** host queries use `host-fail2ban-query.sh` — **one chroot session** per API call (not one Docker run per `fail2ban-client` command). Overview loads via `GET /api/security/fail2ban` (`summary` mode); tab **Jails** and **Banned IPs** fetch lazily when opened. No server-side TTL cache — data is always live from the host.
 
 ### Login rate limit (app layer)
 
@@ -82,18 +85,32 @@ Bổ sung trong panel (`POST /api/auth/login`):
 
 ## ClamAV
 
-### Phase hiện tại (V1)
+### Tính năng (panel)
 
-- Cài daemon + freshclam
-- **Scan now** từ panel: toàn bộ `apps/` hoặc một site (`apps/<domain>/`)
+- Cài daemon + freshclam (background install + poll)
+- **Start services** khi daemon/freshclam inactive
+- **Scan background** — toàn bộ `apps/` hoặc từng site; một scan tại một thời điểm (global lock)
+- Lịch sử quét lưu tại `data/panel/clamav-scans/` (index + `by-domain/`)
 - Kết quả infected → event `malware_found` + hiển thị path/domain
+- Scan từ **Websites → [domain] → Scan Virus**
 
 Chưa có: clamonacc on-access, quarantine tự động (xem next-step-security.md).
 
 ### Panel UI
 
-- Route: `/settings/clamav`
-- Trạng thái daemon, ngày signature, nút **Update signatures** (freshclam), **Scan all apps**
+- Route: `/settings/clamav` — tabs: **Overview**, **Scan**, **Results**, **Logs**, **Guide**
+- Overview: trạng thái daemon/freshclam, cài/update/start, recent malware events
+- Scan: quét all apps hoặc chọn site; hiển thị lock khi scan đang chạy
+- Results: lịch sử + chi tiết file infected
+- Logs: tail clamav / freshclam / clamd / latest panel scan log
+- Guide: hướng dẫn in-panel + CLI
+- **Websites → [domain] → Security → Scan Virus** — modal pre-check ClamAV, badge last scan
+
+### Background scan UX
+
+- POST scan trả về ngay (`scanId`); **không** báo success trước khi job xong
+- UI poll `/api/security/clamav/scans?id=` hoặc `?active=1` mỗi ~4s
+- Alert success/error chỉ khi scan hoàn tất (composable `useClamavScan`)
 
 ---
 
@@ -124,14 +141,21 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | POST | `/api/security/fail2ban/install` | Cài Fail2ban |
 | POST | `/api/security/clamav/install` | Cài ClamAV |
 | GET | `/api/security/events` | Danh sách events (`?source=fail2ban` filter) |
-| GET | `/api/security/fail2ban` | Chi tiết jails + settings + banned IPs |
+| GET | `/api/security/fail2ban` | Overview nhanh (installed, counts, settings) |
+| GET | `/api/security/fail2ban/jails` | Jails + runtime config (tab Jails & Settings) |
+| GET | `/api/security/fail2ban/banned` | Banned IPs + GeoIP (tab Banned IPs) |
 | PUT | `/api/security/fail2ban/settings` | Lưu settings; `{ resetJail: "sshd" }` reset một jail |
 | GET | `/api/security/fail2ban/logs` | Tail log (`?lines=200&grep=`) |
 | POST | `/api/security/fail2ban/reload` | Reload fail2ban |
 | POST | `/api/security/fail2ban/unban` | `{ "ip": "…", "jail?": "…" }` |
-| GET | `/api/security/clamav` | Trạng thái ClamAV |
+| GET | `/api/security/clamav` | Trạng thái ClamAV (+ version, activeScan, recentScans) |
+| POST | `/api/security/clamav/start` | Start clamav-daemon + freshclam |
+| GET | `/api/security/clamav/logs` | Tail log (`?lines=200&grep=&source=clamav\|freshclam\|clamd\|scan`) |
+| GET | `/api/security/clamav/scans` | Lịch sử (`?limit=&domain=&active=1&id=`) |
 | POST | `/api/security/clamav/update` | freshclam |
-| POST | `/api/security/clamav/scan` | `{ "domain?" }` — quét apps hoặc một site |
+| POST | `/api/security/clamav/scan` | `{ "domain?", "background?" }` — mặc định background |
+| GET | `/api/websites/[domain]/clamav-scan` | Last scan + active scan cho site |
+| POST | `/api/websites/[domain]/clamav-scan` | Bắt đầu scan site (background) |
 
 ---
 
@@ -141,14 +165,19 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 |--------|---------|
 | `host-chroot.sh` | Helper chroot host từ container |
 | `host-security-status.sh` | JSON status |
-| `host-fail2ban-detail.sh` | Chi tiết jails + settings live |
+| `host-fail2ban-query.sh` | Một lần chroot/mode: `summary` \| `jails` \| `banned` |
+| `host-fail2ban-detail.sh` | Deprecated — gọi `host-fail2ban-query.sh jails` |
 | `host-fail2ban-logs.sh` | Tail fail2ban.log |
 | `host-fail2ban-config-apply.sh` | Ghi config từ `fail2ban-settings.json` + reload |
 | `host-fail2ban-reload.sh` | Reload service |
 | `host-security-install.sh` | apt + sync config + enable services |
 | `host-fail2ban-unban.sh` | Unban IP |
+| `host-clamav-detail.sh` | Chi tiết version, paths, services |
+| `host-clamav-start.sh` | Start/restart daemon + freshclam |
+| `host-clamav-logs.sh` | Tail log ClamAV |
+| `host-clamav-scan-bg.sh` | Scan background → ghi `data/panel/clamav-scans/` |
 | `host-clamav-update.sh` | freshclam |
-| `host-clamav-scan.sh` | Quét path, JSON kết quả |
+| `host-clamav-scan.sh` | Quét path (foreground), JSON kết quả |
 
 ---
 

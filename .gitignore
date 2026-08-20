@@ -7,3 +7,6 @@ dist/
 !.env.example
 *.log
 .DS_Store
+data/panel/geoip/*.mmdb
+data/panel/geoip/*.download.tar.gz
+data/panel/geoip/.extract-*/

@@ -1,41 +1,17 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { readFail2banSettings, seedFail2banSettingsIfMissing } from '../../../utils/fail2ban-settings'
-import { fetchHostSecurityStatus } from '../../../utils/host-security'
+import {
+  queryFail2ban,
+  resolveClientIp,
+  syncFail2banBanEventsFromIps
+} from '../../../utils/fail2ban-host'
 import {
   recordSecurityInstallEventIfNeeded,
   resolveSecurityInstallStatus
 } from '../../../utils/security-install'
-import { parseScriptJson, runScript, scriptErrorMessage } from '../../../utils/stack'
+import { scriptErrorMessage } from '../../../utils/stack'
 
-export type Fail2banBannedEntry = {
-  ip: string
-  bannedAt: string | null
-}
-
-export type Fail2banJailDetail = {
-  name: string
-  managedBy: 'dpanel' | 'system'
-  enabled: boolean
-  filter: string | null
-  logpath: string | null
-  maxretry: number
-  findtime: number
-  bantime: number
-  currentlyFailed: number
-  totalFailed: number
-  totalBanned: number
-  bannedIps: Fail2banBannedEntry[]
-}
-
-export type Fail2banDetail = {
-  ok: boolean
-  installed: boolean
-  active: boolean
-  version: string | null
-  global: { ignoreip: string[] }
-  jails: Fail2banJailDetail[]
-  bannedIps: string[]
-}
+export type { Fail2banBannedEntry, Fail2banJailRow } from '../../../utils/fail2ban-host'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -44,35 +20,19 @@ export default defineEventHandler(async (event) => {
 
   try {
     const install = recordSecurityInstallEventIfNeeded('fail2ban')
-    const status = await fetchHostSecurityStatus()
+    const host = await queryFail2ban('summary')
 
-    let detail: Fail2banDetail | null = null
-    if (status.fail2ban?.installed) {
-      try {
-        const raw = await runScript('host-fail2ban-detail.sh', [], 120_000)
-        detail = parseScriptJson<Fail2banDetail>(raw)
-      } catch {
-        detail = null
-      }
-    }
-
-    const clientIp =
-      String(getHeader(event, 'x-forwarded-for') || '')
-        .split(',')[0]
-        ?.trim() ||
-      getRequestIP(event, { xForwardedFor: true }) ||
-      null
+    syncFail2banBanEventsFromIps(host.bannedIps)
 
     return {
       ok: true,
-      installed: status.fail2ban?.installed ?? false,
-      active: status.fail2ban?.active ?? false,
-      jails: detail?.jails ?? status.fail2ban?.jails ?? [],
-      bannedIps: detail?.bannedIps ?? status.fail2ban?.bannedIps ?? [],
-      version: detail?.version ?? null,
-      global: detail?.global ?? { ignoreip: settings.ignoreip },
+      installed: host.installed,
+      active: host.active,
+      version: host.version,
+      jails: host.jails,
+      bannedIps: host.bannedIps,
       settings,
-      clientIp,
+      clientIp: resolveClientIp(event),
       installStatus: install.status,
       installMessage: install.message ?? ''
     }
@@ -83,10 +43,9 @@ export default defineEventHandler(async (event) => {
         ok: true,
         installed: false,
         active: false,
+        version: null,
         jails: [],
         bannedIps: [],
-        version: null,
-        global: { ignoreip: settings.ignoreip },
         settings,
         clientIp: null,
         installStatus: install.status,

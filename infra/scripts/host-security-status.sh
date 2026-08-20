@@ -66,6 +66,28 @@ out = {
     },
 }
 
+def is_valid_ban_ip(s):
+    s = (s or "").strip()
+    if not s or not re.match(r"^[0-9a-fA-F:.]+$", s):
+        return False
+    if re.match(r"^\d+$", s):
+        return False
+    if "." not in s and ":" not in s:
+        return False
+    return True
+
+def parse_banned_ips_from_jail_status(js):
+    ips = []
+    m = re.search(r"Banned IP list:\s*(.+)", js)
+    if m:
+        rest = m.group(1).strip()
+        if rest and rest not in ("-", "none", "None"):
+            for ip in rest.split():
+                ip = ip.strip()
+                if is_valid_ban_ip(ip) and ip not in ips:
+                    ips.append(ip)
+    return ips
+
 # fail2ban
 if run_host("command -v fail2ban-client").strip():
     out["fail2ban"]["installed"] = True
@@ -80,19 +102,13 @@ if run_host("command -v fail2ban-client").strip():
             jails = [j.strip() for j in m.group(1).split(",") if j.strip()]
         for jail in jails:
             js = run_host(f"fail2ban-client status {jail} 2>/dev/null || true")
-            jm = re.search(r"Currently banned:\s*(.+)", js)
-            if jm:
-                for ip in jm.group(1).split():
-                    ip = ip.strip()
-                    if ip and ip not in banned:
-                        banned.append(ip)
+            jail_banned = parse_banned_ips_from_jail_status(js)
+            for ip in jail_banned:
+                if ip not in banned:
+                    banned.append(ip)
             out["fail2ban"]["jails"].append({
                 "name": jail,
-                "bannedIps": [
-                    ip.strip()
-                    for ip in (re.search(r"Currently banned:\s*(.+)", js) or [None, ""])[1].split()
-                    if ip.strip()
-                ],
+                "bannedIps": jail_banned,
             })
         out["fail2ban"]["bannedIps"] = banned
 

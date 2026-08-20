@@ -84,16 +84,5 @@ export type ClamScanResult = {
 export async function runClamScan(domain?: string): Promise<ClamScanResult> {
   const args = domain ? [domain] : []
   const raw = await runScript('host-clamav-scan.sh', args, 1_800_000)
-  const result = parseScriptJson<ClamScanResult>(raw)
-  for (const hit of result.infected || []) {
-    appendSecurityEvent({
-      kind: 'malware_found',
-      source: 'clamav',
-      domain: hit.domain,
-      path: hit.relPath || hit.path,
-      action: 'scan_infected',
-      detail: hit.line
-    })
-  }
-  return result
+  return parseScriptJson<ClamScanResult>(raw)
 }

@@ -185,6 +185,25 @@
         </div>
       </section>
 
+      <section v-if="!site.pendingDeleteAt" class="section">
+        <h2 class="section-title">Security</h2>
+        <div class="tile-grid">
+          <button
+            type="button"
+            class="tile"
+            :class="{ 'tile--locked': scanLocked }"
+            :disabled="busy || scanLocked"
+            @click="clamScanOpen = true"
+          >
+            <AppIcon name="scan" :size="22" />
+            <span class="tile-title">Scan Virus</span>
+            <span class="tile-desc">ClamAV malware scan for this site</span>
+            <span v-if="lastScanBadge" class="scan-badge" :class="lastScanBadgeClass">{{ lastScanBadge }}</span>
+            <span v-if="scanLocked" class="scan-badge scan-badge--running">Scanning…</span>
+          </button>
+        </div>
+      </section>
+
       <section class="section">
         <h2 class="section-title">Coming soon</h2>
         <p class="section-intro">Planned areas for future releases — not available yet.</p>
@@ -204,6 +223,13 @@
         </button>
       </section>
     </template>
+
+    <SiteClamScanModal
+      :open="clamScanOpen"
+      :domain="domainParam"
+      @close="clamScanOpen = false"
+      @started="onClamScanStarted"
+    />
 
     <SiteOpStreamModal
       :open="!!streamOp"
@@ -482,9 +508,65 @@ const comingSoon = [
   { icon: 'shield', title: 'SSL / TLS', desc: 'Origin certificates' },
   { icon: 'clock', title: 'Cron jobs', desc: 'Scheduled tasks' },
   { icon: 'database', title: 'Linked database', desc: 'Attach MariaDB' },
-  { icon: 'mail', title: 'Email', desc: 'SMTP / mailboxes' },
-  { icon: 'scan', title: 'Scan Virus', desc: 'Malware scan' }
+  { icon: 'mail', title: 'Email', desc: 'SMTP / mailboxes' }
 ]
+
+const clamScanOpen = ref(false)
+const lastSiteScan = ref<{
+  status: string
+  infectedCount?: number
+  finishedAt?: string
+  startedAt: string
+} | null>(null)
+
+const {
+  activeScan,
+  polling: scanPolling,
+  startPoll: startClamPoll,
+  resumePollIfRunning: resumeClamPoll
+} = useClamavScan({
+  showAlert,
+  onComplete: async () => {
+    await loadSiteScanStatus()
+  }
+})
+
+const scanLocked = computed(
+  () => scanPolling.value || activeScan.value?.status === 'running'
+)
+
+const lastScanBadge = computed(() => {
+  const s = lastSiteScan.value
+  if (!s || s.status === 'running') return ''
+  if (s.status === 'error') return 'Last: error'
+  if ((s.infectedCount ?? 0) > 0) return `${s.infectedCount} hit(s)`
+  return 'Last: clean'
+})
+
+const lastScanBadgeClass = computed(() => {
+  const s = lastSiteScan.value
+  if (!s) return ''
+  if (s.status === 'error') return 'scan-badge--error'
+  if ((s.infectedCount ?? 0) > 0) return 'scan-badge--warn'
+  return 'scan-badge--ok'
+})
+
+async function loadSiteScanStatus() {
+  if (!domainParam.value) return
+  try {
+    const res = await $fetch<{
+      lastScan?: typeof lastSiteScan.value
+      globalScanRunning?: boolean
+    }>(`/api/websites/${encodeURIComponent(domainParam.value)}/clamav-scan`)
+    lastSiteScan.value = res.lastScan ?? null
+  } catch {
+    lastSiteScan.value = null
+  }
+}
+
+function onClamScanStarted(scanId: string) {
+  startClamPoll(scanId)
+}
 
 const busy = ref(false)
 const streamOp = ref<SiteOpKind | null>(null)
@@ -657,6 +739,8 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
 // Resume console after refresh if update/rebuild is still running (same idea as Update Dpanel).
 onMounted(() => {
   if (!import.meta.client || !domainParam.value) return
+  void loadSiteScanStatus()
+  void resumeClamPoll()
   void $fetch<{ status?: string; op?: string }>(
     `/api/websites/${encodeURIComponent(domainParam.value)}/operation`
   )
@@ -905,6 +989,33 @@ a.tile {
 .tile--soon {
   cursor: default;
   opacity: 0.65;
+}
+.tile--locked {
+  opacity: 0.75;
+}
+.scan-badge {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.scan-badge--ok {
+  color: var(--success, #16a34a);
+}
+.scan-badge--warn {
+  color: var(--warning, #ca8a04);
+}
+.scan-badge--error {
+  color: var(--danger, #dc2626);
+}
+.scan-badge--running {
+  color: var(--accent);
 }
 .tile-title {
   font-weight: 600;
