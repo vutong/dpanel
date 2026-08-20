@@ -70,15 +70,24 @@
 
           <div class="containers-head">
             <h3 class="sub-title">Containers</h3>
-            <label v-if="containers.length" class="limit-select-wrap">
-              <span class="muted">Show</span>
-              <select v-model.number="containerLimit" class="limit-select">
-                <option v-for="n in containerLimitOptions" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </label>
+            <div v-if="containers.length" class="containers-head-actions">
+              <label v-if="containersExpanded" class="limit-select-wrap">
+                <span class="muted">Show</span>
+                <select v-model.number="containerLimit" class="limit-select">
+                  <option v-for="n in containerLimitOptions" :key="n" :value="n">{{ n }}</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                class="toggle-btn"
+                @click="containersExpanded = !containersExpanded"
+              >
+                {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
+              </button>
+            </div>
           </div>
           <p v-if="!containers.length" class="muted empty">No running containers.</p>
-          <div v-else class="table-wrap containers-table-wrap">
+          <div v-else-if="containersExpanded" class="table-wrap containers-table-wrap">
             <table class="table stats-table compact">
               <thead>
                 <tr>
@@ -259,6 +268,7 @@ const MAX_POINTS = 45
 const data = ref<StatsPayload | null>(null)
 const fetchError = ref('')
 const history = ref<HistoryPoint[]>([])
+const containersExpanded = ref(false)
 const diskTesting = ref(false)
 const diskTestError = ref('')
 const containerLimitOptions = [25, 50, 100, 200, 350] as const
@@ -725,6 +735,12 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+.containers-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .limit-select-wrap {
   display: inline-flex;
   align-items: center;
@@ -740,6 +756,21 @@ onUnmounted(() => {
   background: var(--surface-elevated);
   color: var(--text);
   font-size: 0.78rem;
+}
+
+.toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.toggle-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .containers-table-wrap {
