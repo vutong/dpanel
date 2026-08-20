@@ -166,6 +166,7 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | `host-chroot.sh` | Helper chroot host từ container |
 | `host-security-status.sh` | JSON status |
 | `host-fail2ban-query.sh` | Một lần chroot/mode: `summary` \| `jails` \| `banned` |
+| `host-fail2ban-query.py` | Logic query (gọi từ `.sh` trên host) |
 | `host-fail2ban-detail.sh` | Deprecated — gọi `host-fail2ban-query.sh jails` |
 | `host-fail2ban-logs.sh` | Tail fail2ban.log |
 | `host-fail2ban-config-apply.sh` | Ghi config từ `fail2ban-settings.json` + reload |
