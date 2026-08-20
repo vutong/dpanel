@@ -19,15 +19,9 @@
           <div class="status-pills">
             <div
               class="pill"
-              :class="data?.installed && data?.daemonActive ? 'pill-ok' : 'pill-warn'"
+              :class="statusPillClass"
             >
-              {{
-                data?.installed
-                  ? data.daemonActive
-                    ? 'Daemon active'
-                    : 'Daemon inactive'
-                  : 'Not installed'
-              }}
+              {{ statusPillLabel }}
             </div>
             <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
             <div v-if="data?.installed" class="pill">
@@ -39,7 +33,7 @@
           <dl class="status-dl">
             <div>
               <dt>Installed</dt>
-              <dd>{{ data?.installed ? 'Yes' : 'No' }}</dd>
+              <dd>{{ installedLabel }}</dd>
             </div>
             <div>
               <dt>Daemon</dt>
@@ -90,7 +84,7 @@
             >
               {{ updateBusy ? 'Updating…' : 'Update signatures' }}
             </button>
-            <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshBusy" @click="load">
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshBusy" @click="refreshAll">
               <AppIcon name="refresh" :size="14" />
               Refresh
             </button>
@@ -120,9 +114,9 @@
 
       <!-- Scan -->
       <div v-show="activeTab === 'scan'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install ClamAV first.</div>
+        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
         <ClamavScanPanel
-          v-else
+          v-else-if="activeTab === 'scan'"
           :installed="!!data?.installed"
           :sites="sites"
           :scan-locked="scanLocked"
@@ -136,8 +130,8 @@
 
       <!-- Results -->
       <div v-show="activeTab === 'results'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install ClamAV first.</div>
-        <template v-else>
+        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
+        <template v-else-if="activeTab === 'results'">
           <ClamavScanHistory
             ref="historyRef"
             :sites="sites"
@@ -150,8 +144,8 @@
 
       <!-- Logs -->
       <div v-show="activeTab === 'logs'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install ClamAV first.</div>
-        <ClamavLogViewer v-else :installed="!!data?.installed" />
+        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
+        <ClamavLogViewer v-else-if="activeTab === 'logs'" :installed="!!data?.installed" />
       </div>
 
       <!-- Guide -->
@@ -167,6 +161,8 @@ import ClamavTabs, { type ClamavTabId } from '~/components/clamav/ClamavTabs.vue
 import type { ClamavScanSummary } from '~/composables/useClamavScan'
 
 type ClamData = {
+  ok?: boolean
+  error?: string
   installed?: boolean
   daemonActive?: boolean
   freshclamActive?: boolean
@@ -230,8 +226,30 @@ const scanLocked = computed(
   () => scanPolling.value || activeScan.value?.status === 'running' || !!data.value?.activeScan
 )
 
+const isInstalled = computed(() => data.value?.installed === true)
+
+const statusPillLabel = computed(() => {
+  if (data.value?.installed === true) {
+    return data.value.daemonActive ? 'Daemon active' : 'Daemon inactive'
+  }
+  if (data.value?.installed === false) return 'Not installed'
+  if (data.value?.ok === false) return 'Status unavailable'
+  return '—'
+})
+
+const statusPillClass = computed(() => {
+  if (data.value?.installed === true && data.value.daemonActive) return 'pill-ok'
+  return 'pill-warn'
+})
+
+const installedLabel = computed(() => {
+  if (data.value?.installed === true) return 'Yes'
+  if (data.value?.installed === false) return 'No'
+  return '—'
+})
+
 const tabItems = computed(() => {
-  const installed = !!data.value?.installed
+  const installed = isInstalled.value
   return [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'scan' as const, label: 'Scan', disabled: !installed },
@@ -242,20 +260,38 @@ const tabItems = computed(() => {
 })
 
 const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
-  load: () => load(true),
+  load: () => refreshAll(true),
   data,
   installBusy,
   showAlert,
   successMessage: 'ClamAV installed'
 })
 
-async function load(silent = false) {
+async function loadSummary(silent = false) {
   if (!silent) refreshBusy.value = true
+  const prev = data.value
   try {
-    data.value = await $fetch<ClamData>('/api/security/clamav')
+    const res = await $fetch<ClamData>('/api/security/clamav')
+    if (res.ok === false) {
+      if (prev?.installed === true) {
+        data.value = {
+          ...prev,
+          ok: false,
+          error: res.error,
+          installStatus: res.installStatus ?? prev.installStatus,
+          installMessage: res.installMessage ?? prev.installMessage,
+          activeScan: res.activeScan ?? prev.activeScan
+        }
+      } else {
+        data.value = res
+      }
+      if (res.error && !silent) showAlert(res.error, false)
+      return
+    }
+    data.value = res
   } catch (e: unknown) {
     if (!silent) {
-      showAlert(e instanceof Error ? e.message : 'Could not load ClamAV', false)
+      showAlert(fetchApiErrorMessage(e, 'Could not load ClamAV'), false)
     }
   } finally {
     loading.value = false
@@ -263,12 +299,23 @@ async function load(silent = false) {
   }
 }
 
+async function refreshAll(silent = false) {
+  await loadSummary(silent)
+  if (activeTab.value === 'results') {
+    historyRef.value?.refresh?.()
+  }
+}
+
+async function load(silent = false) {
+  await refreshAll(silent)
+}
+
 async function onInstall() {
   if (!confirm('Install ClamAV on this VPS? Signature download may take several minutes.')) return
   try {
     await $fetch('/api/security/clamav/install', { method: 'POST' })
     showAlert('Installation started in the background', true)
-    await load(true)
+    await loadSummary(true)
     startPoll()
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Could not start install', false)
@@ -278,11 +325,17 @@ async function onInstall() {
 async function onStart() {
   startBusy.value = true
   try {
-    await $fetch('/api/security/clamav/start', { method: 'POST' })
+    const res = await $fetch<{ ok?: boolean; error?: string }>('/api/security/clamav/start', {
+      method: 'POST'
+    })
+    if (res.ok === false) {
+      showAlert(res.error || 'Start failed', false)
+      return
+    }
     showAlert('ClamAV services started', true)
-    await load(true)
+    await refreshAll(true)
   } catch (e: unknown) {
-    showAlert(fetchErrorMessage(e), false)
+    showAlert(fetchApiErrorMessage(e), false)
   } finally {
     startBusy.value = false
   }
@@ -291,9 +344,16 @@ async function onStart() {
 async function onUpdate() {
   updateBusy.value = true
   try {
-    await $fetch('/api/security/clamav/update', { method: 'POST', timeout: 600_000 })
+    const res = await $fetch<{ ok?: boolean; error?: string }>('/api/security/clamav/update', {
+      method: 'POST',
+      timeout: 600_000
+    })
+    if (res.ok === false) {
+      showAlert(res.error || 'Update failed', false)
+      return
+    }
     showAlert('Signature update finished', true)
-    await load()
+    await refreshAll()
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Update failed', false)
   } finally {
@@ -336,23 +396,8 @@ function formatTime(iso: string) {
   }
 }
 
-function fetchErrorMessage(e: unknown): string {
-  if (e && typeof e === 'object') {
-    const err = e as {
-      data?: { statusMessage?: string; message?: string }
-      statusMessage?: string
-      message?: string
-    }
-    if (err.data?.statusMessage) return err.data.statusMessage
-    if (err.statusMessage) return err.statusMessage
-    if (err.data?.message) return err.data.message
-    if (err.message && !err.message.startsWith('[POST]')) return err.message
-  }
-  return 'Operation failed'
-}
-
 onMounted(async () => {
-  await load()
+  await loadSummary()
   resumePollIfRunning()
   await resumeScanPoll()
 })

@@ -1,4 +1,5 @@
 import { getHeader, getRequestIP, type H3Event } from 'h3'
+import { DPANEL_JAILS, type Fail2banSettings } from './fail2ban-settings'
 import {
   readFail2banKnownIps,
   syncFail2banBanEvents,
@@ -96,6 +97,33 @@ export function syncFail2banBanEventsFromIps(bannedIps: string[]): void {
   const known = readFail2banKnownIps()
   syncFail2banBanEvents(ips, known)
   writeFail2banKnownIps(known)
+}
+
+/** When fail2ban is stopped, host query returns no jails — fill from panel settings for overview/forms. */
+export function enrichFail2banJailsFromSettings(
+  host: Fail2banQueryResult,
+  settings: Fail2banSettings
+): Fail2banQueryResult {
+  if (!host.installed || host.jails.length > 0) return host
+
+  const dpanelSet = new Set<string>(DPANEL_JAILS)
+  const jails = Object.keys(settings.jails || {}).map((name) => {
+    const saved = settings.jails[name]
+    return {
+      name,
+      managedBy: (dpanelSet.has(name) ? 'dpanel' : 'system') as 'dpanel' | 'system',
+      enabled: saved?.enabled ?? true,
+      maxretry: saved?.maxretry,
+      findtime: saved?.findtime,
+      bantime: saved?.bantime,
+      currentlyFailed: 0,
+      totalFailed: 0,
+      totalBanned: 0,
+      bannedIps: [] as Fail2banBannedEntry[]
+    }
+  })
+
+  return { ...host, jails }
 }
 
 export { filterBannedIps, isValidBanIp }

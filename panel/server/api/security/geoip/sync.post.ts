@@ -15,7 +15,9 @@ export default defineEventHandler(async (event) => {
       ready: status.ready
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'GeoIP sync failed'
-    throw createError({ statusCode: 400, statusMessage: message })
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'GeoIP sync failed'
+    }
   }
 })

@@ -13,7 +13,14 @@ export default defineEventHandler(async (event) => {
   try {
     const host = await queryFail2ban('banned')
     if (!host.installed) {
-      throw createError({ statusCode: 400, statusMessage: 'Fail2ban is not installed' })
+      return {
+        ok: false,
+        error: 'Fail2ban is not installed',
+        jails: [],
+        bannedIps: [],
+        ipGeo: {},
+        geoip: buildGeoipStatusPayload()
+      }
     }
 
     syncFail2banBanEventsFromIps(host.bannedIps)
@@ -29,7 +36,6 @@ export default defineEventHandler(async (event) => {
       geoip: buildGeoipStatusPayload()
     }
   } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'statusCode' in e) throw e
     return {
       ok: false,
       error: scriptErrorMessage(e),

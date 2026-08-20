@@ -1,6 +1,7 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { readFail2banSettings, seedFail2banSettingsIfMissing } from '../../../utils/fail2ban-settings'
 import {
+  enrichFail2banJailsFromSettings,
   queryFail2ban,
   resolveClientIp,
   syncFail2banBanEventsFromIps
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const install = recordSecurityInstallEventIfNeeded('fail2ban')
-    const host = await queryFail2ban('summary')
+    const host = enrichFail2banJailsFromSettings(await queryFail2ban('summary'), settings)
 
     syncFail2banBanEventsFromIps(host.bannedIps)
 
@@ -63,7 +64,6 @@ export default defineEventHandler(async (event) => {
     return {
       ok: false,
       error,
-      installed: false,
       active: false,
       version: null,
       jails: [],

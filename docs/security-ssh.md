@@ -106,6 +106,8 @@ Chưa có: clamonacc on-access, quarantine tự động (xem next-step-security.
 - Guide: hướng dẫn in-panel + CLI
 - **Websites → [domain] → Security → Scan Virus** — modal pre-check ClamAV, badge last scan
 
+**Performance:** host queries use `host-clamav-query.sh` — **one chroot session** per API call. Overview loads via `GET /api/security/clamav` (`summary`); tab **Results** / **Logs** / **Scan** mount lazily; scan history via `GET /api/security/clamav/scans`. No server-side TTL cache.
+
 ### Background scan UX
 
 - POST scan trả về ngay (`scanId`); **không** báo success trước khi job xong
@@ -148,7 +150,8 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | GET | `/api/security/fail2ban/logs` | Tail log (`?lines=200&grep=`) |
 | POST | `/api/security/fail2ban/reload` | Reload fail2ban |
 | POST | `/api/security/fail2ban/unban` | `{ "ip": "…", "jail?": "…" }` |
-| GET | `/api/security/clamav` | Trạng thái ClamAV (+ version, activeScan, recentScans) |
+| GET | `/api/security/clamav` | Overview nhanh (installed, services, activeScan) |
+| GET | `/api/security/clamav/detail` | Version, binary paths, log paths |
 | POST | `/api/security/clamav/start` | Start clamav-daemon + freshclam |
 | GET | `/api/security/clamav/logs` | Tail log (`?lines=200&grep=&source=clamav\|freshclam\|clamd\|scan`) |
 | GET | `/api/security/clamav/scans` | Lịch sử (`?limit=&domain=&active=1&id=`) |
@@ -173,7 +176,9 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | `host-fail2ban-reload.sh` | Reload service |
 | `host-security-install.sh` | apt + sync config + enable services |
 | `host-fail2ban-unban.sh` | Unban IP |
-| `host-clamav-detail.sh` | Chi tiết version, paths, services |
+| `host-clamav-query.sh` | Một lần chroot/mode: `summary` \| `detail` |
+| `host-clamav-query.py` | Logic query (gọi từ `.sh` trên host) |
+| `host-clamav-detail.sh` | Deprecated — gọi `host-clamav-query.sh detail` |
 | `host-clamav-start.sh` | Start/restart daemon + freshclam |
 | `host-clamav-logs.sh` | Tail log ClamAV |
 | `host-clamav-scan-bg.sh` | Scan background → ghi `data/panel/clamav-scans/` |

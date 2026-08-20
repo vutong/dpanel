@@ -17,8 +17,8 @@
       <div v-show="activeTab === 'overview'" class="tab-panel">
         <div class="card status-card">
           <div class="status-pills">
-            <div class="pill" :class="data?.installed && data?.active ? 'pill-ok' : 'pill-warn'">
-              {{ data?.installed ? (data.active ? 'Active' : 'Inactive') : 'Not installed' }}
+            <div class="pill" :class="statusPillClass">
+              {{ statusPillLabel }}
             </div>
             <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
             <div class="pill">{{ jailCount }} jail(s)</div>
@@ -29,7 +29,7 @@
           <dl class="status-dl">
             <div>
               <dt>Installed</dt>
-              <dd>{{ data?.installed ? 'Yes' : 'No' }}</dd>
+              <dd>{{ installedLabel }}</dd>
             </div>
             <div>
               <dt>Service</dt>
@@ -111,8 +111,9 @@
 
       <!-- Jails & Settings -->
       <div v-show="activeTab === 'jails'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install Fail2ban first.</div>
-        <PageLoader v-else-if="jailsLoading" label="Loading jails…" />
+        <div v-if="!isInstalled" class="card muted">Install Fail2ban first.</div>
+        <PageLoader v-else-if="jailsLoading || !jailsLoaded" label="Loading jails…" />
+        <div v-else-if="jailsError" class="card muted warn">{{ jailsError }}</div>
         <Fail2banJailForm
           v-else
           :settings="data.settings ?? { ignoreip: ['127.0.0.1/8', '::1'], jails: {} }"
@@ -127,8 +128,9 @@
 
       <!-- Banned IPs -->
       <div v-show="activeTab === 'banned'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install Fail2ban first.</div>
-        <PageLoader v-else-if="bannedLoading" label="Loading banned IPs…" />
+        <div v-if="!isInstalled" class="card muted">Install Fail2ban first.</div>
+        <PageLoader v-else-if="bannedLoading || !bannedLoaded" label="Loading banned IPs…" />
+        <div v-else-if="bannedError" class="card muted warn">{{ bannedError }}</div>
         <Fail2banBannedTable
           v-else
           :jails="bannedJails"
@@ -195,12 +197,16 @@ type Fail2banSummary = {
 }
 
 type Fail2banJailsPayload = {
+  ok?: boolean
+  error?: string
   jails?: JailRow[]
   global?: { ignoreip: string[] }
   settings?: Fail2banSummary['settings']
 }
 
 type Fail2banBannedPayload = {
+  ok?: boolean
+  error?: string
   jails?: JailRow[]
   bannedIps?: string[]
   ipGeo?: Record<
@@ -233,6 +239,8 @@ const jailsLoading = ref(false)
 const bannedLoading = ref(false)
 const jailsLoaded = ref(false)
 const bannedLoaded = ref(false)
+const jailsError = ref('')
+const bannedError = ref('')
 
 const installBusy = ref(false)
 const refreshBusy = ref(false)
@@ -249,8 +257,31 @@ const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEve
 
 const recentEvents = computed(() => evData.value?.events ?? [])
 
+const isInstalled = computed(() => data.value?.installed === true)
+
+const statusPillLabel = computed(() => {
+  if (data.value?.installed === true) {
+    return data.value.active ? 'Active' : 'Inactive'
+  }
+  if (data.value?.installed === false) return 'Not installed'
+  if (data.value?.ok === false) return 'Status unavailable'
+  return '—'
+})
+
+const statusPillClass = computed(() => {
+  if (data.value?.installed === true && data.value.active) return 'pill-ok'
+  if (data.value?.installed === true || data.value?.installed === false) return 'pill-warn'
+  return 'pill-warn'
+})
+
+const installedLabel = computed(() => {
+  if (data.value?.installed === true) return 'Yes'
+  if (data.value?.installed === false) return 'No'
+  return '—'
+})
+
 const tabItems = computed(() => {
-  const installed = !!data.value?.installed
+  const installed = isInstalled.value
   return [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'jails' as const, label: 'Jails & Settings', disabled: !installed },
@@ -283,22 +314,37 @@ const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
 function invalidateTabData() {
   jailsLoaded.value = false
   bannedLoaded.value = false
+  jailsError.value = ''
+  bannedError.value = ''
   jailsDetail.value = null
   bannedPayload.value = null
 }
 
 async function loadSummary(silent = false) {
   if (!silent) refreshBusy.value = true
+  const prev = data.value
   try {
     const res = await $fetch<Fail2banSummary>('/api/security/fail2ban')
+    if (res.ok === false) {
+      if (prev?.installed === true) {
+        data.value = {
+          ...prev,
+          ok: false,
+          error: res.error,
+          installStatus: res.installStatus ?? prev.installStatus,
+          installMessage: res.installMessage ?? prev.installMessage
+        }
+      } else {
+        data.value = res
+      }
+      if (res.error && !silent) showAlert(res.error, false)
+      return
+    }
     data.value = res
     invalidateTabData()
-    if (res.ok === false && res.error && !silent) {
-      showAlert(res.error, false)
-    }
   } catch (e: unknown) {
     if (!silent) {
-      showAlert(e instanceof Error ? e.message : 'Could not load Fail2ban', false)
+      showAlert(fetchApiErrorMessage(e, 'Could not load Fail2ban'), false)
     }
   } finally {
     loading.value = false
@@ -307,28 +353,43 @@ async function loadSummary(silent = false) {
 }
 
 async function loadJails(silent = false) {
-  if (!data.value?.installed || jailsLoading.value) return
+  if (!isInstalled.value || jailsLoading.value) return
   jailsLoading.value = true
+  jailsError.value = ''
   try {
     const res = await $fetch<Fail2banJailsPayload>('/api/security/fail2ban/jails')
+    if (res.ok === false) {
+      jailsError.value = res.error || 'Could not load jails'
+      if (!silent) showAlert(jailsError.value, false)
+      return
+    }
     jailsDetail.value = res.jails ?? []
-    if (res.settings) data.value = { ...data.value, settings: res.settings }
+    if (res.settings && data.value) data.value = { ...data.value, settings: res.settings }
     jailsLoaded.value = true
   } catch (e: unknown) {
-    if (!silent) showAlert(fetchErrorMessage(e), false)
+    jailsError.value = fetchApiErrorMessage(e, 'Could not load jails')
+    if (!silent) showAlert(jailsError.value, false)
   } finally {
     jailsLoading.value = false
   }
 }
 
 async function loadBanned(silent = false) {
-  if (!data.value?.installed || bannedLoading.value) return
+  if (!isInstalled.value || bannedLoading.value) return
   bannedLoading.value = true
+  bannedError.value = ''
   try {
-    bannedPayload.value = await $fetch<Fail2banBannedPayload>('/api/security/fail2ban/banned')
+    const res = await $fetch<Fail2banBannedPayload>('/api/security/fail2ban/banned')
+    if (res.ok === false) {
+      bannedError.value = res.error || 'Could not load banned IPs'
+      if (!silent) showAlert(bannedError.value, false)
+      return
+    }
+    bannedPayload.value = res
     bannedLoaded.value = true
   } catch (e: unknown) {
-    if (!silent) showAlert(fetchErrorMessage(e), false)
+    bannedError.value = fetchApiErrorMessage(e, 'Could not load banned IPs')
+    if (!silent) showAlert(bannedError.value, false)
   } finally {
     bannedLoading.value = false
   }
@@ -336,18 +397,18 @@ async function loadBanned(silent = false) {
 
 async function refreshAll(silent = false) {
   await loadSummary(silent)
-  if (activeTab.value === 'jails' && data.value?.installed) {
+  if (activeTab.value === 'jails' && isInstalled.value) {
     await loadJails(silent)
   }
-  if (activeTab.value === 'banned' && data.value?.installed) {
+  if (activeTab.value === 'banned' && isInstalled.value) {
     await loadBanned(silent)
   }
 }
 
 watch(activeTab, (tab) => {
-  if (!data.value?.installed || loading.value) return
-  if (tab === 'jails' && !jailsLoaded.value) void loadJails(true)
-  if (tab === 'banned' && !bannedLoaded.value) void loadBanned(true)
+  if (!isInstalled.value || loading.value) return
+  if (tab === 'jails' && !jailsLoaded.value && !jailsLoading.value) void loadJails(true)
+  if (tab === 'banned' && !bannedLoaded.value && !bannedLoading.value) void loadBanned(true)
 })
 
 async function onInstall() {
@@ -369,7 +430,7 @@ async function onStart() {
     showAlert('Fail2ban service started', true)
     await refreshAll(true)
   } catch (e: unknown) {
-    showAlert(fetchErrorMessage(e), false)
+    showAlert(fetchApiErrorMessage(e), false)
   } finally {
     startBusy.value = false
   }
@@ -402,9 +463,16 @@ async function unban(ip: string) {
 async function onSyncGeoip() {
   syncGeoBusy.value = true
   try {
-    const res = await $fetch<{ ok?: boolean; syncedAt?: string }>('/api/security/geoip/sync', {
+    const res = await $fetch<{ ok?: boolean; error?: string; syncedAt?: string }>(
+      '/api/security/geoip/sync',
+      {
       method: 'POST'
-    })
+      }
+    )
+    if (res.ok === false) {
+      showAlert(res.error || 'Country database sync failed', false)
+      return
+    }
     showAlert(
       res.syncedAt
         ? `Country database synced (${new Date(res.syncedAt).toLocaleString()})`
@@ -414,7 +482,7 @@ async function onSyncGeoip() {
     bannedLoaded.value = false
     await loadBanned(true)
   } catch (e: unknown) {
-    showAlert(fetchErrorMessage(e), false)
+    showAlert(fetchApiErrorMessage(e), false)
   } finally {
     syncGeoBusy.value = false
   }
@@ -438,7 +506,7 @@ async function onSaveSettings(settings: {
     await refreshAll(true)
     return { ok: true, message }
   } catch (e: unknown) {
-    const message = fetchErrorMessage(e)
+    const message = fetchApiErrorMessage(e)
     showAlert(message, false)
     return { ok: false, message }
   } finally {
@@ -471,21 +539,6 @@ function formatTime(iso: string) {
   } catch {
     return iso
   }
-}
-
-function fetchErrorMessage(e: unknown): string {
-  if (e && typeof e === 'object') {
-    const err = e as {
-      data?: { statusMessage?: string; message?: string }
-      statusMessage?: string
-      message?: string
-    }
-    if (err.data?.statusMessage) return err.data.statusMessage
-    if (err.statusMessage) return err.statusMessage
-    if (err.data?.message) return err.data.message
-    if (err.message && !err.message.startsWith('[PUT]')) return err.message
-  }
-  return 'Request failed'
 }
 
 onMounted(async () => {
@@ -604,6 +657,10 @@ onMounted(async () => {
 
 .muted {
   color: var(--muted);
+}
+
+.warn {
+  border-left: 3px solid var(--warning, #ca8a04);
 }
 
 .tab-panel {
