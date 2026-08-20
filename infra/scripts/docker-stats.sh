@@ -211,6 +211,18 @@ for label, sub in [("Applications", "apps"), ("Data", "data"), ("Logs", "logs")]
 
 disk_breakdown.sort(key=lambda x: x["bytes"], reverse=True)
 
+HW_CACHE = os.path.join(stack_root, "data", "panel", "host-hardware.json")
+
+def load_hardware():
+    """Load persisted hardware info — never re-probe here (use host-hardware-save.sh)."""
+    try:
+        with open(HW_CACHE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+hw = load_hardware()
+
 print(json.dumps({
     "ok": True,
     "host": {
@@ -220,7 +232,15 @@ print(json.dumps({
         "cpuCores": cpu_cores_usage(),
         "diskUsedBytes": system_disk_used,
         "diskTotalBytes": system_disk_total,
-        "diskKind": disk_kind,
+        "diskKind": hw.get("diskKind") or disk_kind,
+        "diskModel": hw.get("diskModel"),
+        "diskDevice": hw.get("diskDevice"),
+        "cpuModel": hw.get("cpuModel"),
+        "cpuModelFull": hw.get("cpuModelFull"),
+        "cpuThreads": hw.get("cpuThreads") or (os.cpu_count() or 0),
+        "memType": hw.get("memType"),
+        "memSpeedMhz": hw.get("memSpeedMhz"),
+        "probedAt": hw.get("probedAt"),
     },
     "disk": {
         "stackUsedBytes": stack_disk_used,

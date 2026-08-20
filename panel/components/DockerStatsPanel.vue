@@ -113,12 +113,66 @@
         </div>
 
         <aside class="host-metrics" aria-label="Server metrics">
-          <h3 class="metrics-title">Server</h3>
+          <div class="metrics-head">
+            <h3 class="metrics-title">Server</h3>
+            <button
+              type="button"
+              class="icon-btn hw-reload"
+              title="Re-detect CPU, RAM, disk hardware"
+              aria-label="Re-detect server hardware"
+              :disabled="hwRefreshBusy"
+              @click="refreshHardware"
+            >
+              <span class="hw-reload-icon" :class="{ spin: hwRefreshBusy }">
+                <AppIcon name="refresh" :size="15" />
+              </span>
+            </button>
+          </div>
+          <p v-if="hwRefreshError" class="hw-error">{{ hwRefreshError }}</p>
+          <p v-else-if="host?.probedAt" class="probed-at muted">
+            Detected {{ formatProbedAt(host.probedAt) }}
+          </p>
+          <p v-else-if="!host?.cpuModel" class="probed-at muted">
+            No hardware profile —
+            <button type="button" class="link-btn" @click="refreshHardware">Detect now</button>
+          </p>
+
+          <div class="metric-row metric-row-cpu">
+            <span class="metric-icon" aria-hidden="true">⚡</span>
+            <div class="metric-body">
+              <span class="metric-name">CPU</span>
+              <span
+                class="hw-name"
+                :title="host?.cpuModelFull || undefined"
+              >
+                {{ host?.cpuModel || 'Detecting…' }}
+              </span>
+              <span v-if="host?.cpuThreads" class="hw-sub muted">
+                {{ host.cpuThreads }} threads · avg {{ currentCpu.toFixed(1) }}%
+              </span>
+              <ul v-if="cpuCores.length" class="cpu-list">
+                <li v-for="core in cpuCores" :key="core.index">
+                  <span class="cpu-label">Core {{ core.index + 1 }}</span>
+                  <div class="cpu-track">
+                    <div class="cpu-fill" :style="{ width: `${core.percent}%` }" />
+                  </div>
+                  <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
+                </li>
+              </ul>
+              <p v-else class="muted cpu-wait">Sampling cores…</p>
+            </div>
+          </div>
 
           <div class="metric-row">
             <span class="metric-icon" aria-hidden="true">🧠</span>
             <div class="metric-body">
-              <span class="metric-name">RAM</span>
+              <span class="metric-name">
+                RAM
+                <span v-if="host?.memType" class="hw-badge">{{ host.memType }}</span>
+                <span v-else-if="host?.memSpeedMhz" class="hw-badge muted-badge">
+                  {{ host.memSpeedMhz }} MT/s
+                </span>
+              </span>
               <span class="metric-detail">
                 {{ formatBytes(host?.memUsedBytes) }}
                 <span class="metric-pct">({{ memPct.toFixed(0) }}%)</span>
@@ -133,10 +187,19 @@
           <div class="metric-row">
             <span class="metric-icon" aria-hidden="true">💾</span>
             <div class="metric-body">
-              <span class="metric-name">Disk</span>
+              <span class="metric-name">
+                Disk
+                <span v-if="host?.diskKind" class="hw-badge disk-badge">{{ host.diskKind }}</span>
+              </span>
+              <span
+                v-if="host?.diskModel"
+                class="hw-name disk-model"
+                :title="host.diskDevice || undefined"
+              >
+                {{ host.diskModel }}
+              </span>
               <span class="metric-detail">
                 {{ formatBytes(host?.diskUsedBytes) }}
-                <span class="disk-kind">{{ host?.diskKind || 'Disk' }}</span>
                 <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
                 <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
               </span>
@@ -145,25 +208,6 @@
               </div>
             </div>
           </div>
-
-          <div class="metric-row metric-row-cpu">
-            <span class="metric-icon" aria-hidden="true">⚡</span>
-            <div class="metric-body">
-              <span class="metric-name">CPU · avg {{ currentCpu.toFixed(1) }}%</span>
-              <ul v-if="cpuCores.length" class="cpu-list">
-                <li v-for="core in cpuCores" :key="core.index">
-                  <span class="cpu-label">CPU {{ core.index + 1 }}</span>
-                  <div class="cpu-track">
-                    <div class="cpu-fill" :style="{ width: `${core.percent}%` }" />
-                  </div>
-                  <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
-                </li>
-              </ul>
-              <p v-else class="muted cpu-wait">Sampling cores…</p>
-            </div>
-          </div>
-
-          <div v-if="loadHint" class="load-hint muted">{{ loadHint }}</div>
         </aside>
       </div>
     </template>
@@ -184,6 +228,14 @@ type StatsPayload = {
     diskUsedBytes?: number
     diskTotalBytes?: number
     diskKind?: string
+    diskModel?: string | null
+    diskDevice?: string | null
+    cpuModel?: string | null
+    cpuModelFull?: string | null
+    cpuThreads?: number
+    memType?: string | null
+    memSpeedMhz?: number | null
+    probedAt?: string | null
   }
   disk?: {
     stackUsedBytes: number
@@ -208,6 +260,8 @@ const fetchError = ref('')
 const live = ref(false)
 const history = ref<HistoryPoint[]>([])
 const containersExpanded = ref(false)
+const hwRefreshBusy = ref(false)
+const hwRefreshError = ref('')
 
 const gridYs = [0, 30, 60, 90, 120]
 
@@ -233,12 +287,6 @@ const systemDiskPct = computed(() => {
   const h = host.value
   if (!h?.diskTotalBytes) return 0
   return Math.min(100, ((h.diskUsedBytes || 0) / h.diskTotalBytes) * 100)
-})
-
-const loadHint = computed(() => {
-  const n = cpuCores.value.length
-  if (n > 0) return `${n} logical core(s)`
-  return null
 })
 
 function memPctFromHost(h?: StatsPayload['host']) {
@@ -270,11 +318,50 @@ function chartPoints(key: 'cpu' | 'mem'): string {
 const cpuPoints = computed(() => chartPoints('cpu'))
 const memPoints = computed(() => chartPoints('mem'))
 
+function mergeHardware(hw: NonNullable<StatsPayload['host']>) {
+  if (!data.value) return
+  data.value = {
+    ...data.value,
+    host: { ...data.value.host, ...hw }
+  }
+}
+
+function formatProbedAt(iso: string) {
+  try {
+    return new Date(iso).toLocaleString()
+  } catch {
+    return iso
+  }
+}
+
+async function refreshHardware() {
+  if (hwRefreshBusy.value) return
+  hwRefreshBusy.value = true
+  hwRefreshError.value = ''
+  try {
+    const res = await $fetch<{
+      ok: boolean
+      hardware: Partial<StatsPayload['host']>
+    }>('/api/docker/hardware/refresh', { method: 'POST', timeout: 120_000 })
+    if (res.hardware) {
+      mergeHardware(res.hardware as StatsPayload['host'])
+    }
+    await poll()
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    hwRefreshError.value =
+      err.data?.statusMessage || err.statusMessage || 'Hardware detection failed'
+  } finally {
+    hwRefreshBusy.value = false
+  }
+}
+
 async function poll() {
   try {
     const payload = await $fetch<StatsPayload>('/api/docker/stats')
     data.value = payload
     fetchError.value = ''
+    hwRefreshError.value = ''
     live.value = true
     const mem = memPctFromHost(payload.host)
     const next = [...history.value, { cpu: payload.host.cpuPercent, mem }]
@@ -354,8 +441,66 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin: 0 0 0.85rem;
+  margin: 0;
   font-weight: 600;
+}
+
+.metrics-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.hw-reload {
+  color: var(--muted);
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.hw-reload:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.hw-reload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+:deep(.spin),
+.hw-reload-icon.spin {
+  display: inline-flex;
+  animation: hw-spin 0.8s linear infinite;
+}
+
+@keyframes hw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.probed-at {
+  font-size: 0.68rem;
+  margin: 0 0 0.75rem;
+  line-height: 1.35;
+}
+
+.hw-error {
+  font-size: 0.68rem;
+  color: var(--danger);
+  margin: 0 0 0.75rem;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
 }
 
 .metric-row {
@@ -383,11 +528,59 @@ onUnmounted(() => {
 }
 
 .metric-name {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text);
   margin-bottom: 0.2rem;
+}
+
+.hw-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.hw-badge.disk-badge {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+.hw-badge.muted-badge {
+  background: var(--surface-2);
+  color: var(--muted);
+  text-transform: none;
+  font-weight: 600;
+}
+
+.hw-name {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 0.15rem;
+  word-break: break-word;
+}
+
+.hw-name.disk-model {
+  font-weight: 500;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.hw-sub {
+  display: block;
+  font-size: 0.72rem;
+  margin-bottom: 0.35rem;
 }
 
 .metric-detail {
@@ -405,20 +598,6 @@ onUnmounted(() => {
 
 .metric-of {
   color: var(--muted);
-}
-
-.disk-kind {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.35rem;
-  margin: 0 0.15rem;
-  border-radius: 4px;
-  background: var(--accent-muted);
-  color: var(--accent);
-  vertical-align: middle;
 }
 
 .metric-bar {
@@ -488,13 +667,6 @@ onUnmounted(() => {
 .cpu-wait {
   font-size: 0.78rem;
   margin: 0.25rem 0 0;
-}
-
-.load-hint {
-  font-size: 0.72rem;
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
 }
 
 .chart-wrap {
