@@ -40,4 +40,22 @@ _run_install() {
 }
 
 _run_install
+
+# Seed panel settings file if missing
+SETTINGS="${STACK_ROOT}/data/panel/fail2ban-settings.json"
+if [[ ! -f "${SETTINGS}" ]]; then
+  mkdir -p "${STACK_ROOT}/data/panel"
+  cat > "${SETTINGS}" << 'EOF'
+{
+  "ignoreip": ["127.0.0.1/8", "::1"],
+  "jails": {
+    "sshd": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600 },
+    "nginx-dpanel-login": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600 },
+    "nginx-php-exploit": { "enabled": true, "maxretry": 10, "findtime": 600, "bantime": 7200 }
+  }
+}
+EOF
+fi
+
+bash "${SCRIPT_DIR}/host-fail2ban-config-apply.sh" 2>/dev/null || true
 bash "${SCRIPT_DIR}/host-security-status.sh"

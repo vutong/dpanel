@@ -60,9 +60,15 @@ Config: [`infra/security/fail2ban/`](../infra/security/fail2ban/)
 
 ### Panel UI
 
-- Route: `/settings/fail2ban`
-- Trạng thái service, danh sách jail, IP đang ban
+- Route: `/settings/fail2ban` — tabs: **Overview**, **Jails & Settings**, **Banned IPs**, **Logs**, **Guide**
+- Overview: service status, reload, recent Fail2ban events, unban my IP
+- Jails & Settings: edit `enabled`, `maxretry`, `findtime`, `bantime` for all jails (including `sshd`); global `ignoreip` whitelist
+- Banned IPs: searchable table with jail names and unban
+- Logs: tail `/var/log/fail2ban.log` with line count and filter
+- Guide: in-panel help (jails, Cloudflare, whitelist, rate limit vs Fail2ban, CLI)
 - **Unban** IP (gọi `host-fail2ban-unban.sh`)
+
+Settings persist in `data/panel/fail2ban-settings.json`; panel regenerates `/etc/fail2ban/jail.d/dpanel*.conf` on save.
 
 ### Login rate limit (app layer)
 
@@ -117,9 +123,12 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | GET | `/api/security/status` | Tổng quan Fail2ban + ClamAV |
 | POST | `/api/security/fail2ban/install` | Cài Fail2ban |
 | POST | `/api/security/clamav/install` | Cài ClamAV |
-| GET | `/api/security/events` | Danh sách events |
-| GET | `/api/security/fail2ban` | Chi tiết jails + banned IPs |
-| POST | `/api/security/fail2ban/unban` | `{ "ip": "…" }` |
+| GET | `/api/security/events` | Danh sách events (`?source=fail2ban` filter) |
+| GET | `/api/security/fail2ban` | Chi tiết jails + settings + banned IPs |
+| PUT | `/api/security/fail2ban/settings` | Lưu settings; `{ resetJail: "sshd" }` reset một jail |
+| GET | `/api/security/fail2ban/logs` | Tail log (`?lines=200&grep=`) |
+| POST | `/api/security/fail2ban/reload` | Reload fail2ban |
+| POST | `/api/security/fail2ban/unban` | `{ "ip": "…", "jail?": "…" }` |
 | GET | `/api/security/clamav` | Trạng thái ClamAV |
 | POST | `/api/security/clamav/update` | freshclam |
 | POST | `/api/security/clamav/scan` | `{ "domain?" }` — quét apps hoặc một site |
@@ -132,6 +141,10 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 |--------|---------|
 | `host-chroot.sh` | Helper chroot host từ container |
 | `host-security-status.sh` | JSON status |
+| `host-fail2ban-detail.sh` | Chi tiết jails + settings live |
+| `host-fail2ban-logs.sh` | Tail fail2ban.log |
+| `host-fail2ban-config-apply.sh` | Ghi config từ `fail2ban-settings.json` + reload |
+| `host-fail2ban-reload.sh` | Reload service |
 | `host-security-install.sh` | apt + sync config + enable services |
 | `host-fail2ban-unban.sh` | Unban IP |
 | `host-clamav-update.sh` | freshclam |

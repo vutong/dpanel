@@ -51,6 +51,8 @@
 </template>
 
 <script setup lang="ts">
+const route = useRoute()
+
 type SecurityEvent = {
   id: string
   at: string
@@ -64,9 +66,18 @@ type SecurityEvent = {
 
 const { msg, ok, alertKey, clearAlert } = usePageAlert()
 
-const { data, pending, refresh } = useFetch<{ events?: SecurityEvent[] }>('/api/security/events?limit=100', {
-  key: 'security-events-page'
-})
+const { data, pending, refresh } = useFetch<{ events?: SecurityEvent[] }>(
+  () => {
+    const source = route.query.source ? String(route.query.source) : ''
+    const q = new URLSearchParams({ limit: '100' })
+    if (source) q.set('source', source)
+    return `/api/security/events?${q}`
+  },
+  {
+    key: 'security-events-page',
+    watch: [() => route.query.source]
+  }
+)
 
 const events = computed(() => data.value?.events ?? [])
 
