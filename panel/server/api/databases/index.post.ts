@@ -1,6 +1,6 @@
 import { requireAuth } from '../../utils/auth-guard'
 import { parseScriptJson, runScript } from '../../utils/stack'
-import { assertSiteNotPending, getSite, normalizeSiteDomain } from '../../utils/sites'
+import { assertSiteActive, getSite, normalizeSiteDomain } from '../../utils/sites'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const user = (body.user || '').trim()
   const password = typeof body.password === 'string' ? body.password : ''
 
-  assertSiteNotPending(await getSite(siteDomain))
+  assertSiteActive(await getSite(siteDomain))
 
   const args = [name, siteDomain]
   if (user) {

@@ -80,17 +80,22 @@ DOMAIN="${MATCH_DOMAIN}"
 export DOMAIN
 [[ "${RUNTIME}" == "node" ]] || die "Routing apply is only available for Node sites"
 
-# Soft-deleted sites must not regain an active nginx vhost.
-PENDING="$("${PYBIN}" -c "
+# Soft-deleted / suspended sites must not regain an active nginx vhost.
+OFFLINE="$("${PYBIN}" -c "
 import json, os
 domain = os.environ.get('DOMAIN', '')
 with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         if (s.get('domain') or '').strip().lower() == domain.strip().lower():
-            print((s.get('pendingDeleteAt') or '').strip())
+            pending = (s.get('pendingDeleteAt') or '').strip()
+            suspended = (s.get('suspendedAt') or '').strip()
+            if pending:
+                print('pending')
+            elif suspended:
+                print('suspended')
             break
 " 2>/dev/null || true)"
-[[ -z "${PENDING}" ]] || die "Site is pending delete — restore before applying routing"
+[[ -z "${OFFLINE}" ]] || die "Site is ${OFFLINE} — restore/unsuspend before applying routing"
 
 site_apply_nginx_routing "${DOMAIN}" || die "nginx routing apply failed"
 

@@ -82,9 +82,48 @@
             <table class="table stats-table compact">
               <thead>
                 <tr>
-                  <th>Container</th>
-                  <th class="num">CPU %</th>
-                  <th class="num">RAM</th>
+                  <th>
+                    <button
+                      type="button"
+                      class="th-sort"
+                      :class="{ active: containerSort === 'name' }"
+                      @click="containerSort = 'name'"
+                    >
+                      Container
+                      <span class="sort-icons" aria-hidden="true">
+                        <i class="sort-up" />
+                        <i class="sort-down" />
+                      </span>
+                    </button>
+                  </th>
+                  <th class="num">
+                    <button
+                      type="button"
+                      class="th-sort th-sort-num"
+                      :class="{ active: containerSort === 'cpu' }"
+                      @click="containerSort = 'cpu'"
+                    >
+                      CPU %
+                      <span class="sort-icons" aria-hidden="true">
+                        <i class="sort-up" />
+                        <i class="sort-down" />
+                      </span>
+                    </button>
+                  </th>
+                  <th class="num">
+                    <button
+                      type="button"
+                      class="th-sort th-sort-num"
+                      :class="{ active: containerSort === 'mem' }"
+                      @click="containerSort = 'mem'"
+                    >
+                      RAM
+                      <span class="sort-icons" aria-hidden="true">
+                        <i class="sort-up" />
+                        <i class="sort-down" />
+                      </span>
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -224,6 +263,7 @@ const diskTesting = ref(false)
 const diskTestError = ref('')
 const containerLimitOptions = [25, 50, 100, 200, 350] as const
 const containerLimit = ref<(typeof containerLimitOptions)[number]>(25)
+const containerSort = ref<'name' | 'cpu' | 'mem'>('mem')
 
 const gridYs = [0, 30, 60, 90, 120]
 
@@ -243,9 +283,13 @@ const diskBreakdownRows = computed(() => {
 })
 
 const visibleContainers = computed(() => {
-  return [...containers.value]
-    .sort((a, b) => b.memUsedBytes - a.memUsedBytes)
-    .slice(0, containerLimit.value)
+  const key = containerSort.value
+  const sorted = [...containers.value].sort((a, b) => {
+    if (key === 'cpu') return b.cpuPercent - a.cpuPercent
+    if (key === 'name') return b.name.localeCompare(a.name)
+    return b.memUsedBytes - a.memUsedBytes
+  })
+  return sorted.slice(0, containerLimit.value)
 })
 
 const memPct = computed(() => memPctFromHost(host.value))
@@ -702,6 +746,62 @@ onUnmounted(() => {
   max-height: 500px;
   overflow: auto;
   margin-bottom: 0.25rem;
+}
+
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+
+.th-sort-num {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.th-sort:hover {
+  color: var(--accent);
+}
+
+.th-sort.active {
+  color: var(--text);
+}
+
+.sort-icons {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 0.55rem;
+}
+
+.sort-up,
+.sort-down {
+  display: block;
+  width: 0;
+  height: 0;
+  border-left: 0.22rem solid transparent;
+  border-right: 0.22rem solid transparent;
+  opacity: 0.35;
+}
+
+.sort-up {
+  border-bottom: 0.28rem solid currentColor;
+}
+
+.sort-down {
+  border-top: 0.28rem solid currentColor;
+}
+
+.th-sort.active .sort-down {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .disk-summary {

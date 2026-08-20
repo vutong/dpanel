@@ -19,6 +19,7 @@
           <span v-if="site.pendingDeleteAt" class="badge badge-pending">
             Pending delete — expires {{ formatDate(site.pendingDeleteExpiresAt || undefined) }}
           </span>
+          <span v-else-if="site.suspendedAt" class="status-inactive">Inactive</span>
           <span v-else class="status-active">Active</span>
         </div>
         <dl class="meta-grid">
@@ -45,9 +46,13 @@
         </dl>
       </header>
 
+      <div v-if="site.suspendedAt && !site.pendingDeleteAt" class="alert alert-error">
+        This website is suspended (inactive). It is offline and not using CPU or RAM. Unsuspend to bring it back online.
+      </div>
+
       <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-      <section v-if="!site.pendingDeleteAt" class="section">
+      <section v-if="!site.pendingDeleteAt && !site.suspendedAt" class="section">
         <h2 class="section-title">Deploy &amp; code</h2>
         <div class="tile-grid">
           <!-- PHP: Update from Git only. Node: pull / rebuild / pull+rebuild. -->
@@ -123,7 +128,7 @@
         </div>
       </section>
 
-      <section v-if="site.runtime === 'node' && !site.pendingDeleteAt" class="section">
+      <section v-if="site.runtime === 'node' && !site.pendingDeleteAt && !site.suspendedAt" class="section">
         <h2 class="section-title">Configuration</h2>
         <div class="tile-grid">
           <button type="button" class="tile" :disabled="busy" @click="routingOpen = true">
@@ -144,7 +149,7 @@
         </div>
       </section>
 
-      <section v-if="site.runtime === 'php' && !site.pendingDeleteAt" class="section">
+      <section v-if="site.runtime === 'php' && !site.pendingDeleteAt && !site.suspendedAt" class="section">
         <h2 class="section-title">PHP setup</h2>
         <ol class="php-setup">
           <li>
@@ -162,7 +167,7 @@
       </section>
 
       <section class="section">
-        <h2 class="section-title">Files</h2>
+        <h2 class="section-title">Others</h2>
         <div class="tile-grid">
           <NuxtLink
             :to="`/websites/${encodeURIComponent(site.domain)}/files`"
@@ -172,24 +177,18 @@
             <span class="tile-title">File manager</span>
             <span class="tile-desc">Browse apps/{{ site.domain }}/</span>
           </NuxtLink>
-        </div>
-      </section>
-
-      <section v-if="site.runtime === 'node'" class="section">
-        <h2 class="section-title">Monitoring</h2>
-        <div class="tile-grid">
-          <button type="button" class="tile" @click="logOpen = true">
+          <button
+            v-if="site.runtime === 'node'"
+            type="button"
+            class="tile"
+            @click="logOpen = true"
+          >
             <AppIcon name="eye" :size="22" />
             <span class="tile-title">Application logs</span>
             <span class="tile-desc">Build &amp; container output</span>
           </button>
-        </div>
-      </section>
-
-      <section v-if="!site.pendingDeleteAt" class="section">
-        <h2 class="section-title">Security</h2>
-        <div class="tile-grid">
           <button
+            v-if="!site.pendingDeleteAt && !site.suspendedAt"
             type="button"
             class="tile"
             :class="{ 'tile--locked': scanLocked }"
@@ -200,6 +199,28 @@
             <span class="tile-title">Scan Virus</span>
             <span class="tile-desc">ClamAV malware scan for this site</span>
             <span v-if="scanLocked" class="scan-badge scan-badge--running">Scanning…</span>
+          </button>
+          <button
+            v-if="!site.pendingDeleteAt && !site.suspendedAt"
+            type="button"
+            class="tile"
+            :disabled="busy"
+            @click="openSuspend"
+          >
+            <AppIcon name="pause" :size="22" />
+            <span class="tile-title">Suspend</span>
+            <span class="tile-desc">Take offline — no CPU or RAM</span>
+          </button>
+          <button
+            v-if="site.suspendedAt && !site.pendingDeleteAt"
+            type="button"
+            class="tile"
+            :disabled="busy"
+            @click="unsuspendSite"
+          >
+            <AppIcon name="power" :size="22" />
+            <span class="tile-title">Unsuspend</span>
+            <span class="tile-desc">Bring site back online</span>
           </button>
         </div>
       </section>
@@ -374,6 +395,25 @@
       </div>
     </div>
 
+    <div v-if="suspendOpen" class="modal-backdrop" @click.self="suspendOpen = false">
+      <div class="modal card" role="dialog" aria-labelledby="suspend-title">
+        <h2 id="suspend-title">Suspend website</h2>
+        <p class="muted">
+          <strong>{{ site?.domain }}</strong> will go offline completely: nginx stops serving traffic
+          <template v-if="site?.runtime === 'node'"> and the Node container is stopped</template>.
+          It will not use CPU or RAM until you Unsuspend.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" :disabled="busy" @click="suspendOpen = false">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmSuspend">
+            {{ busy ? 'Suspending…' : 'Suspend' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="deleteOpen" class="modal-backdrop" @click.self="closeDelete">
       <div class="modal card" role="dialog" aria-labelledby="delete-title">
         <h2 id="delete-title">{{ deleteForever ? 'Delete forever' : 'Delete website' }}</h2>
@@ -447,6 +487,7 @@ type Site = {
   createdAt?: string
   pendingDeleteAt?: string | null
   pendingDeleteExpiresAt?: string | null
+  suspendedAt?: string | null
 }
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
 type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
@@ -552,6 +593,7 @@ const updateSaveToken = ref(false)
 const updateGitCheckout = ref(false)
 const gitTokenStorage = useGitHubTokenStorage()
 const deleteOpen = ref(false)
+const suspendOpen = ref(false)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const deleteConfirm = ref('')
 const deleteInputId = `delete-confirm-${Math.random().toString(36).slice(2, 9)}`
@@ -773,6 +815,44 @@ async function restoreSite() {
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     showAlert(err.data?.statusMessage || err.statusMessage || 'Restore failed', false)
+  } finally {
+    busy.value = false
+  }
+}
+
+function openSuspend() {
+  clearAlert()
+  suspendOpen.value = true
+}
+
+async function confirmSuspend() {
+  if (!site.value || busy.value) return
+  busy.value = true
+  clearAlert()
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/suspend`, { method: 'POST' })
+    suspendOpen.value = false
+    showAlert(`Suspended ${site.value.domain}`, true)
+    await refresh()
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Suspend failed', false)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function unsuspendSite() {
+  if (!site.value || busy.value) return
+  busy.value = true
+  clearAlert()
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/unsuspend`, { method: 'POST' })
+    showAlert(`Unsuspended ${site.value.domain}`, true)
+    await refresh()
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    showAlert(err.data?.statusMessage || err.statusMessage || 'Unsuspend failed', false)
   } finally {
     busy.value = false
   }

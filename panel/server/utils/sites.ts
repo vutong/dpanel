@@ -9,6 +9,8 @@ export type SiteRecord = {
   createdAt?: string
   /** ISO UTC — set when soft-deleted; purge after 24h */
   pendingDeleteAt?: string | null
+  /** ISO UTC — suspended (offline, no CPU/RAM); reversible, no purge */
+  suspendedAt?: string | null
 }
 
 export const SITE_PENDING_DELETE_HOURS = Math.max(
@@ -26,6 +28,10 @@ export function isSitePendingDelete(site: SiteRecord): boolean {
   return !!(site.pendingDeleteAt || '').trim()
 }
 
+export function isSiteSuspended(site: SiteRecord): boolean {
+  return !!(site.suspendedAt || '').trim()
+}
+
 export function assertSiteNotPending(site: SiteRecord): void {
   if (isSitePendingDelete(site)) {
     throw createError({
@@ -35,12 +41,29 @@ export function assertSiteNotPending(site: SiteRecord): void {
   }
 }
 
+export function assertSiteNotSuspended(site: SiteRecord): void {
+  if (isSiteSuspended(site)) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'Site is suspended — Unsuspend it first'
+    })
+  }
+}
+
+/** Block mutating ops while pending delete or suspended. */
+export function assertSiteActive(site: SiteRecord): void {
+  assertSiteNotPending(site)
+  assertSiteNotSuspended(site)
+}
+
 export function withPendingMeta<T extends SiteRecord>(site: T) {
   const pending = (site.pendingDeleteAt || '').trim() || null
+  const suspended = (site.suspendedAt || '').trim() || null
   return {
     ...site,
     pendingDeleteAt: pending,
-    pendingDeleteExpiresAt: pending ? pendingDeleteExpiresAt(pending) : null
+    pendingDeleteExpiresAt: pending ? pendingDeleteExpiresAt(pending) : null,
+    suspendedAt: suspended
   }
 }
 

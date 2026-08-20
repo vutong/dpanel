@@ -1,7 +1,7 @@
 import { readBody } from 'h3'
 import { requireApiCredentials } from '../../utils/api-auth'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
-import { assertNodeSite, assertSiteNotPending, getSite } from '../../utils/sites'
+import { assertNodeSite, assertSiteActive, getSite } from '../../utils/sites'
 import { runScriptDetached } from '../../utils/stack'
 
 /** App containers register extra hostnames (e.g. store custom domains). */
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing siteDomain' })
   }
   await assertNodeSite(siteDomain)
-  assertSiteNotPending(await getSite(siteDomain))
+  assertSiteActive(await getSite(siteDomain))
   if (!['add', 'remove'].includes(action)) {
     throw createError({ statusCode: 400, statusMessage: 'action must be add or remove' })
   }

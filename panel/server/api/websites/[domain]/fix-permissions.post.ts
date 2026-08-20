@@ -7,7 +7,7 @@ import {
   stackRoot,
   type SiteOpKind
 } from '../../../utils/stack'
-import { assertSiteNotPending, getSite } from '../../../utils/sites'
+import { assertSiteActive, getSite } from '../../../utils/sites'
 import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const site = await getSite(domain)
-  assertSiteNotPending(site)
+  assertSiteActive(site)
 
   if (site.runtime !== 'php') {
     throw createError({ statusCode: 400, statusMessage: 'Fix permissions is only available for PHP sites' })

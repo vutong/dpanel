@@ -1,6 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { beginClamavScan } from '../../../utils/clamav-scans'
-import { assertSiteNotPending, getSite } from '../../../utils/sites'
+import { assertSiteActive, getSite } from '../../../utils/sites'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
   }
 
-  assertSiteNotPending(await getSite(domain))
+  assertSiteActive(await getSite(domain))
 
   let result: ReturnType<typeof beginClamavScan>
   try {

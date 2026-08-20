@@ -48,6 +48,8 @@ Websites
   site-remove <domain> [--soft|--purge]
                              Soft-delete (default, 24h) or purge immediately
   site-restore <domain>      Restore a soft-deleted site within 24h
+  site-suspend <domain>      Suspend site (offline, no CPU/RAM)
+  site-unsuspend <domain>    Bring a suspended site back online
 
 Security
   setpass <password>         Change panel login password
@@ -138,6 +140,12 @@ case "${CMD}" in
     ;;
   site-restore)
     exec bash "${STACK_ROOT}/infra/scripts/site-restore.sh" "${@:2}"
+    ;;
+  site-suspend)
+    exec bash "${STACK_ROOT}/infra/scripts/site-suspend.sh" "${@:2}"
+    ;;
+  site-unsuspend)
+    exec bash "${STACK_ROOT}/infra/scripts/site-unsuspend.sh" "${@:2}"
     ;;
   setpass)
     exec bash "${STACK_ROOT}/infra/scripts/setpass.sh" "${2:-}"

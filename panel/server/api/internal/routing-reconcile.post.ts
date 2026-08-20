@@ -1,7 +1,7 @@
 import { readBody } from 'h3'
 import { requireApiCredentials } from '../../utils/api-auth'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
-import { assertNodeSite, assertSiteNotPending, getSite } from '../../utils/sites'
+import { assertNodeSite, assertSiteActive, getSite } from '../../utils/sites'
 import { runScriptDetached } from '../../utils/stack'
 
 /**
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing siteDomain' })
   }
   await assertNodeSite(siteDomain)
-  assertSiteNotPending(await getSite(siteDomain))
+  assertSiteActive(await getSite(siteDomain))
 
   const primary = siteDomain
   const incoming = Array.isArray(body?.hostnames) ? body.hostnames : []

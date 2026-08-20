@@ -548,7 +548,7 @@ EOF
 }
 
 # Regenerate site nginx + compose.d from panel registry (fixes stale upstream configs).
-# Skips sites with pendingDeleteAt (soft-deleted — stay offline until restore or purge).
+# Skips pending-delete and suspended sites (stay offline until restore/unsuspend/purge).
 sync_site_configs() {
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
   [[ -f "${sites_file}" ]] || return 0
@@ -569,12 +569,13 @@ with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         d = s.get('domain') or ''
         r = s.get('runtime') or ''
-        if d and not (s.get('pendingDeleteAt') or '').strip():
+        offline = (s.get('pendingDeleteAt') or '').strip() or (s.get('suspendedAt') or '').strip()
+        if d and not offline:
             print(f'{d}|{r}')
 " 2>/dev/null)
 }
 
-# Soft-deleted sites must stay offline: quarantine any active nginx + stop Node containers.
+# Quarantine nginx + stop Node for pending-delete and suspended sites.
 ensure_pending_sites_offline() {
   local sites_file="${STACK_ROOT}/data/panel/sites.json"
   [[ -f "${sites_file}" ]] || return 0
@@ -599,7 +600,8 @@ import json, os
 with open(os.environ['SITES_FILE']) as f:
     for s in json.load(f):
         d = (s.get('domain') or '').strip()
-        if d and (s.get('pendingDeleteAt') or '').strip():
+        offline = (s.get('pendingDeleteAt') or '').strip() or (s.get('suspendedAt') or '').strip()
+        if d and offline:
             r = (s.get('runtime') or '').strip()
             print(f'{d}|{r}')
 " 2>/dev/null)
@@ -608,7 +610,7 @@ with open(os.environ['SITES_FILE']) as f:
 stack_compose_up_sites() {
   cd "${STACK_ROOT}"
   stack_compose up -d --remove-orphans 2>/dev/null || true
-  # Soft-deleted sites stay in sites.json + compose.d — compose up would restart them.
+  # Offline sites stay in sites.json + compose.d — compose up would restart them.
   ensure_pending_sites_offline
 }
 

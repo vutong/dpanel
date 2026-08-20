@@ -95,6 +95,8 @@ for s in sites:
         else:
             pending_raw = now.strftime("%Y-%m-%dT%H:%M:%SZ")
             s["pendingDeleteAt"] = pending_raw
+        # Soft-delete supersedes suspend
+        s.pop("suspendedAt", None)
         break
 if not found:
     raise SystemExit(1)

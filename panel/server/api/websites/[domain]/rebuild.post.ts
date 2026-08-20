@@ -1,6 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { beginSiteOp, runScriptDetached, stackRoot } from '../../../utils/stack'
-import { assertSiteNotPending, getSite } from '../../../utils/sites'
+import { assertSiteActive, getSite } from '../../../utils/sites'
 import { readBody } from 'h3'
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Domain is required' })
   }
 
-  assertSiteNotPending(await getSite(domain))
+  assertSiteActive(await getSite(domain))
 
   const script = join(stackRoot(), 'infra', 'scripts', 'site-rebuild.sh')
   try {

@@ -22,7 +22,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in sites" :key="s.domain" :class="{ 'row-pending': !!s.pendingDeleteAt }">
+          <tr v-for="s in sites" :key="s.domain" :class="{ 'row-pending': !!s.pendingDeleteAt, 'row-inactive': !!s.suspendedAt && !s.pendingDeleteAt }">
             <td><strong>{{ s.domain }}</strong></td>
             <td>
               <span :class="s.runtime === 'node' ? 'badge badge-node' : 'badge badge-php'">
@@ -33,6 +33,7 @@
               <span v-if="s.pendingDeleteAt" class="badge badge-pending" :title="s.pendingDeleteExpiresAt || ''">
                 Pending delete
               </span>
+              <span v-else-if="s.suspendedAt" class="status-inactive">Inactive</span>
               <span v-else class="status-active">Active</span>
             </td>
             <td class="github-cell">{{ s.githubUrl || '—' }}</td>
@@ -81,6 +82,7 @@ type Site = {
   createdAt?: string
   pendingDeleteAt?: string | null
   pendingDeleteExpiresAt?: string | null
+  suspendedAt?: string | null
 }
 
 const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
@@ -149,7 +151,8 @@ async function restoreSite(domain: string) {
   color: var(--muted);
   white-space: nowrap;
 }
-.row-pending td {
+.row-pending td,
+.row-inactive td {
   opacity: 0.92;
 }
 </style>
