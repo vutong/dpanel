@@ -11,32 +11,33 @@ MODE="${1:-summary}"
 case "$MODE" in
   summary | jails | banned) ;;
   *)
-    echo "{\"ok\":false,\"error\":\"Invalid mode: ${MODE}\"}" >&2
+    echo "{\"ok\":false,\"error\":\"Invalid mode: ${MODE}\"}"
     exit 1
     ;;
 esac
 
 die() {
-  local msg="${*//\"/\\\"}"
-  echo "{\"ok\":false,\"error\":\"${msg}\"}"
+  python3 -c 'import json,sys; print(json.dumps({"ok":False,"error":sys.argv[1]}))' "$*" 2>/dev/null \
+    || echo "{\"ok\":false,\"error\":\"query failed\"}"
   exit 1
 }
 
 command -v python3 >/dev/null 2>&1 || die "python3 required"
 
-QUERY_PY="${STACK_ROOT}/infra/scripts/host-fail2ban-query.py"
-[[ -f "${QUERY_PY}" ]] || die "Missing ${QUERY_PY}"
+QUERY_PY="${SCRIPT_DIR}/host-fail2ban-query.py"
+[[ -f "${QUERY_PY}" ]] || die "Missing host-fail2ban-query.py — run: sudo dpanel update"
 
-# Short command — python logic lives in .py file (avoids ARG_MAX / heredoc in host_exec).
-HOST_CMD="export FAIL2BAN_QUERY_MODE='${MODE}'; python3 '${QUERY_PY}'"
+# Path inside chroot (host filesystem)
+HOST_PY="${STACK_ROOT}/infra/scripts/host-fail2ban-query.py"
+HOST_CMD="export FAIL2BAN_QUERY_MODE='${MODE}'; python3 '${HOST_PY}'"
 
 if ! OUT="$(host_exec_capture "${HOST_CMD}")"; then
   die "${OUT:-Fail2ban host query failed}"
 fi
 
-JSON_LINE="$(echo "${OUT}" | grep -E '^\{.*\}$' | tail -1 || true)"
+JSON_LINE="$(printf '%s\n' "${OUT}" | grep -E '^\{.*\}$' | tail -1 || true)"
 if [[ -z "${JSON_LINE}" ]]; then
-  die "Fail2ban query did not return JSON: ${OUT:0:400}"
+  die "No JSON from fail2ban query: ${OUT:0:300}"
 fi
 
 echo "${JSON_LINE}"

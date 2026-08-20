@@ -182,6 +182,7 @@ type JailRow = {
 
 type Fail2banSummary = {
   ok?: boolean
+  error?: string
   installed?: boolean
   active?: boolean
   version?: string | null
@@ -289,8 +290,12 @@ function invalidateTabData() {
 async function loadSummary(silent = false) {
   if (!silent) refreshBusy.value = true
   try {
-    data.value = await $fetch<Fail2banSummary>('/api/security/fail2ban')
+    const res = await $fetch<Fail2banSummary>('/api/security/fail2ban')
+    data.value = res
     invalidateTabData()
+    if (res.ok === false && res.error && !silent) {
+      showAlert(res.error, false)
+    }
   } catch (e: unknown) {
     if (!silent) {
       showAlert(e instanceof Error ? e.message : 'Could not load Fail2ban', false)

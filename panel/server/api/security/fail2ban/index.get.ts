@@ -15,8 +15,14 @@ export type { Fail2banBannedEntry, Fail2banJailRow } from '../../../utils/fail2b
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
-  seedFail2banSettingsIfMissing()
-  const settings = readFail2banSettings()
+
+  let settings = readFail2banSettings()
+  try {
+    seedFail2banSettingsIfMissing()
+    settings = readFail2banSettings()
+  } catch {
+    /* use defaults already loaded */
+  }
 
   try {
     const install = recordSecurityInstallEventIfNeeded('fail2ban')
@@ -52,9 +58,20 @@ export default defineEventHandler(async (event) => {
         installMessage: install.message ?? ''
       }
     }
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+
+    const error = scriptErrorMessage(e)
+    return {
+      ok: false,
+      error,
+      installed: false,
+      active: false,
+      version: null,
+      jails: [],
+      bannedIps: [],
+      settings,
+      clientIp: resolveClientIp(event),
+      installStatus: install.status,
+      installMessage: install.message || error
+    }
   }
 })

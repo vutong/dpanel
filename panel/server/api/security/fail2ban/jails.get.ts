@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   try {
     const host = await queryFail2ban('jails')
     if (!host.installed) {
-      throw createError({ statusCode: 400, statusMessage: 'Fail2ban is not installed' })
+      return { ok: false, error: 'Fail2ban is not installed', jails: [], settings }
     }
 
     return {
@@ -23,9 +23,11 @@ export default defineEventHandler(async (event) => {
     }
   } catch (e: unknown) {
     if (e && typeof e === 'object' && 'statusCode' in e) throw e
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e),
+      jails: [],
+      settings
+    }
   }
 })

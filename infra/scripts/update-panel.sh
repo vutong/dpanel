@@ -30,5 +30,7 @@ mkdir -p "${APP_DIR}"
 rsync -a "${PANEL_SRC}/.output/" "${APP_DIR}/.output/"
 rsync -a "${PANEL_SRC}/package.json" "${PANEL_SRC}/node_modules" "${APP_DIR}/" 2>/dev/null || true
 
+chmod +x "${STACK_ROOT}/infra/scripts/"*.sh 2>/dev/null || true
+
 stack_compose restart dpanel
 log "Panel updated. URL: http://${PANEL_DOMAIN}"

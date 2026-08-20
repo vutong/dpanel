@@ -4,7 +4,7 @@ import {
   buildIpGeoMap,
   queryFail2ban,
   syncFail2banBanEventsFromIps
-} from '../../../utils/fail2ban-host'
+} from '../../../utils/fail2ban-banned'
 import { scriptErrorMessage } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
@@ -30,9 +30,13 @@ export default defineEventHandler(async (event) => {
     }
   } catch (e: unknown) {
     if (e && typeof e === 'object' && 'statusCode' in e) throw e
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e),
+      jails: [],
+      bannedIps: [],
+      ipGeo: {},
+      geoip: buildGeoipStatusPayload()
+    }
   }
 })

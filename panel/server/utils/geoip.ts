@@ -12,7 +12,10 @@ import {
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { open } from 'mmdb-lib'
+import { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 import { stackRoot } from './stack'
+
+export { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 
 const execFileAsync = promisify(execFile)
 
@@ -173,18 +176,6 @@ export function isMaxMindDatabaseReady(edition: MaxMindEditionId = COUNTRY_EDITI
 
 export function isGeoipReady(): boolean {
   return isMaxMindDatabaseReady(COUNTRY_EDITION)
-}
-
-export function isValidBanIp(ip: string): boolean {
-  const s = ip.trim()
-  if (!s || !/^[0-9a-fA-F:.]+$/.test(s)) return false
-  if (/^\d+$/.test(s)) return false
-  if (!s.includes('.') && !s.includes(':')) return false
-  return true
-}
-
-export function filterBannedIps(ips: string[]): string[] {
-  return ips.filter(isValidBanIp)
 }
 
 function ensureGeoipDir(): void {

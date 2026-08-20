@@ -1,16 +1,10 @@
 import { getHeader, getRequestIP, type H3Event } from 'h3'
 import {
-  filterBannedIps,
-  getGeoipStatus,
-  isValidBanIp,
-  lookupIpGeoBatch,
-  type IpGeoEntry
-} from './geoip'
-import {
   readFail2banKnownIps,
   syncFail2banBanEvents,
   writeFail2banKnownIps
 } from './security-events'
+import { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 import { parseScriptJson, runScript } from './stack'
 
 export type Fail2banQueryMode = 'summary' | 'jails' | 'banned'
@@ -48,13 +42,17 @@ export type Fail2banQueryResult = {
 }
 
 export function resolveClientIp(event: H3Event): string | null {
-  return (
-    String(getHeader(event, 'x-forwarded-for') || '')
-      .split(',')[0]
-      ?.trim() ||
-    getRequestIP(event, { xForwardedFor: true }) ||
-    null
-  )
+  try {
+    return (
+      String(getHeader(event, 'x-forwarded-for') || '')
+        .split(',')[0]
+        ?.trim() ||
+      getRequestIP(event, { xForwardedFor: true }) ||
+      null
+    )
+  } catch {
+    return null
+  }
 }
 
 export async function queryFail2ban(mode: Fail2banQueryMode): Promise<Fail2banQueryResult> {
@@ -92,16 +90,6 @@ export function sanitizeQueryResult(result: Fail2banQueryResult): Fail2banQueryR
   return result
 }
 
-export function collectBannedIps(jails: Fail2banJailRow[], bannedIps: string[]): string[] {
-  const set = new Set<string>(filterBannedIps(bannedIps || []))
-  for (const jail of jails || []) {
-    for (const entry of jail.bannedIps || []) {
-      if (isValidBanIp(entry.ip)) set.add(entry.ip)
-    }
-  }
-  return [...set]
-}
-
 export function syncFail2banBanEventsFromIps(bannedIps: string[]): void {
   const ips = filterBannedIps(bannedIps || [])
   if (!ips.length) return
@@ -110,17 +98,4 @@ export function syncFail2banBanEventsFromIps(bannedIps: string[]): void {
   writeFail2banKnownIps(known)
 }
 
-export function buildIpGeoMap(jails: Fail2banJailRow[], bannedIps: string[]): Record<string, IpGeoEntry> {
-  return lookupIpGeoBatch(collectBannedIps(jails, bannedIps))
-}
-
-export function buildGeoipStatusPayload() {
-  const geoStatus = getGeoipStatus()
-  return {
-    ready: geoStatus.ready,
-    syncedAt: geoStatus.meta?.syncedAt ?? null,
-    buildDate: geoStatus.meta?.buildDate ?? null,
-    edition: geoStatus.meta?.edition ?? null,
-    filename: geoStatus.meta?.filename ?? null
-  }
-}
+export { filterBannedIps, isValidBanIp }
