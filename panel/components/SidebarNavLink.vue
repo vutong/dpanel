@@ -4,8 +4,7 @@
     :class="sub ? 'nav-link nav-link--sub' : 'nav-link nav-link--main'"
     :exact="to === '/'"
   >
-    <span v-if="emoji" class="nav-emoji" aria-hidden="true">{{ emoji }}</span>
-    <AppIcon v-else :name="icon!" :size="sub ? 16 : 18" class="nav-icon" />
+    <AppIcon :name="icon" :size="sub ? 16 : 18" class="nav-icon" />
     <span class="nav-label">{{ label }}</span>
   </NuxtLink>
 </template>
@@ -14,12 +13,11 @@
 withDefaults(
   defineProps<{
     to: string
-    icon?: string
-    emoji?: string
+    icon: string
     label: string
     sub?: boolean
   }>(),
-  { sub: true, icon: 'file' }
+  { sub: true }
 )
 </script>
 
@@ -27,14 +25,6 @@ withDefaults(
 .nav-link {
   display: flex;
   align-items: center;
-}
-
-.nav-emoji {
-  flex-shrink: 0;
-  width: 1.125rem;
-  text-align: center;
-  font-size: 0.95rem;
-  line-height: 1;
 }
 
 .nav-icon {

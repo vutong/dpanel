@@ -349,7 +349,7 @@ apt_get update
 if [[ "${DPANEL_FULL_UPGRADE:-0}" == "1" ]]; then
   apt_get upgrade -y
 fi
-apt_get install -y ca-certificates curl gnupg lsb-release git unzip rsync ufw apache2-utils python3 dmidecode
+apt_get install -y ca-certificates curl gnupg lsb-release git unzip rsync ufw apache2-utils python3
 
 if ! command -v docker &>/dev/null; then
   step "Docker Engine"
@@ -384,16 +384,13 @@ install_security_packages() {
     || log "Warning: security package install failed — install from panel Security menu"
 }
 
-save_host_hardware() {
-  local cache="${STACK_ROOT}/data/panel/host-hardware.json"
-  if [[ "${NEW_ENV_CREATED:-0}" != "1" && -f "${cache}" ]]; then
+probe_host_disk() {
+  if [[ ! -x "${STACK_ROOT}/infra/scripts/host-disk-probe.sh" ]]; then
     return
   fi
-  if [[ -x "${STACK_ROOT}/infra/scripts/host-hardware-save.sh" ]]; then
-    log "Saving host hardware profile"
-    bash "${STACK_ROOT}/infra/scripts/host-hardware-save.sh" >/dev/null 2>&1 \
-      || log "Warning: host hardware probe failed — use Reload in panel Overview"
-  fi
+  log "Probing disk type (rotational + read speed)"
+  bash "${STACK_ROOT}/infra/scripts/host-disk-probe.sh" >/dev/null 2>&1 \
+    || log "Warning: disk probe failed — will retry from panel Overview"
 }
 
 step "Deploy stack"
@@ -498,7 +495,7 @@ bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx configuration f
 wait_for_healthy_stack
 
 install_security_packages
-save_host_hardware
+probe_host_disk
 
 if [[ -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
   bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix || log "Warning: post-install health check reported issues — run: dpanel health --fix"

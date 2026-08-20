@@ -12,6 +12,14 @@ export type DockerStatsResponse = {
     stackUsedBytes: number
     stackTotalBytes: number
     breakdown: { label: string; path: string; bytes: number }[]
+    storage?: {
+      kind: string
+      device: string
+      readMbps: number | null
+      writeMbps: number | null
+      rotational: number | null
+      probedAt?: string
+    }
   }
   containers: {
     name: string
