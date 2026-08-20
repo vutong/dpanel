@@ -1,8 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import {
-  buildGeoipStatusPayload,
-  buildIpGeoMap
-} from '../../../utils/fail2ban-banned'
+import { collectBannedIps } from '../../../utils/fail2ban-ip-utils'
 import { queryFail2ban, syncFail2banBanEventsFromIps } from '../../../utils/fail2ban-host'
 import { scriptErrorMessage } from '../../../utils/stack'
 
@@ -18,13 +15,28 @@ export default defineEventHandler(async (event) => {
         jails: [],
         bannedIps: [],
         ipGeo: {},
-        geoip: buildGeoipStatusPayload()
+        geoip: emptyGeoip()
       }
     }
 
     syncFail2banBanEventsFromIps(host.bannedIps)
 
-    const ipGeo = buildIpGeoMap(host.jails, host.bannedIps)
+    let ipGeo = {}
+    let geoip = emptyGeoip()
+    try {
+      const { getGeoipStatus, lookupIpGeoBatch } = await import('../../../utils/geoip')
+      ipGeo = lookupIpGeoBatch(collectBannedIps(host.jails, host.bannedIps))
+      const geoStatus = getGeoipStatus()
+      geoip = {
+        ready: geoStatus.ready,
+        syncedAt: geoStatus.meta?.syncedAt ?? null,
+        buildDate: geoStatus.meta?.buildDate ?? null,
+        edition: geoStatus.meta?.edition ?? null,
+        filename: geoStatus.meta?.filename ?? null
+      }
+    } catch {
+      /* keep banned list working even if GeoIP module/database is unavailable */
+    }
 
     return {
       ok: true,
@@ -32,7 +44,7 @@ export default defineEventHandler(async (event) => {
       jails: host.jails,
       bannedIps: host.bannedIps,
       ipGeo,
-      geoip: buildGeoipStatusPayload()
+      geoip
     }
   } catch (e: unknown) {
     return {
@@ -41,7 +53,17 @@ export default defineEventHandler(async (event) => {
       jails: [],
       bannedIps: [],
       ipGeo: {},
-      geoip: buildGeoipStatusPayload()
+      geoip: emptyGeoip()
     }
   }
 })
+
+function emptyGeoip() {
+  return {
+    ready: false,
+    syncedAt: null,
+    buildDate: null,
+    edition: null,
+    filename: null
+  }
+}

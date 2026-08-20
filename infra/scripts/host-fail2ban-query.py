@@ -80,7 +80,7 @@ def parse_banned_from_status(status):
     return entries
 
 
-def parse_banned_with_time(jail, jail_status):
+def parse_banned_with_time(jail):
     raw = f2b(f"get {jail} banip --with-time")
     entries = []
     if raw and "invalid" not in raw.lower() and "error" not in raw.lower():
@@ -96,7 +96,7 @@ def parse_banned_with_time(jail, jail_status):
                     entries.append({"ip": ip, "bannedAt": banned_at})
     if entries:
         return entries
-    return parse_banned_from_status(jail_status)
+    return parse_banned_from_status(f2b(f"status {jail}"))
 
 
 def stat_field(status, label):
@@ -195,8 +195,7 @@ def main():
 
     elif MODE == "banned":
         for jail in jail_names:
-            js = f2b(f"status {jail}")
-            banned_entries = parse_banned_with_time(jail, js)
+            banned_entries = parse_banned_with_time(jail)
             for entry in banned_entries:
                 if entry["ip"] not in all_banned:
                     all_banned.append(entry["ip"])
