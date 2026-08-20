@@ -11,7 +11,7 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 required"
 
-PY='
+STACK_ROOT="${STACK_ROOT}" python3 <<'PY'
 import json, os, re, subprocess
 
 stack = os.environ.get("STACK_ROOT", "/opt/stack")
@@ -174,10 +174,4 @@ for jail in jail_names:
 
 out["bannedIps"] = all_banned
 print(json.dumps(out))
-'
-
-if [[ -f /.dockerenv ]] && command -v docker >/dev/null 2>&1; then
-  STACK_ROOT="${STACK_ROOT}" python3 -c "${PY}"
-else
-  STACK_ROOT="${STACK_ROOT}" python3 -c "${PY}"
-fi
+PY

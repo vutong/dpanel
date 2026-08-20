@@ -10,7 +10,7 @@ die() { echo "{\"ok\":false,\"error\":\"$*\"}" >&2; exit 1; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 required"
 
-PY='
+python3 <<'PY'
 import json, os, subprocess
 
 def in_container():
@@ -41,7 +41,7 @@ def run_host(cmd):
 
 if not run_host("command -v fail2ban-client")[0].strip():
     print(json.dumps({"ok": False, "error": "fail2ban not installed"}))
-    raise SystemExit(1)
+    raise SystemExit(0)
 
 run_host("systemctl enable fail2ban 2>/dev/null || true")
 
@@ -61,6 +61,4 @@ if active != "active":
     raise SystemExit(0)
 
 print(json.dumps({"ok": True, "started": True, "active": True}))
-'
-
-python3 -c "${PY}"
+PY
