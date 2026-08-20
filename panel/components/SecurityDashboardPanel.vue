@@ -51,16 +51,25 @@ type Fail2banSummary = {
   bannedIps?: string[]
 }
 
+const REFRESH_MS = 60_000
+
 const { data: status, pending: statusPending } = useFetch<Status>('/api/security/status', {
-  key: 'security-status-dashboard'
+  key: 'security-status-dashboard',
+  refreshInterval: REFRESH_MS
 })
 
 const { data: fail2ban, pending: fail2banPending } = useFetch<Fail2banSummary>(
   '/api/security/fail2ban',
-  { key: 'security-fail2ban-dashboard' }
+  {
+    key: 'security-fail2ban-dashboard',
+    refreshInterval: REFRESH_MS
+  }
 )
 
-const pending = computed(() => statusPending.value || fail2banPending.value)
+const pending = computed(
+  () =>
+    (statusPending.value && !status.value) || (fail2banPending.value && !fail2ban.value)
+)
 
 const fail2banOk = computed(
   () => status.value?.fail2ban?.installed && status.value?.fail2ban?.active
