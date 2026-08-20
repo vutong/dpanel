@@ -1,20 +1,11 @@
 <template>
   <section class="card docker-stats">
-    <div class="stats-head">
-      <h2>Host resources</h2>
-      <span v-if="live" class="live-badge">Live</span>
-    </div>
-
     <p v-if="fetchError && !data" class="alert alert-error">{{ fetchError }}</p>
 
     <template v-else>
       <div class="stats-layout">
         <div class="stats-main">
           <div class="chart-wrap">
-            <div class="chart-legend">
-              <span class="legend-item"><i class="dot cpu" /> CPU {{ currentCpu.toFixed(1) }}%</span>
-              <span class="legend-item"><i class="dot mem" /> RAM {{ currentMemPct.toFixed(1) }}%</span>
-            </div>
             <p v-if="history.length < 2" class="chart-wait muted">Collecting samples…</p>
             <svg
               class="chart-svg"
@@ -55,7 +46,7 @@
               <div class="bar-fill disk" :style="{ width: `${diskPct}%` }" />
             </div>
           </div>
-          <div v-if="disk?.breakdown?.length" class="table-wrap disk-table-wrap">
+          <div v-if="diskBreakdownRows.length" class="table-wrap disk-table-wrap">
             <table class="table stats-table compact">
               <thead>
                 <tr>
@@ -65,7 +56,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in disk.breakdown" :key="row.path">
+                <tr v-for="row in diskBreakdownRows" :key="row.path">
                   <td>
                     <code>{{ row.path }}/</code>
                     <span class="row-label">{{ row.label }}</span>
@@ -79,17 +70,15 @@
 
           <div class="containers-head">
             <h3 class="sub-title">Containers</h3>
-            <button
-              v-if="containers.length"
-              type="button"
-              class="toggle-btn"
-              @click="containersExpanded = !containersExpanded"
-            >
-              {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
-            </button>
+            <label v-if="containers.length" class="limit-select-wrap">
+              <span class="muted">Show</span>
+              <select v-model.number="containerLimit" class="limit-select">
+                <option v-for="n in containerLimitOptions" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </label>
           </div>
           <p v-if="!containers.length" class="muted empty">No running containers.</p>
-          <div v-else-if="containersExpanded" class="table-wrap">
+          <div v-else class="table-wrap containers-table-wrap">
             <table class="table stats-table compact">
               <thead>
                 <tr>
@@ -99,7 +88,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="c in containers" :key="c.name">
+                <tr v-for="c in visibleContainers" :key="c.name">
                   <td><code class="cname">{{ c.name }}</code></td>
                   <td class="num">{{ c.cpuPercent.toFixed(2) }}%</td>
                   <td class="num">
@@ -112,70 +101,74 @@
           </div>
         </div>
 
-        <aside class="host-metrics" aria-label="Server metrics">
-          <h3 class="metrics-title">Server</h3>
+        <div class="stats-side">
+          <aside class="host-metrics" aria-label="Server metrics">
+            <h3 class="metrics-title">Server</h3>
 
-          <div class="metric-row">
-            <span class="metric-icon" aria-hidden="true">🧠</span>
-            <div class="metric-body">
-              <span class="metric-name">RAM</span>
-              <span class="metric-detail">
-                {{ formatBytes(host?.memUsedBytes) }}
-                <span class="metric-pct">({{ memPct.toFixed(0) }}%)</span>
-                <span class="metric-of">/ {{ formatBytes(host?.memTotalBytes) }}</span>
-              </span>
-              <div class="bar metric-bar">
-                <div class="bar-fill mem" :style="{ width: `${memPct}%` }" />
-              </div>
-            </div>
-          </div>
-
-          <div class="metric-row">
-            <span class="metric-icon" aria-hidden="true">💾</span>
-            <div class="metric-body">
-              <span class="metric-name">Disk</span>
-              <div class="metric-detail-row">
+            <div class="metric-row">
+              <span class="metric-icon" aria-hidden="true">🧠</span>
+              <div class="metric-body">
+                <span class="metric-name">RAM</span>
                 <span class="metric-detail">
-                  {{ formatBytes(host?.diskUsedBytes) }}
-                  <span v-if="host?.diskKind" class="disk-kind">{{ host.diskKind }}</span>
-                  <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
-                  <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
+                  {{ formatBytes(host?.memUsedBytes) }}
+                  <span class="metric-pct">({{ memPct.toFixed(0) }}%)</span>
+                  <span class="metric-of">/ {{ formatBytes(host?.memTotalBytes) }}</span>
                 </span>
-                <button
-                  type="button"
-                  class="disk-check-btn"
-                  :disabled="diskTesting"
-                  @click="runDiskTest"
-                >
-                  {{ diskTesting ? 'Checking…' : 'Check' }}
-                </button>
+                <div class="bar metric-bar">
+                  <div class="bar-fill mem" :style="{ width: `${memPct}%` }" />
+                </div>
               </div>
-              <div class="bar metric-bar">
-                <div class="bar-fill disk-sys" :style="{ width: `${systemDiskPct}%` }" />
+            </div>
+
+            <div class="metric-row">
+              <span class="metric-icon" aria-hidden="true">💾</span>
+              <div class="metric-body">
+                <span class="metric-name">Disk</span>
+                <div class="metric-detail-row">
+                  <span class="metric-detail">
+                    {{ formatBytes(host?.diskUsedBytes) }}
+                    <span v-if="host?.diskKind" class="disk-kind">{{ host.diskKind }}</span>
+                    <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
+                    <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
+                  </span>
+                  <button
+                    type="button"
+                    class="disk-check-btn"
+                    :disabled="diskTesting"
+                    @click="runDiskTest"
+                  >
+                    {{ diskTesting ? 'Checking…' : 'Check' }}
+                  </button>
+                </div>
+                <div class="bar metric-bar">
+                  <div class="bar-fill disk-sys" :style="{ width: `${systemDiskPct}%` }" />
+                </div>
+                <p v-if="diskTestError" class="disk-test-error">{{ diskTestError }}</p>
               </div>
-              <p v-if="diskTestError" class="disk-test-error">{{ diskTestError }}</p>
             </div>
-          </div>
 
-          <div class="metric-row metric-row-cpu">
-            <span class="metric-icon" aria-hidden="true">⚡</span>
-            <div class="metric-body">
-              <span class="metric-name">CPU · avg {{ currentCpu.toFixed(1) }}%</span>
-              <ul v-if="cpuCores.length" class="cpu-list">
-                <li v-for="core in cpuCores" :key="core.index">
-                  <span class="cpu-label">CPU {{ core.index + 1 }}</span>
-                  <div class="cpu-track">
-                    <div class="cpu-fill" :style="{ width: `${core.percent}%` }" />
-                  </div>
-                  <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
-                </li>
-              </ul>
-              <p v-else class="muted cpu-wait">Sampling cores…</p>
+            <div class="metric-row metric-row-cpu">
+              <span class="metric-icon" aria-hidden="true">⚡</span>
+              <div class="metric-body">
+                <span class="metric-name">CPU · avg {{ currentCpu.toFixed(1) }}%</span>
+                <ul v-if="cpuCores.length" class="cpu-list">
+                  <li v-for="core in cpuCores" :key="core.index">
+                    <span class="cpu-label">CPU {{ core.index + 1 }}</span>
+                    <div class="cpu-track">
+                      <div class="cpu-fill" :style="{ width: `${core.percent}%` }" />
+                    </div>
+                    <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
+                  </li>
+                </ul>
+                <p v-else class="muted cpu-wait">Sampling cores…</p>
+              </div>
             </div>
-          </div>
 
-          <div v-if="loadHint" class="load-hint muted">{{ loadHint }}</div>
-        </aside>
+            <div v-if="loadHint" class="load-hint muted">{{ loadHint }}</div>
+          </aside>
+
+          <SecurityDashboardPanel />
+        </div>
       </div>
     </template>
   </section>
@@ -226,11 +219,11 @@ const MAX_POINTS = 45
 
 const data = ref<StatsPayload | null>(null)
 const fetchError = ref('')
-const live = ref(false)
 const history = ref<HistoryPoint[]>([])
-const containersExpanded = ref(false)
 const diskTesting = ref(false)
 const diskTestError = ref('')
+const containerLimitOptions = [25, 50, 100, 200, 350] as const
+const containerLimit = ref<(typeof containerLimitOptions)[number]>(25)
 
 const gridYs = [0, 30, 60, 90, 120]
 
@@ -238,11 +231,22 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 const host = computed(() => data.value?.host)
 const currentCpu = computed(() => history.value.at(-1)?.cpu ?? data.value?.host.cpuPercent ?? 0)
-const currentMemPct = computed(() => history.value.at(-1)?.mem ?? memPctFromHost(data.value?.host))
 
 const disk = computed(() => data.value?.disk)
 const containers = computed(() => data.value?.containers ?? [])
 const cpuCores = computed(() => host.value?.cpuCores ?? [])
+
+const diskBreakdownRows = computed(() => {
+  const rows = [...(disk.value?.breakdown ?? [])]
+  if (!rows.length) return []
+  return rows.sort((a, b) => b.bytes - a.bytes).slice(0, 5)
+})
+
+const visibleContainers = computed(() => {
+  return [...containers.value]
+    .sort((a, b) => b.memUsedBytes - a.memUsedBytes)
+    .slice(0, containerLimit.value)
+})
 
 const memPct = computed(() => memPctFromHost(host.value))
 
@@ -349,12 +353,10 @@ async function poll() {
     const payload = await $fetch<StatsPayload>('/api/docker/stats')
     data.value = payload
     fetchError.value = ''
-    live.value = true
     const mem = memPctFromHost(payload.host)
     const next = [...history.value, { cpu: payload.host.cpuPercent, mem }]
     history.value = next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next
   } catch (e: unknown) {
-    live.value = false
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     const msg = err.data?.statusMessage || err.statusMessage || 'Could not load stats'
     if (!data.value) fetchError.value = msg
@@ -376,29 +378,6 @@ onUnmounted(() => {
   margin-top: 0;
 }
 
-.stats-head {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  margin-bottom: 1rem;
-}
-
-.stats-head h2 {
-  font-size: 1.05rem;
-  margin: 0;
-}
-
-.live-badge {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.2rem 0.45rem;
-  border-radius: 4px;
-  background: var(--success-muted);
-  color: var(--success);
-  font-weight: 600;
-}
-
 .stats-layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -413,6 +392,13 @@ onUnmounted(() => {
 }
 
 .stats-main {
+  min-width: 0;
+}
+
+.stats-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   min-width: 0;
 }
 
@@ -637,36 +623,6 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-.chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.dot.cpu {
-  background: var(--accent);
-}
-
-.dot.mem {
-  background: var(--success);
-}
-
 .chart-svg {
   width: 100%;
   height: 140px;
@@ -718,21 +674,34 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  margin-bottom: 0.65rem;
 }
 
-.toggle-btn {
+.containers-head .sub-title {
+  margin-bottom: 0;
+}
+
+.limit-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.limit-select {
+  min-height: var(--control-h-sm, 1.75rem);
+  padding: 0 0.45rem;
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--surface-elevated);
-  color: var(--muted);
-  font-size: 0.8rem;
-  padding: 0.3rem 0.6rem;
-  border-radius: 7px;
-  cursor: pointer;
+  color: var(--text);
+  font-size: 0.78rem;
 }
 
-.toggle-btn:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+.containers-table-wrap {
+  max-height: 500px;
+  overflow: auto;
+  margin-bottom: 0.25rem;
 }
 
 .disk-summary {

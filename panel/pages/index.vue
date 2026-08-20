@@ -8,12 +8,21 @@
     <PageLoader v-if="loading" label="Loading dashboard…" />
     <div v-else class="grid stat-grid">
       <NuxtLink to="/websites" class="card stat-card">
-        <div class="stat-icon">
-          <AppIcon name="globe" :size="22" />
+        <div class="stat-icon stat-icon-node">
+          <AppIcon name="cpu" :size="22" />
         </div>
         <div>
-          <h2>Websites</h2>
-          <p class="stat-value">{{ siteCount }} <span class="stat-unit">site(s)</span></p>
+          <h2>NODE</h2>
+          <p class="stat-value">{{ nodeCount }} <span class="stat-unit">site(s)</span></p>
+        </div>
+      </NuxtLink>
+      <NuxtLink to="/websites" class="card stat-card">
+        <div class="stat-icon stat-icon-php">
+          <AppIcon name="layers" :size="22" />
+        </div>
+        <div>
+          <h2>PHP</h2>
+          <p class="stat-value">{{ phpCount }} <span class="stat-unit">site(s)</span></p>
         </div>
       </NuxtLink>
       <NuxtLink to="/databases" class="card stat-card">
@@ -25,11 +34,18 @@
           <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
         </div>
       </NuxtLink>
+      <NuxtLink to="/settings/api-keys" class="card stat-card">
+        <div class="stat-icon stat-icon-keys">
+          <AppIcon name="key" :size="22" />
+        </div>
+        <div>
+          <h2>API Keys</h2>
+          <p class="stat-value">{{ apiKeyCount }} <span class="stat-unit">key(s)</span></p>
+        </div>
+      </NuxtLink>
     </div>
 
     <DockerStatsPanel />
-
-    <SecurityDashboardPanel />
 
     <footer class="dashboard-footer">
       <button
@@ -72,9 +88,18 @@
 <script setup lang="ts">
 const { data: sites, pending: sitesPending } = useFetch('/api/websites')
 const { data: dbs, pending: dbsPending } = useFetch('/api/databases')
-const loading = computed(() => sitesPending.value || dbsPending.value)
-const siteCount = computed(() => sites.value?.sites?.length ?? 0)
+const { data: apiKeys, pending: keysPending } = useFetch('/api/api-keys')
+const loading = computed(() => sitesPending.value || dbsPending.value || keysPending.value)
+
+const siteList = computed(() => sites.value?.sites ?? [])
+const nodeCount = computed(
+  () => siteList.value.filter((s: { runtime?: string }) => s.runtime === 'node').length
+)
+const phpCount = computed(
+  () => siteList.value.filter((s: { runtime?: string }) => s.runtime === 'php').length
+)
 const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
+const apiKeyCount = computed(() => apiKeys.value?.keys?.length ?? 0)
 
 const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
 
@@ -237,6 +262,7 @@ onUnmounted(() => {
 
 .stat-grid {
   margin-bottom: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 
 .grid {
@@ -276,9 +302,24 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.stat-icon-node {
+  background: var(--badge-node-bg);
+  color: var(--badge-node-fg);
+}
+
+.stat-icon-php {
+  background: var(--badge-php-bg);
+  color: var(--badge-php-fg);
+}
+
 .stat-icon-db {
   background: var(--success-muted);
   color: var(--success);
+}
+
+.stat-icon-keys {
+  background: var(--warning-muted);
+  color: var(--warning);
 }
 
 .stat-card h2 {

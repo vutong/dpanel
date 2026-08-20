@@ -210,7 +210,7 @@ try:
 except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError):
     pass
 
-containers.sort(key=lambda c: c["cpuPercent"])
+containers.sort(key=lambda c: c["memUsedBytes"], reverse=True)
 
 stack_disk_used = stack_disk_total = 0
 try:
@@ -221,9 +221,16 @@ except OSError:
     pass
 
 disk_breakdown = []
-for label, sub in [("Applications", "apps"), ("Data", "data"), ("Logs", "logs")]:
+for label, sub in [
+    ("Applications", "apps"),
+    ("Data", "data"),
+    ("Logs", "logs"),
+    ("Infra", "infra"),
+    ("Panel", "panel"),
+]:
     path = os.path.join(stack_root, sub)
     if not os.path.isdir(path):
+        disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
         continue
     try:
         out = subprocess.check_output(["du", "-sb", path], text=True, timeout=120, stderr=subprocess.DEVNULL)

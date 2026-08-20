@@ -1,13 +1,8 @@
 <template>
-  <div class="card security-dashboard">
-    <div class="head">
-      <h2>
-        <AppIcon name="shield" :size="18" />
-        Security
-      </h2>
-    </div>
+  <aside class="host-metrics security-metrics" aria-label="Security">
+    <h3 class="metrics-title">Security</h3>
 
-    <PageLoader v-if="pending" label="Loading security…" />
+    <PageLoader v-if="pending" label="Loading…" />
 
     <template v-else>
       <div class="svc-list">
@@ -23,11 +18,11 @@
         </div>
       </div>
 
-      <p v-if="!installedAny" class="muted hint">
-        Host security packages are not installed yet. Open Fail2ban or ClamAV to install.
+      <p v-if="!installedAny" class="hint muted">
+        Not installed yet — open Fail2ban or ClamAV to set up.
       </p>
     </template>
-  </div>
+  </aside>
 </template>
 
 <script setup lang="ts">
@@ -63,51 +58,37 @@ const clamLabel = computed(() => {
 </script>
 
 <style scoped>
-.security-dashboard {
-  margin-top: 1.25rem;
+.host-metrics {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1rem 0.85rem;
 }
 
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.head h2 {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  font-size: 1rem;
+.metrics-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+  font-weight: 600;
 }
 
 .svc-list {
   display: flex;
   flex-direction: column;
+  gap: 0.65rem;
 }
 
 .svc-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.svc-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.svc-row:first-child {
-  padding-top: 0;
+  gap: 0.75rem;
 }
 
 .svc-name {
-  font-size: var(--text-sm);
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--text);
   text-decoration: none;
@@ -118,9 +99,8 @@ const clamLabel = computed(() => {
 }
 
 .hint {
-  font-size: var(--text-sm);
   margin: 0.75rem 0 0;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 </style>
