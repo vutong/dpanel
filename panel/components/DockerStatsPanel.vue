@@ -8,117 +8,175 @@
     <p v-if="fetchError && !data" class="alert alert-error">{{ fetchError }}</p>
 
     <template v-else>
-      <div class="chart-wrap">
-        <div class="chart-legend">
-          <span class="legend-item"><i class="dot cpu" /> CPU {{ currentCpu.toFixed(1) }}%</span>
-          <span class="legend-item"><i class="dot mem" /> RAM {{ currentMemPct.toFixed(1) }}%</span>
-        </div>
-        <p v-if="history.length < 2" class="chart-wait muted">Collecting samples…</p>
-        <svg
-          class="chart-svg"
-          viewBox="0 0 400 120"
-          preserveAspectRatio="none"
-          aria-label="CPU and RAM usage over time"
-        >
-          <line
-            v-for="y in gridYs"
-            :key="y"
-            x1="0"
-            :y1="y"
-            x2="400"
-            :y2="y"
-            class="grid-line"
-          />
-          <polyline v-if="cpuPoints" :points="cpuPoints" class="line cpu" fill="none" />
-          <polyline v-if="memPoints" :points="memPoints" class="line mem" fill="none" />
-        </svg>
-        <div class="chart-axis">
-          <span>0%</span>
-          <span>50%</span>
-          <span>100%</span>
-        </div>
-      </div>
+      <div class="stats-layout">
+        <div class="stats-main">
+          <div class="chart-wrap">
+            <div class="chart-legend">
+              <span class="legend-item"><i class="dot cpu" /> CPU {{ currentCpu.toFixed(1) }}%</span>
+              <span class="legend-item"><i class="dot mem" /> RAM {{ currentMemPct.toFixed(1) }}%</span>
+            </div>
+            <p v-if="history.length < 2" class="chart-wait muted">Collecting samples…</p>
+            <svg
+              class="chart-svg"
+              viewBox="0 0 400 120"
+              preserveAspectRatio="none"
+              aria-label="CPU and RAM usage over time"
+            >
+              <line
+                v-for="y in gridYs"
+                :key="y"
+                x1="0"
+                :y1="y"
+                x2="400"
+                :y2="y"
+                class="grid-line"
+              />
+              <polyline v-if="cpuPoints" :points="cpuPoints" class="line cpu" fill="none" />
+              <polyline v-if="memPoints" :points="memPoints" class="line mem" fill="none" />
+            </svg>
+            <div class="chart-axis">
+              <span>0%</span>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+          </div>
 
-      <h3 class="sub-title">Disk usage</h3>
-      <div v-if="disk" class="disk-badge-row">
-        <span class="hw-badge disk-badge">{{ storageBadgeText }}</span>
-        <button
-          type="button"
-          class="disk-test-btn"
-          :disabled="diskTesting"
-          @click="runDiskTest"
-        >
-          {{ diskTesting ? 'Testing…' : 'Test' }}
-        </button>
-      </div>
-      <p v-if="diskTestError" class="alert alert-error disk-test-error">{{ diskTestError }}</p>
-      <div v-if="disk" class="disk-summary">
-        <div class="disk-head">
-          <span class="metric-label">Stack volume</span>
-          <span class="metric-value">
-            {{ formatBytes(disk.stackUsedBytes) }}
-            <span class="metric-of">/ {{ formatBytes(disk.stackTotalBytes) }}</span>
-            <span class="pct">({{ diskPct.toFixed(1) }}%)</span>
-          </span>
-        </div>
-        <div class="bar disk-bar">
-          <div class="bar-fill disk" :style="{ width: `${diskPct}%` }" />
-        </div>
-      </div>
-      <div v-if="disk?.breakdown?.length" class="table-wrap disk-table-wrap">
-        <table class="table stats-table">
-          <thead>
-            <tr>
-              <th>Path</th>
-              <th class="num">Size</th>
-              <th class="num">Share</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in disk.breakdown" :key="row.path">
-              <td>
-                <code>{{ row.path }}/</code>
-                <span class="row-label">{{ row.label }}</span>
-              </td>
-              <td class="num">{{ formatBytes(row.bytes) }}</td>
-              <td class="num">{{ breakdownShare(row.bytes) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+          <h3 class="sub-title">Stack disk breakdown</h3>
+          <div v-if="disk" class="disk-summary">
+            <div class="disk-head">
+              <span class="metric-label">Stack volume</span>
+              <span class="metric-value">
+                {{ formatBytes(disk.stackUsedBytes) }}
+                <span class="metric-of">/ {{ formatBytes(disk.stackTotalBytes) }}</span>
+                <span class="pct">({{ diskPct.toFixed(1) }}%)</span>
+              </span>
+            </div>
+            <div class="bar disk-bar">
+              <div class="bar-fill disk" :style="{ width: `${diskPct}%` }" />
+            </div>
+          </div>
+          <div v-if="disk?.breakdown?.length" class="table-wrap disk-table-wrap">
+            <table class="table stats-table compact">
+              <thead>
+                <tr>
+                  <th>Path</th>
+                  <th class="num">Size</th>
+                  <th class="num">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in disk.breakdown" :key="row.path">
+                  <td>
+                    <code>{{ row.path }}/</code>
+                    <span class="row-label">{{ row.label }}</span>
+                  </td>
+                  <td class="num">{{ formatBytes(row.bytes) }}</td>
+                  <td class="num">{{ breakdownShare(row.bytes) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <div class="containers-head">
-        <h3 class="sub-title">Containers</h3>
-        <button
-          v-if="containers.length"
-          type="button"
-          class="toggle-btn"
-          @click="containersExpanded = !containersExpanded"
-        >
-          {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
-        </button>
-      </div>
-      <p v-if="!containers.length" class="muted empty">No running containers.</p>
-      <div v-else-if="containersExpanded" class="table-wrap">
-        <table class="table stats-table">
-          <thead>
-            <tr>
-              <th>Container</th>
-              <th class="num">CPU %</th>
-              <th class="num">RAM</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in containers" :key="c.name">
-              <td><code class="cname">{{ c.name }}</code></td>
-              <td class="num">{{ c.cpuPercent.toFixed(2) }}%</td>
-              <td class="num">
-                {{ formatBytes(c.memUsedBytes) }}
-                <span v-if="c.memLimitBytes" class="limit-of">/ {{ formatBytes(c.memLimitBytes) }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <div class="containers-head">
+            <h3 class="sub-title">Containers</h3>
+            <button
+              v-if="containers.length"
+              type="button"
+              class="toggle-btn"
+              @click="containersExpanded = !containersExpanded"
+            >
+              {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
+            </button>
+          </div>
+          <p v-if="!containers.length" class="muted empty">No running containers.</p>
+          <div v-else-if="containersExpanded" class="table-wrap">
+            <table class="table stats-table compact">
+              <thead>
+                <tr>
+                  <th>Container</th>
+                  <th class="num">CPU %</th>
+                  <th class="num">RAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in containers" :key="c.name">
+                  <td><code class="cname">{{ c.name }}</code></td>
+                  <td class="num">{{ c.cpuPercent.toFixed(2) }}%</td>
+                  <td class="num">
+                    {{ formatBytes(c.memUsedBytes) }}
+                    <span v-if="c.memLimitBytes" class="limit-of">/ {{ formatBytes(c.memLimitBytes) }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="host-metrics" aria-label="Server metrics">
+          <h3 class="metrics-title">Server</h3>
+
+          <div class="metric-row">
+            <span class="metric-icon" aria-hidden="true">🧠</span>
+            <div class="metric-body">
+              <span class="metric-name">RAM</span>
+              <span class="metric-detail">
+                {{ formatBytes(host?.memUsedBytes) }}
+                <span class="metric-pct">({{ memPct.toFixed(0) }}%)</span>
+                <span class="metric-of">/ {{ formatBytes(host?.memTotalBytes) }}</span>
+              </span>
+              <div class="bar metric-bar">
+                <div class="bar-fill mem" :style="{ width: `${memPct}%` }" />
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-row">
+            <span class="metric-icon" aria-hidden="true">💾</span>
+            <div class="metric-body">
+              <span class="metric-name">Disk</span>
+              <span class="metric-detail">
+                {{ formatBytes(host?.diskUsedBytes) }}
+                <span v-if="host?.diskKind" class="disk-kind">{{ host.diskKind }}</span>
+                <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
+                <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
+              </span>
+              <div class="bar metric-bar">
+                <div class="bar-fill disk-sys" :style="{ width: `${systemDiskPct}%` }" />
+              </div>
+              <div class="disk-badge-row">
+                <span class="hw-badge disk-badge">{{ storageBadgeText }}</span>
+                <button
+                  type="button"
+                  class="disk-test-btn"
+                  :disabled="diskTesting"
+                  @click="runDiskTest"
+                >
+                  {{ diskTesting ? 'Testing…' : 'Test' }}
+                </button>
+              </div>
+              <p v-if="diskTestError" class="disk-test-error">{{ diskTestError }}</p>
+            </div>
+          </div>
+
+          <div class="metric-row metric-row-cpu">
+            <span class="metric-icon" aria-hidden="true">⚡</span>
+            <div class="metric-body">
+              <span class="metric-name">CPU · avg {{ currentCpu.toFixed(1) }}%</span>
+              <ul v-if="cpuCores.length" class="cpu-list">
+                <li v-for="core in cpuCores" :key="core.index">
+                  <span class="cpu-label">CPU {{ core.index + 1 }}</span>
+                  <div class="cpu-track">
+                    <div class="cpu-fill" :style="{ width: `${core.percent}%` }" />
+                  </div>
+                  <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
+                </li>
+              </ul>
+              <p v-else class="muted cpu-wait">Sampling cores…</p>
+            </div>
+          </div>
+
+          <div v-if="loadHint" class="load-hint muted">{{ loadHint }}</div>
+        </aside>
       </div>
     </template>
   </section>
@@ -127,20 +185,32 @@
 <script setup lang="ts">
 import { formatBytes } from '~/composables/useFormatBytes'
 
+type CpuCore = { index: number; percent: number }
+
+type DiskStorage = {
+  kind: 'hdd' | 'ssd' | 'nvme' | 'unknown'
+  device: string
+  readMbps: number | null
+  writeMbps: number | null
+  rotational: number | null
+  probedAt?: string
+}
+
 type StatsPayload = {
-  host: { cpuPercent: number; memUsedBytes: number; memTotalBytes: number }
+  host: {
+    cpuPercent: number
+    memUsedBytes: number
+    memTotalBytes: number
+    cpuCores?: CpuCore[]
+    diskUsedBytes?: number
+    diskTotalBytes?: number
+    diskKind?: string
+  }
   disk?: {
     stackUsedBytes: number
     stackTotalBytes: number
     breakdown: { label: string; path: string; bytes: number }[]
-    storage?: {
-      kind: 'hdd' | 'ssd' | 'nvme' | 'unknown'
-      device: string
-      readMbps: number | null
-      writeMbps: number | null
-      rotational: number | null
-      probedAt?: string
-    }
+    storage?: DiskStorage
   }
   containers: {
     name: string
@@ -167,11 +237,15 @@ const gridYs = [0, 30, 60, 90, 120]
 
 let timer: ReturnType<typeof setInterval> | null = null
 
+const host = computed(() => data.value?.host)
 const currentCpu = computed(() => history.value.at(-1)?.cpu ?? data.value?.host.cpuPercent ?? 0)
 const currentMemPct = computed(() => history.value.at(-1)?.mem ?? memPctFromHost(data.value?.host))
 
 const disk = computed(() => data.value?.disk)
 const containers = computed(() => data.value?.containers ?? [])
+const cpuCores = computed(() => host.value?.cpuCores ?? [])
+
+const memPct = computed(() => memPctFromHost(host.value))
 
 const diskPct = computed(() => {
   const d = disk.value
@@ -179,10 +253,22 @@ const diskPct = computed(() => {
   return Math.min(100, (d.stackUsedBytes / d.stackTotalBytes) * 100)
 })
 
+const systemDiskPct = computed(() => {
+  const h = host.value
+  if (!h?.diskTotalBytes) return 0
+  return Math.min(100, ((h.diskUsedBytes || 0) / h.diskTotalBytes) * 100)
+})
+
+const loadHint = computed(() => {
+  const n = cpuCores.value.length
+  if (n > 0) return `${n} logical core(s)`
+  return null
+})
+
 const storageBadgeText = computed(() => {
   const s = disk.value?.storage
   if (!s?.kind || s.kind === 'unknown') {
-    return s?.device ? `${s.device} · not tested` : 'Disk not tested'
+    return s?.device ? `${s.device} · not tested` : 'Not tested'
   }
   const kindMap = { hdd: 'HDD', ssd: 'SSD', nvme: 'NVMe' } as const
   const parts: string[] = [kindMap[s.kind as keyof typeof kindMap] || s.kind.toUpperCase()]
@@ -196,11 +282,20 @@ const storageBadgeText = computed(() => {
   return parts.join(' · ')
 })
 
-function applyStorageFromProbe(storage: NonNullable<StatsPayload['disk']>['storage']) {
-  if (!data.value?.disk || !storage) return
+function diskKindLabel(kind: string) {
+  const map = { hdd: 'HDD', ssd: 'SSD', nvme: 'NVMe' } as const
+  return map[kind as keyof typeof map] || kind.toUpperCase()
+}
+
+function applyStorageFromProbe(storage: DiskStorage) {
+  if (!data.value?.disk) return
   data.value = {
     ...data.value,
     disk: { ...data.value.disk, storage },
+    host: {
+      ...data.value.host,
+      diskKind: storage.kind !== 'unknown' ? diskKindLabel(storage.kind) : data.value.host.diskKind,
+    },
   }
 }
 
@@ -223,7 +318,7 @@ async function runDiskTest() {
       return
     }
     applyStorageFromProbe({
-      kind: (result.kind || 'unknown') as 'hdd' | 'ssd' | 'nvme' | 'unknown',
+      kind: (result.kind || 'unknown') as DiskStorage['kind'],
       device: result.device || '',
       readMbps: result.readMbps ?? null,
       writeMbps: result.writeMbps ?? null,
@@ -238,9 +333,9 @@ async function runDiskTest() {
   }
 }
 
-function memPctFromHost(host?: StatsPayload['host']) {
-  if (!host?.memTotalBytes) return 0
-  return Math.min(100, (host.memUsedBytes / host.memTotalBytes) * 100)
+function memPctFromHost(h?: StatsPayload['host']) {
+  if (!h?.memTotalBytes) return 0
+  return Math.min(100, (h.memUsedBytes / h.memTotalBytes) * 100)
 }
 
 function breakdownShare(bytes: number) {
@@ -298,15 +393,19 @@ onUnmounted(() => {
 .docker-stats {
   margin-top: 0;
 }
+
 .stats-head {
   display: flex;
   align-items: center;
   gap: 0.65rem;
   margin-bottom: 1rem;
 }
+
 .stats-head h2 {
   font-size: 1.05rem;
+  margin: 0;
 }
+
 .live-badge {
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -317,10 +416,235 @@ onUnmounted(() => {
   color: var(--success);
   font-weight: 600;
 }
+
+.stats-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 960px) {
+  .stats-layout {
+    grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+    align-items: start;
+  }
+}
+
+.stats-main {
+  min-width: 0;
+}
+
+.host-metrics {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1rem 0.85rem;
+}
+
+.metrics-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+  font-weight: 600;
+}
+
+.metric-row {
+  display: flex;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.metric-row-cpu {
+  margin-bottom: 0.5rem;
+}
+
+.metric-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 1.35rem;
+  text-align: center;
+  margin-top: 0.1rem;
+}
+
+.metric-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.metric-detail {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 0.35rem;
+}
+
+.metric-pct {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.metric-of {
+  color: var(--muted);
+}
+
+.disk-kind {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.35rem;
+  margin: 0 0.15rem;
+  border-radius: 4px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  vertical-align: middle;
+}
+
+.metric-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.bar-fill.mem {
+  height: 100%;
+  background: var(--success);
+  border-radius: 3px;
+  transition: width 0.35s ease;
+}
+
+.bar-fill.disk-sys {
+  height: 100%;
+  background: #a78bfa;
+  border-radius: 3px;
+  transition: width 0.35s ease;
+}
+
+.disk-badge-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.hw-badge.disk-badge {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.22rem 0.45rem;
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+
+.disk-test-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.22rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.disk-test-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.disk-test-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.disk-test-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--danger, #ef4444);
+}
+
+.cpu-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cpu-list li {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr 2.25rem;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.cpu-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.cpu-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.cpu-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+  min-width: 0;
+}
+
+.cpu-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.cpu-wait {
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0;
+}
+
+.load-hint {
+  font-size: 0.72rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
 .chart-wrap {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   position: relative;
 }
+
 .chart-wait {
   position: absolute;
   inset: 0;
@@ -331,6 +655,7 @@ onUnmounted(() => {
   pointer-events: none;
   z-index: 1;
 }
+
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -339,48 +664,58 @@ onUnmounted(() => {
   font-size: 0.85rem;
   font-weight: 500;
 }
+
 .legend-item {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
+
 .dot {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 50%;
 }
+
 .dot.cpu {
   background: var(--accent);
 }
+
 .dot.mem {
   background: var(--success);
 }
+
 .chart-svg {
   width: 100%;
-  height: 160px;
+  height: 140px;
   display: block;
   background: var(--bg-subtle);
   border-radius: 8px;
   border: 1px solid var(--border);
 }
+
 .grid-line {
   stroke: var(--border);
   stroke-width: 0.5;
   vector-effect: non-scaling-stroke;
 }
+
 .line {
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
+
 .line.cpu {
   stroke: var(--accent);
 }
+
 .line.mem {
   stroke: var(--success);
 }
+
 .chart-axis {
   display: flex;
   justify-content: space-between;
@@ -389,18 +724,21 @@ onUnmounted(() => {
   margin-top: 0.25rem;
   padding: 0 0.15rem;
 }
+
 .sub-title {
   font-size: 0.88rem;
   font-weight: 600;
   margin: 0 0 0.65rem;
   color: var(--text);
 }
+
 .containers-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
+
 .toggle-btn {
   border: 1px solid var(--border);
   background: var(--surface-elevated);
@@ -410,13 +748,16 @@ onUnmounted(() => {
   border-radius: 7px;
   cursor: pointer;
 }
+
 .toggle-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
+
 .disk-summary {
   margin-bottom: 0.75rem;
 }
+
 .disk-head {
   display: flex;
   flex-wrap: wrap;
@@ -425,110 +766,81 @@ onUnmounted(() => {
   gap: 0.5rem;
   margin-bottom: 0.4rem;
 }
+
 .metric-label {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
 }
-.disk-badge-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.65rem;
-}
-.hw-badge.disk-badge {
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0.25rem 0.55rem;
-  line-height: 1.35;
-  flex: 1;
-  min-width: 0;
-}
-.disk-test-btn {
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 500;
-  padding: 0.28rem 0.65rem;
-  border-radius: 7px;
-  cursor: pointer;
-}
-.disk-test-btn:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.disk-test-btn:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-.disk-test-error {
-  margin: 0 0 0.65rem;
-  font-size: 0.85rem;
-}
+
 .metric-value {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
+
 .metric-of {
   font-weight: 500;
   color: var(--muted);
 }
+
 .pct {
   font-size: 0.82rem;
   color: var(--muted);
   margin-left: 0.25rem;
 }
+
 .bar {
   height: 6px;
   border-radius: 3px;
   background: var(--border);
   overflow: hidden;
 }
+
 .bar-fill.disk {
   height: 100%;
   background: #a78bfa;
   border-radius: 3px;
   transition: width 0.35s ease;
 }
+
 .disk-table-wrap {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
+
+.stats-table.compact th,
+.stats-table.compact td {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
 .row-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--muted);
   margin-top: 0.1rem;
 }
+
 .stats-table .num {
   text-align: right;
   white-space: nowrap;
 }
+
 .cname {
   font-size: 0.78rem;
   word-break: break-all;
 }
+
 .limit-of {
   color: var(--muted);
   font-size: 0.82rem;
 }
+
 .empty {
   font-size: 0.9rem;
   margin: 0.5rem 0;
 }
+
 .muted {
   color: var(--muted);
 }

@@ -7,6 +7,10 @@ export type DockerStatsResponse = {
     cpuPercent: number
     memUsedBytes: number
     memTotalBytes: number
+    cpuCores?: { index: number; percent: number }[]
+    diskUsedBytes?: number
+    diskTotalBytes?: number
+    diskKind?: string
   }
   disk: {
     stackUsedBytes: number
