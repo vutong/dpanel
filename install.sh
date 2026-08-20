@@ -375,6 +375,23 @@ if command -v ufw &>/dev/null; then
   ufw --force enable >/dev/null 2>&1 || true
 fi
 
+install_security_packages() {
+  if [[ "${DPANEL_INSTALL_SECURITY:-}" == "1" ]]; then
+    log "Installing Fail2ban + ClamAV (DPANEL_INSTALL_SECURITY=1)"
+    bash "${STACK_ROOT}/infra/scripts/host-security-install.sh" || log "Warning: security package install failed — use panel Settings → Fail2ban"
+    return
+  fi
+  if [[ -n "${DPANEL_NONINTERACTIVE:-}" ]]; then
+    return
+  fi
+  local ans=""
+  tty_print ""
+  tty_read "Install Fail2ban + ClamAV on this VPS? [y/N]: " ans
+  if [[ "${ans}" == "y" || "${ans}" == "Y" ]]; then
+    bash "${STACK_ROOT}/infra/scripts/host-security-install.sh" || log "Warning: security install failed — retry from panel"
+  fi
+}
+
 step "Deploy stack"
 mkdir -p "${STACK_ROOT}"
 rsync -a --delete \
@@ -400,6 +417,7 @@ cat > "${STACK_ROOT}/data/panel/auth.json" <<EOF
 EOF
 chmod 600 "${STACK_ROOT}/data/panel/auth.json"
 echo '[]' > "${STACK_ROOT}/data/panel/sites.json"
+echo '[]' > "${STACK_ROOT}/data/panel/security-events.json"
 STACK_ROOT="${STACK_ROOT}" INSTALLER_VERSION="${INSTALLER_VERSION}" python3 <<'PY' 2>/dev/null || true
 import json, os
 from datetime import datetime, timezone
@@ -474,6 +492,8 @@ step "Configure nginx"
 bash "${STACK_ROOT}/infra/scripts/nginx-reload.sh" || die "nginx configuration failed"
 
 wait_for_healthy_stack
+
+install_security_packages
 
 if [[ -f "${STACK_ROOT}/infra/scripts/health-check.sh" ]]; then
   bash "${STACK_ROOT}/infra/scripts/health-check.sh" --fix || log "Warning: post-install health check reported issues — run: dpanel health --fix"

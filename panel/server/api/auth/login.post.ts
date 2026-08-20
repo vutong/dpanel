@@ -1,6 +1,13 @@
 import bcrypt from 'bcryptjs'
 import { readAuth } from '../../utils/stack'
 import { createSessionToken, sessionCookieName } from '../../utils/session'
+import {
+  assertLoginAllowed,
+  clearLoginFailures,
+  recordLoginFailure
+} from '../../utils/login-rate-limit'
+import { appendSecurityEvent } from '../../utils/security-events'
+import { getRequestIP } from 'h3'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ email?: string; password?: string }>(event)
@@ -11,6 +18,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Email and password are required' })
   }
 
+  assertLoginAllowed(event)
+
   let auth: { email: string; passwordHash: string }
   try {
     auth = await readAuth()
@@ -20,6 +29,7 @@ export default defineEventHandler(async (event) => {
 
   const authEmail = auth.email.trim().toLowerCase()
   if (email !== authEmail) {
+    recordLoginFailure(event)
     throw createError({ statusCode: 401, statusMessage: 'Invalid email or password' })
   }
 
@@ -29,8 +39,18 @@ export default defineEventHandler(async (event) => {
 
   const ok = await bcrypt.compare(password, hash.replace(/^\$2y\$/, '$2a$'))
   if (!ok) {
+    recordLoginFailure(event)
+    appendSecurityEvent({
+      kind: 'login_brute',
+      source: 'panel_login',
+      ip: getRequestIP(event, { xForwardedFor: true }) || null,
+      action: 'failed_attempt',
+      detail: 'Invalid password on panel login'
+    })
     throw createError({ statusCode: 401, statusMessage: 'Invalid email or password' })
   }
+
+  clearLoginFailures(event)
 
   const config = useRuntimeConfig()
   const token = createSessionToken(email, config.sessionSecret)

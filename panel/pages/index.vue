@@ -29,6 +29,8 @@
 
     <DockerStatsPanel />
 
+    <SecurityOverviewPanel />
+
     <footer class="overview-footer">
       <button
         type="button"
