@@ -162,6 +162,16 @@
     <template v-else-if="name === 'shield'">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </template>
+    <!-- bell / security events -->
+    <template v-else-if="name === 'bell'">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </template>
+    <!-- ban / fail2ban -->
+    <template v-else-if="name === 'ban'">
+      <circle cx="12" cy="12" r="10" />
+      <path d="m4.9 4.9 14.2 14.2" />
+    </template>
     <!-- folder -->
     <template v-else-if="name === 'folder'">
       <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9L9.6 4.9A2 2 0 0 0 7.93 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z" />
