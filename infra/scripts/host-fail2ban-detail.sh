@@ -26,8 +26,10 @@ def run_host(cmd):
             q = cmd.replace("'", "'\"'\"'")
             r = subprocess.run(
                 [
-                    "docker", "run", "--rm", "--privileged", "--network", "host",
+                    "docker", "run", "--rm", "--privileged", "--pid=host", "--network", "host",
                     "-v", "/:/host",
+                    "-v", "/run/systemd:/run/systemd",
+                    "-v", "/run/dbus:/run/dbus",
                     "-e", f"STACK_ROOT={stack}",
                     "alpine:3.20", "sh", "-ec",
                     f"export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; "

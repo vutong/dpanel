@@ -289,10 +289,23 @@ function addClientIp() {
   }
 }
 
+function cloneJails(jails: Record<string, JailSettings>): Record<string, JailSettings> {
+  const out: Record<string, JailSettings> = {}
+  for (const [name, cfg] of Object.entries(jails)) {
+    out[name] = {
+      enabled: Boolean(cfg.enabled),
+      maxretry: Number(cfg.maxretry),
+      findtime: Number(cfg.findtime),
+      bantime: Number(cfg.bantime)
+    }
+  }
+  return out
+}
+
 function buildPayload(): Settings {
   return {
     ignoreip: [...draft.ignoreip],
-    jails: structuredClone(draft.jails)
+    jails: cloneJails(draft.jails)
   }
 }
 

@@ -12,11 +12,13 @@ CMD="
 if ! command -v fail2ban-client >/dev/null 2>&1; then
   echo 'fail2ban not installed' >&2; exit 1
 fi
-if systemctl is-active fail2ban >/dev/null 2>&1; then
+if fail2ban-client ping 2>/dev/null | grep -qi pong; then
+  fail2ban-client reload
+elif systemctl is-active fail2ban >/dev/null 2>&1; then
   fail2ban-client reload
 else
   systemctl enable fail2ban 2>/dev/null || true
-  systemctl restart fail2ban
+  systemctl restart fail2ban 2>/dev/null || fail2ban-client start 2>/dev/null || true
 fi
 "
 
