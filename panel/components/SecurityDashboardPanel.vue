@@ -7,16 +7,31 @@
     <template v-else>
       <div class="svc-list">
         <div class="svc-row">
-          <NuxtLink to="/settings/fail2ban" class="svc-name">Fail2ban</NuxtLink>
-          <span v-if="fail2banOk" class="status-active">Active</span>
-          <span v-else class="status-inactive">{{ fail2banLabel }}</span>
-        </div>
-        <div class="svc-row">
           <NuxtLink to="/settings/clamav" class="svc-name">ClamAV</NuxtLink>
           <span v-if="clamOk" class="status-active">Active</span>
           <span v-else class="status-inactive">{{ clamLabel }}</span>
         </div>
+        <div class="svc-row">
+          <NuxtLink to="/settings/fail2ban" class="svc-name">Fail2ban</NuxtLink>
+          <span v-if="fail2banOk" class="status-active">Active</span>
+          <span v-else class="status-inactive">{{ fail2banLabel }}</span>
+        </div>
       </div>
+
+      <dl class="f2b-stats">
+        <div>
+          <dt>Jail(s)</dt>
+          <dd>{{ jailCount }}</dd>
+        </div>
+        <div>
+          <dt>Banned</dt>
+          <dd>{{ bannedCount }}</dd>
+        </div>
+        <div>
+          <dt>Suspected</dt>
+          <dd>{{ suspectedCount }}</dd>
+        </div>
+      </dl>
 
       <p v-if="!installedAny" class="hint muted">
         Not installed yet — open Fail2ban or ClamAV to set up.
@@ -31,11 +46,21 @@ type Status = {
   clamav?: { installed?: boolean; daemonActive?: boolean }
 }
 
+type Fail2banSummary = {
+  jails?: { currentlyFailed?: number }[]
+  bannedIps?: string[]
+}
+
 const { data: status, pending: statusPending } = useFetch<Status>('/api/security/status', {
   key: 'security-status-dashboard'
 })
 
-const pending = computed(() => statusPending.value)
+const { data: fail2ban, pending: fail2banPending } = useFetch<Fail2banSummary>(
+  '/api/security/fail2ban',
+  { key: 'security-fail2ban-dashboard' }
+)
+
+const pending = computed(() => statusPending.value || fail2banPending.value)
 
 const fail2banOk = computed(
   () => status.value?.fail2ban?.installed && status.value?.fail2ban?.active
@@ -55,6 +80,12 @@ const clamLabel = computed(() => {
   if (!status.value?.clamav?.installed) return 'Not installed'
   return status.value.clamav.daemonActive ? 'Active' : 'Inactive'
 })
+
+const jailCount = computed(() => fail2ban.value?.jails?.length ?? 0)
+const bannedCount = computed(() => fail2ban.value?.bannedIps?.length ?? 0)
+const suspectedCount = computed(() =>
+  (fail2ban.value?.jails || []).reduce((n, j) => n + (j.currentlyFailed || 0), 0)
+)
 </script>
 
 <style scoped>
@@ -96,6 +127,32 @@ const clamLabel = computed(() => {
 
 .svc-name:hover {
   color: var(--accent);
+}
+
+.f2b-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.f2b-stats dt {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+  font-weight: 600;
+}
+
+.f2b-stats dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .hint {
