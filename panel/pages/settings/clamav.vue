@@ -39,7 +39,7 @@
             :disabled="installBusy"
             @click="onInstall"
           >
-            {{ installBusy ? 'Installing…' : 'Install security packages' }}
+            {{ installBusy ? 'Installing…' : 'Install ClamAV' }}
           </button>
           <button
             type="button"
@@ -141,11 +141,11 @@ async function load() {
 }
 
 async function onInstall() {
-  if (!confirm('Install Fail2ban and ClamAV on this VPS? This may take several minutes.')) return
+  if (!confirm('Install ClamAV on this VPS? Signature download may take several minutes.')) return
   installBusy.value = true
   try {
-    await $fetch('/api/security/install', { method: 'POST', timeout: 600_000 })
-    showAlert('Security packages installed', true)
+    await $fetch('/api/security/clamav/install', { method: 'POST', timeout: 600_000 })
+    showAlert('ClamAV installed', true)
     await load()
   } catch (e: unknown) {
     showAlert(e instanceof Error ? e.message : 'Install failed', false)

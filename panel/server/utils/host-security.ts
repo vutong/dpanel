@@ -34,8 +34,33 @@ export async function fetchHostSecurityStatus(): Promise<HostSecurityStatus> {
   return status
 }
 
+export async function installFail2ban(): Promise<HostSecurityStatus> {
+  const raw = await runScript('host-fail2ban-install.sh', [], 300_000)
+  const status = parseScriptJson<HostSecurityStatus>(raw)
+  appendSecurityEvent({
+    kind: 'security_install',
+    source: 'panel',
+    action: 'installed',
+    detail: 'Fail2ban installed from panel'
+  })
+  return status
+}
+
+export async function installClamAv(): Promise<HostSecurityStatus> {
+  const raw = await runScript('host-clamav-install.sh', [], 600_000)
+  const status = parseScriptJson<HostSecurityStatus>(raw)
+  appendSecurityEvent({
+    kind: 'security_install',
+    source: 'panel',
+    action: 'installed',
+    detail: 'ClamAV installed from panel'
+  })
+  return status
+}
+
+/** @deprecated Use installFail2ban + installClamAv separately from panel UI */
 export async function installHostSecurity(): Promise<HostSecurityStatus> {
-  const raw = await runScript('host-security-install.sh', [], 600_000)
+  const raw = await runScript('host-security-install.sh', [], 900_000)
   const status = parseScriptJson<HostSecurityStatus>(raw)
   appendSecurityEvent({
     kind: 'security_install',

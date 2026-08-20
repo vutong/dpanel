@@ -46,8 +46,8 @@
           Security
         </p>
         <SidebarNavLink to="/security/events" icon="shield" label="Events" />
-        <SidebarNavLink to="/settings/fail2ban" icon="shield" label="Fail2ban" />
-        <SidebarNavLink to="/settings/clamav" icon="scan" label="ClamAV" />
+        <SidebarNavLink to="/settings/fail2ban" emoji="🛡️" label="Fail2ban" />
+        <SidebarNavLink to="/settings/clamav" emoji="🦠" label="ClamAV" />
       </nav>
 
       <button class="logout-btn" type="button" @click="logout">
@@ -142,13 +142,15 @@ async function logout() {
 .nav-section {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   font-size: 0.68rem;
   text-transform: uppercase;
   color: var(--text);
   margin: 0.8rem 0 0.3rem 0.5rem;
   letter-spacing: 0.06em;
   font-weight: 600;
+  line-height: 1;
+  min-height: 1.125rem;
 }
 
 .nav-section:first-of-type {
@@ -162,6 +164,8 @@ async function logout() {
   padding: 0.45rem 0.5rem;
   margin: 0 0 0.15rem 0;
   transition: background 0.15s, color 0.15s;
+  line-height: 1;
+  min-height: 1.125rem;
 }
 
 .nav-section--link:hover {
@@ -176,7 +180,13 @@ async function logout() {
 }
 
 .section-icon {
-  opacity: 0.75;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
 }
 
 .nav-section--link.router-link-exact-active .section-icon,

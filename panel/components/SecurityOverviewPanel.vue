@@ -22,7 +22,9 @@
 
       <p v-if="!installedAny" class="muted hint">
         Host security packages not installed.
-        <NuxtLink to="/settings/fail2ban">Install from Fail2ban settings</NuxtLink>.
+        <NuxtLink to="/settings/fail2ban">Fail2ban</NuxtLink>
+        ·
+        <NuxtLink to="/settings/clamav">ClamAV</NuxtLink>
       </p>
 
       <div v-if="events.length" class="events-mini">

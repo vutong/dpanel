@@ -1,5 +1,5 @@
-import { requireAuth } from '../../utils/auth-guard'
-import { fetchHostSecurityStatus } from '../../utils/host-security'
+import { requireAuth } from '../../../utils/auth-guard'
+import { fetchHostSecurityStatus } from '../../../utils/host-security'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)

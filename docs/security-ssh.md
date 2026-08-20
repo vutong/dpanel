@@ -30,20 +30,19 @@ Panel **không** chạy Fail2ban/ClamAV trong container — gọi host qua `dock
 
 ### Lúc cài VPS (`install.sh`)
 
-Bước optional **Security packages** (prompt mặc định):
+**VPS mới** (tạo `.env` lần đầu): tự động cài **cả Fail2ban và ClamAV** sau health check.
 
 ```bash
-# Non-interactive: cài luôn
+# Ép cài lại trên reinstall có .env sẵn:
 DPANEL_INSTALL_SECURITY=1 sudo bash install.sh
 ```
 
-Gọi `infra/scripts/host-security-install.sh` trên host.
+Gọi `host-fail2ban-install.sh` + `host-clamav-install.sh` (wrapper `host-security-install.sh`).
 
-### Từ panel
+### Từ panel (update / cài thiếu)
 
-**Settings → Fail2ban** hoặc **ClamAV** → nút **Install security packages** nếu chưa có.
-
-Script cài: `fail2ban`, `clamav`, `clamav-daemon`, `clamav-freshclam`, sync jail/filter từ repo, `systemctl enable --now`.
+- **Fail2ban** → nút **Install Fail2ban** (chỉ khi chưa cài)
+- **ClamAV** → nút **Install ClamAV** (chỉ khi chưa cài)
 
 ---
 
@@ -116,7 +115,8 @@ Overview hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV).
 | Method | Path | Mô tả |
 |--------|------|-------|
 | GET | `/api/security/status` | Tổng quan Fail2ban + ClamAV |
-| POST | `/api/security/install` | Cài packages trên host |
+| POST | `/api/security/fail2ban/install` | Cài Fail2ban |
+| POST | `/api/security/clamav/install` | Cài ClamAV |
 | GET | `/api/security/events` | Danh sách events |
 | GET | `/api/security/fail2ban` | Chi tiết jails + banned IPs |
 | POST | `/api/security/fail2ban/unban` | `{ "ip": "…" }` |

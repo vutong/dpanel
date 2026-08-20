@@ -48,7 +48,7 @@
         @click="onUpdateClick"
       >
         <AppIcon name="git-pull" :size="14" />
-        {{ updateBusy ? 'Updating…' : 'Update Dpanel' }}
+        {{ updateBusy ? 'Updating…' : 'Update' }}
       </button>
       <button
         type="button"
@@ -57,7 +57,7 @@
         @click="onRebootClick"
       >
         <AppIcon name="power" :size="14" />
-        {{ rebooting ? 'Rebooting…' : 'Reboot VPS' }}
+        {{ rebooting ? 'Rebooting…' : 'Reboot' }}
       </button>
     </footer>
 

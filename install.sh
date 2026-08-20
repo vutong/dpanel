@@ -376,20 +376,12 @@ if command -v ufw &>/dev/null; then
 fi
 
 install_security_packages() {
-  if [[ "${DPANEL_INSTALL_SECURITY:-}" == "1" ]]; then
-    log "Installing Fail2ban + ClamAV (DPANEL_INSTALL_SECURITY=1)"
-    bash "${STACK_ROOT}/infra/scripts/host-security-install.sh" || log "Warning: security package install failed — use panel Settings → Fail2ban"
+  if [[ "${NEW_ENV_CREATED:-0}" != "1" && "${DPANEL_INSTALL_SECURITY:-}" != "1" ]]; then
     return
   fi
-  if [[ -n "${DPANEL_NONINTERACTIVE:-}" ]]; then
-    return
-  fi
-  local ans=""
-  tty_print ""
-  tty_read "Install Fail2ban + ClamAV on this VPS? [y/N]: " ans
-  if [[ "${ans}" == "y" || "${ans}" == "Y" ]]; then
-    bash "${STACK_ROOT}/infra/scripts/host-security-install.sh" || log "Warning: security install failed — retry from panel"
-  fi
+  log "Installing Fail2ban + ClamAV (default for new VPS)"
+  bash "${STACK_ROOT}/infra/scripts/host-security-install.sh" \
+    || log "Warning: security package install failed — install from panel Security menu"
 }
 
 step "Deploy stack"
