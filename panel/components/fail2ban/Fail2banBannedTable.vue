@@ -11,8 +11,9 @@
     </div>
 
     <p v-if="!geoip?.ready" class="geo-banner muted">
-      Country lookup uses an offline MaxMind database. Click <strong>Sync</strong> in the Country column
-      header to download it (requires <code>GEOIP_MAXMIND_LICENSE_KEY</code> in <code>.env</code>).
+      Country for banned IPs is resolved via <code>country.is</code> and stored in
+      <code>geo-blocklist.json</code>. Missing IPs are filled automatically; use
+      <strong>Sync</strong> to refresh all currently banned IPs.
     </p>
 
     <div v-if="!rows.length" class="card muted empty">No banned IPs.</div>
@@ -85,8 +86,8 @@ type IpGeoEntry = {
 type GeoipStatus = {
   ready: boolean
   syncedAt: string | null
-  buildDate?: string | null
-  edition?: string | null
+  provider?: string | null
+  count?: number
 }
 
 const props = defineProps<{
@@ -102,9 +103,9 @@ const emit = defineEmits<{ unban: [string]; 'sync-geoip': [] }>()
 const search = ref('')
 
 const syncTitle = computed(() => {
-  if (props.syncBusy) return 'Downloading GeoLite2 database…'
-  if (props.geoip?.ready) return 'Update offline country database from MaxMind'
-  return 'Download offline country database from MaxMind'
+  if (props.syncBusy) return 'Refreshing country data from country.is…'
+  if (props.geoip?.ready) return 'Refresh country data for all banned IPs'
+  return 'Build geo-blocklist.json for banned IPs via country.is'
 })
 
 const rows = computed(() => {

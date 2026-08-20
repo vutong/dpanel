@@ -6,10 +6,10 @@ import {
   type IpGeoEntry
 } from './geoip'
 
-export function buildIpGeoMap(
+export async function buildIpGeoMap(
   jails: Fail2banJailRow[],
   bannedIps: string[]
-): Record<string, IpGeoEntry> {
+): Promise<Record<string, IpGeoEntry>> {
   return lookupIpGeoBatch(collectBannedIps(jails, bannedIps))
 }
 
@@ -17,9 +17,8 @@ export function buildGeoipStatusPayload() {
   const geoStatus = getGeoipStatus()
   return {
     ready: geoStatus.ready,
-    syncedAt: geoStatus.meta?.syncedAt ?? null,
-    buildDate: geoStatus.meta?.buildDate ?? null,
-    edition: geoStatus.meta?.edition ?? null,
-    filename: geoStatus.meta?.filename ?? null
+    syncedAt: geoStatus.syncedAt,
+    provider: geoStatus.provider,
+    count: geoStatus.count
   }
 }

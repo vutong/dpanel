@@ -1,4 +1,4 @@
-/** IP validation helpers shared by fail2ban host queries (no GeoIP / mmdb deps). */
+/** IP validation helpers shared by fail2ban host queries (no GeoIP deps). */
 
 export function isValidBanIp(ip: string): boolean {
   const s = String(ip || '').trim()

@@ -21,18 +21,20 @@ export default defineEventHandler(async (event) => {
 
     syncFail2banBanEventsFromIps(host.bannedIps)
 
-    let ipGeo = {}
+    let ipGeo: Record<
+      string,
+      { countryCode: string | null; countryName: string | null; flag: string }
+    > = {}
     let geoip = emptyGeoip()
     try {
       const { getGeoipStatus, lookupIpGeoBatch } = await import('../../../utils/geoip')
-      ipGeo = lookupIpGeoBatch(collectBannedIps(host.jails, host.bannedIps))
+      ipGeo = await lookupIpGeoBatch(collectBannedIps(host.jails, host.bannedIps))
       const geoStatus = getGeoipStatus()
       geoip = {
         ready: geoStatus.ready,
-        syncedAt: geoStatus.meta?.syncedAt ?? null,
-        buildDate: geoStatus.meta?.buildDate ?? null,
-        edition: geoStatus.meta?.edition ?? null,
-        filename: geoStatus.meta?.filename ?? null
+        syncedAt: geoStatus.syncedAt,
+        provider: geoStatus.provider,
+        count: geoStatus.count
       }
     } catch {
       /* keep banned list working even if GeoIP module/database is unavailable */
@@ -61,9 +63,8 @@ export default defineEventHandler(async (event) => {
 function emptyGeoip() {
   return {
     ready: false,
-    syncedAt: null,
-    buildDate: null,
-    edition: null,
-    filename: null
+    syncedAt: null as string | null,
+    provider: 'country.is' as const,
+    count: 0
   }
 }

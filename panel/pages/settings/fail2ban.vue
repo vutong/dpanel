@@ -217,8 +217,8 @@ type Fail2banBannedPayload = {
   geoip?: {
     ready: boolean
     syncedAt: string | null
-    buildDate?: string | null
-    edition?: string | null
+    provider?: string | null
+    count?: number
   }
 }
 
@@ -483,20 +483,27 @@ async function unban(ip: string) {
 async function onSyncGeoip() {
   syncGeoBusy.value = true
   try {
-    const res = await $fetch<{ ok?: boolean; error?: string; syncedAt?: string }>(
-      '/api/security/geoip/sync',
-      {
+    const res = await $fetch<{
+      ok?: boolean
+      error?: string
+      syncedAt?: string
+      resolved?: number
+      total?: number
+    }>('/api/security/geoip/sync', {
       method: 'POST'
-      }
-    )
+    })
     if (res.ok === false) {
       showAlert(res.error || 'Country database sync failed', false)
       return
     }
+    const stats =
+      typeof res.total === 'number'
+        ? ` — ${res.resolved ?? 0}/${res.total} resolved`
+        : ''
     showAlert(
       res.syncedAt
-        ? `Country database synced (${new Date(res.syncedAt).toLocaleString()})`
-        : 'Country database synced',
+        ? `Country database synced (${new Date(res.syncedAt).toLocaleString()})${stats}`
+        : `Country database synced${stats}`,
       true
     )
     bannedLoaded.value = false

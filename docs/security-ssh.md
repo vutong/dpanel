@@ -63,8 +63,8 @@ Config: [`infra/security/fail2ban/`](../infra/security/fail2ban/)
 - Route: `/settings/fail2ban` — tabs: **Overview**, **Jails & Settings**, **Banned IPs**, **Logs**, **Guide**
 - Overview: service status, reload, recent Fail2ban events, unban my IP
 - Jails & Settings: edit `enabled`, `maxretry`, `findtime`, `bantime` for all jails (including `sshd`); per-jail **incremental bantime** for `sshd` and `nginx-dpanel-login` (stepped ladder via native Fail2ban DB; `nginx-php-exploit` uses fixed bantime only); global `ignoreip` whitelist
-- Banned IPs: searchable table with jail names, country (offline MaxMind GeoLite2), and unban
-- Country DB: click **Sync** in the Banned IPs table header → downloads `GeoLite2-Country.mmdb` to `data/panel/geoip/`; sync state in `maxmind.json` (set `GEOIP_MAXMIND_LICENSE_KEY` in `/opt/stack/.env`; IP lookups cached in `lookup-cache.json`)
+- Banned IPs: searchable table with jail names, country (via [country.is](https://country.is)), and unban
+- Country DB: results stored in `data/panel/geo-blocklist.json`. Opening Banned IPs auto-fills missing IPs; **Sync** force-refreshes all currently banned IPs from country.is (no license key)
 - Logs: tail `/var/log/fail2ban.log` with line count and filter
 - Guide: in-panel help (jails, Cloudflare, whitelist, rate limit vs Fail2ban, CLI)
 - **Unban** IP (gọi `host-fail2ban-unban.sh`)
@@ -147,7 +147,8 @@ Dashboard hiển thị widget Security (5 event + trạng thái Fail2ban/ClamAV)
 | GET | `/api/security/events` | Danh sách events (`?source=fail2ban` filter) |
 | GET | `/api/security/fail2ban` | Overview nhanh (installed, counts, settings) |
 | GET | `/api/security/fail2ban/jails` | Jails + runtime config (tab Jails & Settings) |
-| GET | `/api/security/fail2ban/banned` | Banned IPs + GeoIP (tab Banned IPs) |
+| GET | `/api/security/fail2ban/banned` | Banned IPs + country (tab Banned IPs) |
+| POST | `/api/security/geoip/sync` | Force-refresh `geo-blocklist.json` for currently banned IPs (country.is) |
 | PUT | `/api/security/fail2ban/settings` | Lưu settings; `{ resetJail: "sshd" }` reset một jail |
 | GET | `/api/security/fail2ban/logs` | Tail log (`?lines=200&grep=`) |
 | POST | `/api/security/fail2ban/reload` | Reload fail2ban |
