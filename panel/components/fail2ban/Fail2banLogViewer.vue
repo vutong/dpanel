@@ -55,15 +55,23 @@ async function load() {
     const q = new URLSearchParams({ lines: String(lineCount.value) })
     if (grep.value.trim()) q.set('grep', grep.value.trim())
     const res = await $fetch<{
+      ok?: boolean
+      error?: string
       lines?: string[]
       path?: string | null
       warning?: string
     }>(`/api/security/fail2ban/logs?${q}`)
+    if (res.ok === false) {
+      warning.value = res.error || 'Could not load logs'
+      lines.value = []
+      path.value = null
+      return
+    }
     lines.value = res.lines ?? []
     path.value = res.path ?? null
     warning.value = res.warning ?? ''
   } catch (e: unknown) {
-    warning.value = e instanceof Error ? e.message : 'Could not load logs'
+    warning.value = fetchApiErrorMessage(e, 'Could not load logs')
     lines.value = []
   } finally {
     loading.value = false

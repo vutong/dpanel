@@ -109,6 +109,8 @@ export function useClamavScan(options?: {
         : '/api/security/clamav/scan')
 
     const res = await $fetch<{
+      ok?: boolean
+      error?: string
       accepted?: boolean
       scanId?: string
       message?: string
@@ -116,6 +118,10 @@ export function useClamavScan(options?: {
       method: 'POST',
       body: domain ? { background: true } : { domain, background: true }
     })
+
+    if (res.ok === false) {
+      throw new Error(res.error || res.message || 'Could not start scan')
+    }
 
     if (!res.accepted || !res.scanId) {
       throw new Error(res.message || 'Scan already running')

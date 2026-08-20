@@ -6,9 +6,9 @@ export default defineEventHandler(async (event) => {
   try {
     return await installHostSecurity()
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: e instanceof Error ? e.message : 'Security install failed'
-    })
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Security install failed'
+    }
   }
 })

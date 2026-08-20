@@ -426,7 +426,13 @@ async function onInstall() {
 async function onStart() {
   startBusy.value = true
   try {
-    await $fetch('/api/security/fail2ban/start', { method: 'POST' })
+    const res = await $fetch<{ ok?: boolean; error?: string }>('/api/security/fail2ban/start', {
+      method: 'POST'
+    })
+    if (res.ok === false) {
+      showAlert(res.error || 'Start failed', false)
+      return
+    }
     showAlert('Fail2ban service started', true)
     await refreshAll(true)
   } catch (e: unknown) {
@@ -439,7 +445,13 @@ async function onStart() {
 async function onReload() {
   reloadBusy.value = true
   try {
-    await $fetch('/api/security/fail2ban/reload', { method: 'POST' })
+    const res = await $fetch<{ ok?: boolean; error?: string }>('/api/security/fail2ban/reload', {
+      method: 'POST'
+    })
+    if (res.ok === false) {
+      showAlert(res.error || 'Reload failed', false)
+      return
+    }
     showAlert('Fail2ban reloaded', true)
     await refreshAll(true)
   } catch (e: unknown) {
@@ -452,7 +464,14 @@ async function onReload() {
 async function unban(ip: string) {
   if (!confirm(`Unban ${ip}?`)) return
   try {
-    await $fetch('/api/security/fail2ban/unban', { method: 'POST', body: { ip } })
+    const res = await $fetch<{ ok?: boolean; error?: string }>('/api/security/fail2ban/unban', {
+      method: 'POST',
+      body: { ip }
+    })
+    if (res.ok === false) {
+      showAlert(res.error || 'Unban failed', false)
+      return
+    }
     showAlert(`Unbanned ${ip}`, true)
     await refreshAll(true)
   } catch (e: unknown) {
@@ -494,10 +513,15 @@ async function onSaveSettings(settings: {
 }): Promise<{ ok: boolean; message: string }> {
   saveBusy.value = true
   try {
-    const res = await $fetch<{ settings: typeof settings; warnings?: string[] }>(
+    const res = await $fetch<{ ok?: boolean; error?: string; settings: typeof settings; warnings?: string[] }>(
       '/api/security/fail2ban/settings',
       { method: 'PUT', body: settings }
     )
+    if (res.ok === false) {
+      const message = res.error || 'Settings apply failed'
+      showAlert(message, false)
+      return { ok: false, message }
+    }
     data.value = { ...data.value, settings: res.settings }
     const warn = res.warnings?.length ? ` (${res.warnings.join('; ')})` : ''
     const message = `Settings applied${warn}`
@@ -518,16 +542,24 @@ async function onResetJail(jail: string) {
   if (!confirm(`Reset ${jail} to default settings?`)) return
   saveBusy.value = true
   try {
-    const res = await $fetch<{ settings: Fail2banSummary['settings'] }>(
+    const res = await $fetch<{
+      ok?: boolean
+      error?: string
+      settings?: Fail2banSummary['settings']
+    }>(
       '/api/security/fail2ban/settings',
       { method: 'PUT', body: { resetJail: jail } }
     )
+    if (res.ok === false) {
+      showAlert(res.error || 'Reset failed', false)
+      return
+    }
     if (res.settings) data.value = { ...data.value, settings: res.settings }
     showAlert(`${jail} reset to defaults`, true)
     jailsLoaded.value = false
     await refreshAll(true)
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Reset failed', false)
+    showAlert(fetchApiErrorMessage(e, 'Reset failed'), false)
   } finally {
     saveBusy.value = false
   }

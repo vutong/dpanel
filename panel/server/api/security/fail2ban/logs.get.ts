@@ -12,17 +12,33 @@ export default defineEventHandler(async (event) => {
 
   try {
     const raw = await runScript('host-fail2ban-logs.sh', args, 60_000)
-    return parseScriptJson<{
+    const result = parseScriptJson<{
       ok: boolean
       lines: string[]
       truncated: boolean
       path: string | null
+      error?: string
       warning?: string
     }>(raw)
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: result.error || 'Could not load logs',
+        lines: [],
+        truncated: false,
+        path: null,
+        warning: result.warning || ''
+      }
+    }
+    return result
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e),
+      lines: [],
+      truncated: false,
+      path: null,
+      warning: ''
+    }
   }
 })

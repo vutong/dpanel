@@ -13,18 +13,19 @@ export default defineEventHandler(async (event) => {
       detail?: string
     }>(raw)
     if (!result.ok) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: result.detail
+      return {
+        ok: false,
+        error: result.detail
           ? `${result.error || 'Start failed'}: ${result.detail.slice(0, 500)}`
-          : result.error || 'Start failed'
-      })
+          : result.error || 'Start failed',
+        ...result
+      }
     }
     return result
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e)
+    }
   }
 })

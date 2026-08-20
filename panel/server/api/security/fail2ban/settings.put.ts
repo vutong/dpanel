@@ -14,27 +14,29 @@ export default defineEventHandler(async (event) => {
   if (body?.resetJail) {
     const jail = String(body.resetJail).trim()
     if (!jail) {
-      throw createError({ statusCode: 400, statusMessage: 'resetJail is required' })
+      return { ok: false, error: 'resetJail is required' }
     }
     const settings = resetJailToDefault(jail)
     try {
       const raw = await runScript('host-fail2ban-config-apply.sh', [], 120_000)
       const applied = parseScriptJson<{ ok: boolean; error?: string; warnings?: string[] }>(raw)
       if (!applied.ok) {
-        throw new Error(applied.error || 'Apply failed')
+        return { ok: false, error: applied.error || 'Apply failed', settings, warnings: [] }
       }
       return { ok: true, settings, warnings: applied.warnings ?? [] }
     } catch (e: unknown) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: scriptErrorMessage(e)
-      })
+      return {
+        ok: false,
+        error: scriptErrorMessage(e),
+        settings,
+        warnings: []
+      }
     }
   }
 
   const validated = validateFail2banSettings(body)
   if (!validated.ok) {
-    throw createError({ statusCode: 400, statusMessage: validated.error })
+    return { ok: false, error: validated.error }
   }
 
   writeFail2banSettings(validated.settings)
@@ -43,13 +45,20 @@ export default defineEventHandler(async (event) => {
     const raw = await runScript('host-fail2ban-config-apply.sh', [], 120_000)
     const applied = parseScriptJson<{ ok: boolean; error?: string; warnings?: string[] }>(raw)
     if (!applied.ok) {
-      throw new Error(applied.error || 'Apply failed')
+      return {
+        ok: false,
+        error: applied.error || 'Apply failed',
+        settings: validated.settings,
+        warnings: []
+      }
     }
     return { ok: true, settings: validated.settings, warnings: applied.warnings ?? [] }
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e),
+      settings: validated.settings,
+      warnings: []
+    }
   }
 })

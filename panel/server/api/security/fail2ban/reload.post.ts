@@ -5,11 +5,15 @@ export default defineEventHandler(async (event) => {
   requireAuth(event)
   try {
     const raw = await runScript('host-fail2ban-reload.sh', [], 60_000)
-    return parseScriptJson<{ ok: boolean; reloaded?: boolean; error?: string }>(raw)
+    const result = parseScriptJson<{ ok: boolean; reloaded?: boolean; error?: string }>(raw)
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'Reload failed', ...result }
+    }
+    return result
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: scriptErrorMessage(e)
-    })
+    return {
+      ok: false,
+      error: scriptErrorMessage(e)
+    }
   }
 })

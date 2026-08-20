@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ ip?: string; jail?: string }>(event)
   const ip = String(body?.ip || '').trim()
   if (!ip) {
-    throw createError({ statusCode: 400, statusMessage: 'ip is required' })
+    return { ok: false, error: 'ip is required' }
   }
 
   const args = [ip]
@@ -14,11 +14,15 @@ export default defineEventHandler(async (event) => {
 
   try {
     const raw = await runScript('host-fail2ban-unban.sh', args, 30_000)
-    return parseScriptJson<{ ok: boolean; ip: string; jail?: string }>(raw)
+    const result = parseScriptJson<{ ok: boolean; ip: string; jail?: string; error?: string }>(raw)
+    if (!result.ok) {
+      return { ok: false, error: result.error || 'Unban failed', ...result }
+    }
+    return result
   } catch (e: unknown) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: e instanceof Error ? e.message : 'Unban failed'
-    })
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Unban failed'
+    }
   }
 })
