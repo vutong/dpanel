@@ -46,7 +46,10 @@
         </dl>
       </header>
 
-      <div v-if="site.suspendedAt && !site.pendingDeleteAt" class="alert alert-error">
+      <div
+        v-if="site.suspendedAt && !site.pendingDeleteAt && !msg"
+        class="alert alert-error"
+      >
         This website is suspended (inactive). It is offline and not using CPU or RAM. Unsuspend to bring it back online.
       </div>
 
@@ -216,7 +219,7 @@
             type="button"
             class="tile"
             :disabled="busy"
-            @click="unsuspendSite"
+            @click="openUnsuspend"
           >
             <AppIcon name="power" :size="22" />
             <span class="tile-title">Unsuspend</span>
@@ -395,7 +398,7 @@
       </div>
     </div>
 
-    <div v-if="suspendOpen" class="modal-backdrop" @click.self="suspendOpen = false">
+    <div v-if="suspendOpen" class="modal-backdrop" @click.self="!busy && (suspendOpen = false)">
       <div class="modal card" role="dialog" aria-labelledby="suspend-title">
         <h2 id="suspend-title">Suspend website</h2>
         <p class="muted">
@@ -409,6 +412,25 @@
           </button>
           <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmSuspend">
             {{ busy ? 'Suspending…' : 'Suspend' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="unsuspendOpen" class="modal-backdrop" @click.self="!busy && (unsuspendOpen = false)">
+      <div class="modal card" role="dialog" aria-labelledby="unsuspend-title">
+        <h2 id="unsuspend-title">Unsuspend website</h2>
+        <p class="muted">
+          Bring <strong>{{ site?.domain }}</strong> back online: restore nginx
+          <template v-if="site?.runtime === 'node'"> and start the Node container</template>.
+          This may take a moment.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" :disabled="busy" @click="unsuspendOpen = false">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmUnsuspend">
+            {{ busy ? 'Unsuspending…' : 'Unsuspend' }}
           </button>
         </div>
       </div>
@@ -594,6 +616,7 @@ const updateGitCheckout = ref(false)
 const gitTokenStorage = useGitHubTokenStorage()
 const deleteOpen = ref(false)
 const suspendOpen = ref(false)
+const unsuspendOpen = ref(false)
 const deletePhase = ref<'confirm' | 'background'>('confirm')
 const deleteConfirm = ref('')
 const deleteInputId = `delete-confirm-${Math.random().toString(36).slice(2, 9)}`
@@ -832,7 +855,7 @@ async function confirmSuspend() {
   try {
     await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/suspend`, { method: 'POST' })
     suspendOpen.value = false
-    showAlert(`Suspended ${site.value.domain}`, true)
+    // Status banner (alert-error) is the feedback — avoid stacking with PageAlert
     await refresh()
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -842,12 +865,18 @@ async function confirmSuspend() {
   }
 }
 
-async function unsuspendSite() {
+function openUnsuspend() {
+  clearAlert()
+  unsuspendOpen.value = true
+}
+
+async function confirmUnsuspend() {
   if (!site.value || busy.value) return
   busy.value = true
   clearAlert()
   try {
     await $fetch(`/api/websites/${encodeURIComponent(site.value.domain)}/unsuspend`, { method: 'POST' })
+    unsuspendOpen.value = false
     showAlert(`Unsuspended ${site.value.domain}`, true)
     await refresh()
   } catch (e: unknown) {
