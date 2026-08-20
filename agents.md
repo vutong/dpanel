@@ -207,3 +207,4 @@ dpanel/
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
 - **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` with headers `x-dpanel-api-key` + `x-dpanel-api-secret` (Settings → API Keys, Read & Write). Host check: `GET /api/sites/check?domain=`.
+- UI typography cho trang panel: giữ body/list/table/form text đồng bộ, ưu tiên `0.8125rem`; text phụ/meta/label nhỏ dùng `0.75rem`; chỉ dùng cỡ lớn hơn ở tiêu đề, note quan trọng, alert, hoặc vị trí đặc biệt có chủ đích.

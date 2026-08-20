@@ -11,11 +11,12 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { open } from 'mmdb-lib'
+import mmdbLib from 'mmdb-lib'
 import { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 import { stackRoot } from './stack'
 
 const execFileAsync = promisify(execFile)
+const { open } = mmdbLib
 
 /** Known MaxMind GeoLite2 editions the panel may sync and query. */
 export const MAXMIND_DATABASES = {

@@ -169,6 +169,11 @@ const filtered = computed(() => {
 </script>
 
 <style scoped>
+.banned-wrap {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -183,23 +188,32 @@ const filtered = computed(() => {
 }
 
 .count {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 .geo-banner {
   margin: 0 0 0.75rem;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
 .empty {
   padding: 1rem;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.table {
+  font-size: 0.8125rem;
+}
+
+.table th,
+.table td {
+  line-height: 1.35;
 }
 
 .jail-tag {
   display: inline-block;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   padding: 0.1rem 0.4rem;
   margin: 0.1rem 0.25rem 0.1rem 0;
   border-radius: 4px;
@@ -223,13 +237,13 @@ const filtered = computed(() => {
 
 .sync-btn {
   padding: 0.1rem 0.45rem;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.2;
 }
 
 .geo-meta {
   display: block;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 400;
   margin-top: 0.125rem;
 }

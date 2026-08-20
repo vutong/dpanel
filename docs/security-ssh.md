@@ -62,7 +62,7 @@ Config: [`infra/security/fail2ban/`](../infra/security/fail2ban/)
 
 - Route: `/settings/fail2ban` — tabs: **Overview**, **Jails & Settings**, **Banned IPs**, **Logs**, **Guide**
 - Overview: service status, reload, recent Fail2ban events, unban my IP
-- Jails & Settings: edit `enabled`, `maxretry`, `findtime`, `bantime` for all jails (including `sshd`); global `ignoreip` whitelist
+- Jails & Settings: edit `enabled`, `maxretry`, `findtime`, `bantime` for all jails (including `sshd`); per-jail **incremental bantime** for `sshd` and `nginx-dpanel-login` (stepped ladder via native Fail2ban DB; `nginx-php-exploit` uses fixed bantime only); global `ignoreip` whitelist
 - Banned IPs: searchable table with jail names, country (offline MaxMind GeoLite2), and unban
 - Country DB: click **Sync** in the Banned IPs table header → downloads `GeoLite2-Country.mmdb` to `data/panel/geoip/`; sync state in `maxmind.json` (set `GEOIP_MAXMIND_LICENSE_KEY` in `/opt/stack/.env`; IP lookups cached in `lookup-cache.json`)
 - Logs: tail `/var/log/fail2ban.log` with line count and filter
@@ -70,6 +70,8 @@ Config: [`infra/security/fail2ban/`](../infra/security/fail2ban/)
 - **Unban** IP (gọi `host-fail2ban-unban.sh`)
 
 Settings persist in `data/panel/fail2ban-settings.json`; panel regenerates `/etc/fail2ban/jail.d/dpanel*.conf` on save.
+
+**Incremental bantime (native Fail2ban):** when enabled for a jail, Fail2ban uses `bantime.increment = true` with multipliers `1 6 24 72 168 720 4320` × base `bantime` (cap `bantime.maxtime = bantime × 4320`). Example with base 3600s: 1h → 6h → 24h → 72h → 7d → 30d → 180d. Repeat offenders stay on the ladder until ban history expires in Fail2ban’s DB — **not** reset after one successful login. Default **on** for `sshd` and `nginx-dpanel-login`; **off** (fixed bantime) for `nginx-php-exploit`.
 
 **Performance:** host queries use `host-fail2ban-query.sh` — **one chroot session** per API call (not one Docker run per `fail2ban-client` command). Overview loads via `GET /api/security/fail2ban` (`summary` mode); tab **Jails** and **Banned IPs** fetch lazily when opened. No server-side TTL cache — data is always live from the host.
 

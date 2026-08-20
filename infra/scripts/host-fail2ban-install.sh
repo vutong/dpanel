@@ -49,9 +49,9 @@ if [[ ! -f "${SETTINGS}" ]]; then
 {
   "ignoreip": ["127.0.0.1/8", "::1"],
   "jails": {
-    "sshd": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600 },
-    "nginx-dpanel-login": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600 },
-    "nginx-php-exploit": { "enabled": true, "maxretry": 10, "findtime": 600, "bantime": 7200 }
+    "sshd": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600, "bantimeIncrement": true },
+    "nginx-dpanel-login": { "enabled": true, "maxretry": 5, "findtime": 600, "bantime": 3600, "bantimeIncrement": true },
+    "nginx-php-exploit": { "enabled": true, "maxretry": 10, "findtime": 600, "bantime": 7200, "bantimeIncrement": false }
   }
 }
 EOF

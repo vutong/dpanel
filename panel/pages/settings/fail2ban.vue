@@ -165,6 +165,7 @@ type JailSettings = {
   maxretry: number
   findtime: number
   bantime: number
+  bantimeIncrement?: boolean
 }
 
 type JailRow = {

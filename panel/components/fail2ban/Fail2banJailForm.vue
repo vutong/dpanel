@@ -88,6 +88,21 @@
             class="input"
           />
         </label>
+        <label v-if="bantimeIncrementAllowed(jail.name)" class="toggle-row span-all">
+          <input v-model="draft.jails[jail.name].bantimeIncrement" type="checkbox" />
+          Incremental bantime
+        </label>
+        <p
+          v-if="bantimeIncrementAllowed(jail.name) && draft.jails[jail.name]?.bantimeIncrement"
+          class="increment-hint muted span-all"
+        >
+          Repeat offenders get longer bans:
+          {{ formatBantimeIncrementLadder(draft.jails[jail.name].bantime) }}.
+          Level resets after ban history expires (native Fail2ban DB).
+        </p>
+        <p v-else-if="jail.name === 'nginx-php-exploit'" class="increment-hint muted span-all">
+          Fixed bantime only — no incremental ladder for exploit-scan jail.
+        </p>
       </div>
     </div>
 
@@ -137,11 +152,18 @@
 </template>
 
 <script setup lang="ts">
+import {
+  bantimeIncrementAllowed,
+  defaultBantimeIncrementForJail,
+  formatBantimeIncrementLadder
+} from '~/composables/useFail2banBantime'
+
 type JailSettings = {
   enabled: boolean
   maxretry: number
   findtime: number
   bantime: number
+  bantimeIncrement?: boolean
 }
 
 type JailDetail = {
@@ -210,7 +232,14 @@ function syncDraft(from: Settings) {
       enabled: saved?.enabled ?? live?.enabled ?? true,
       maxretry: Number(saved?.maxretry ?? live?.maxretry ?? 5),
       findtime: Number(saved?.findtime ?? live?.findtime ?? 600),
-      bantime: Number(saved?.bantime ?? live?.bantime ?? 3600)
+      bantime: Number(saved?.bantime ?? live?.bantime ?? 3600),
+      bantimeIncrement: bantimeIncrementAllowed(name)
+        ? Boolean(
+            saved?.bantimeIncrement ??
+              live?.bantimeIncrement ??
+              defaultBantimeIncrementForJail(name)
+          )
+        : false
     }
   }
 }
@@ -252,7 +281,8 @@ function jailChanged(name: string, prev: JailSettings | undefined, cur: JailSett
     Boolean(prev.enabled) !== Boolean(cur.enabled) ||
     Number(prev.maxretry) !== Number(cur.maxretry) ||
     Number(prev.findtime) !== Number(cur.findtime) ||
-    Number(prev.bantime) !== Number(cur.bantime)
+    Number(prev.bantime) !== Number(cur.bantime) ||
+    Boolean(prev.bantimeIncrement) !== Boolean(cur.bantimeIncrement)
   )
 }
 
@@ -274,8 +304,9 @@ const changeSummary = computed(() => {
       continue
     }
     if (jailChanged(name, prev, cfg)) {
+      const inc = cfg.bantimeIncrement ? ', incremental bantime on' : ''
       lines.push(
-        `${name}: enabled=${cfg.enabled}, maxretry=${cfg.maxretry}, findtime=${cfg.findtime}, bantime=${cfg.bantime}`
+        `${name}: enabled=${cfg.enabled}, maxretry=${cfg.maxretry}, findtime=${cfg.findtime}, bantime=${cfg.bantime}${inc}`
       )
     }
   }
@@ -296,7 +327,8 @@ function cloneJails(jails: Record<string, JailSettings>): Record<string, JailSet
       enabled: Boolean(cfg.enabled),
       maxretry: Number(cfg.maxretry),
       findtime: Number(cfg.findtime),
-      bantime: Number(cfg.bantime)
+      bantime: Number(cfg.bantime),
+      bantimeIncrement: bantimeIncrementAllowed(name) ? Boolean(cfg.bantimeIncrement) : false
     }
   }
   return out
@@ -406,6 +438,16 @@ async function confirmSave() {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 0.75rem;
+}
+
+.span-all {
+  grid-column: 1 / -1;
+}
+
+.increment-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
 }
 
 .label-sm {
