@@ -49,7 +49,7 @@
         <SidebarNavLink to="/settings/clamav" icon="scan" label="ClamAV" />
       </nav>
 
-      <button class="logout-btn" type="button" @click="logout">
+      <button class="btn btn-ghost logout-btn" type="button" @click="logout">
         <span class="logout-label">Sign out</span>
         <AppIcon name="log-out" :size="18" class="logout-icon" />
       </button>
@@ -252,32 +252,16 @@ async function logout() {
 .logout-btn {
   margin-top: auto;
   width: 100%;
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.68rem 0.85rem;
-  border-radius: 9px;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
   color: var(--muted);
-  font-size: 0.88rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    color 0.15s,
-    background 0.15s;
+  min-height: 2.35rem;
+  padding: 0.68rem 0.85rem;
 }
 
-.logout-btn:hover {
+.logout-btn:hover:not(:disabled) {
   border-color: var(--danger);
   color: var(--danger);
   background: var(--danger-muted);
-}
-
-.logout-btn:active {
-  transform: translateY(1px);
 }
 
 .logout-label {

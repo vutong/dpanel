@@ -257,11 +257,6 @@ onUnmounted(stopTimers)
   flex-shrink: 0;
 }
 
-.btn-sm {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.82rem;
-}
-
 .stream-status-msg--err {
   color: #f85149 !important;
 }

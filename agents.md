@@ -207,4 +207,19 @@ dpanel/
 - **Backup:** chưa triển khai — không tạo `data/mariadb/backup/`; `infra/scripts/backup.sh` là placeholder.
 - Không SSL local trừ khi user yêu cầu (Cloudflare SSL phía trước; nginx stack chỉ HTTP :80).
 - **Public domains** (panel → Websites → globe, Node sites): wildcard base + custom store domains; `data/panel/site-routing/<slug>.json`. App sync custom domain: `POST /api/internal/routing-domains` with headers `x-dpanel-api-key` + `x-dpanel-api-secret` (Settings → API Keys, Read & Write). Host check: `GET /api/sites/check?domain=`.
-- UI typography cho trang panel: giữ body/list/table/form text đồng bộ, ưu tiên `0.8125rem`; text phụ/meta/label nhỏ dùng `0.75rem`; chỉ dùng cỡ lớn hơn ở tiêu đề, note quan trọng, alert, hoặc vị trí đặc biệt có chủ đích.
+
+### Panel UI — quy chuẩn tái sử dụng
+
+Nguồn sự thật duy nhất: `panel/assets/css/main.css` (tokens + class dùng chung). **Không** tự quy định font / cỡ chữ / nút / select / status theo từng trang trừ khi được yêu cầu rõ.
+
+| Thành phần | Quy tắc |
+|------------|---------|
+| **Font** | `--font-sans` (UI), `--font-mono` (log/code). Body mặc định `--text-sm` (`0.8125rem`). |
+| **Cỡ chữ** | `--text-xs` `0.75rem` (meta, label, Active); `--text-sm` `0.8125rem` (body/UI); `--text-md` `0.875rem`; `--text-base` `0.9375rem`; tiêu đề dùng `h1`/`h2` global. Không hard-code rem lệch scale. |
+| **Nút** | Luôn `btn` + variant: `btn-primary` / `btn-ghost` (hoặc `btn-secondary`) / `btn-danger`; compact thêm `btn-sm`. Không invent class nút mới (padding/font riêng) trừ khi user yêu cầu. Icon-only: `IconButton`. |
+| **Input** | `class="input"` (+ `input-sm` toolbar). |
+| **Select** | `class="select"` (+ `select-sm` toolbar) — **không** dùng `input` trên `<select>`. Arrow/custom appearance đã có trong global CSS. |
+| **Active** | Dùng `status-active` (chấm xanh + quầng + chữ xanh nhỏ). Inactive: `status-inactive`. Không plain text muted cho Active. |
+| **Pill / badge** | Global `.pill` / `.pill-ok` / `.pill-warn` / `.badge` (+ `badge-node` / `badge-php` / `badge-pending`). |
+
+Khi thêm UI mới: ưu tiên class global trước; chỉ scoped CSS cho layout trang (grid, spacing), không copy lại style control.

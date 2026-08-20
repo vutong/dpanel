@@ -33,7 +33,7 @@
               <span v-if="s.pendingDeleteAt" class="badge badge-pending" :title="s.pendingDeleteExpiresAt || ''">
                 Pending delete
               </span>
-              <span v-else class="status-ok">Active</span>
+              <span v-else class="status-active">Active</span>
             </td>
             <td class="github-cell">{{ s.githubUrl || '—' }}</td>
             <td class="created-col">{{ formatDate(s.createdAt) }}</td>
@@ -50,18 +50,18 @@
                 </button>
                 <NuxtLink
                   :to="`/websites/${encodeURIComponent(s.domain)}/files`"
-                  class="manager-link"
+                  class="btn btn-ghost btn-sm manager-link"
                   title="File manager"
                 >
-                  <AppIcon name="folder" :size="18" />
+                  <AppIcon name="folder" :size="14" />
                   <span>Files</span>
                 </NuxtLink>
                 <NuxtLink
                   :to="`/websites/${encodeURIComponent(s.domain)}`"
-                  class="manager-link"
+                  class="btn btn-ghost btn-sm manager-link"
                   title="Manager"
                 >
-                  <AppIcon name="settings" :size="18" />
+                  <AppIcon name="settings" :size="14" />
                   <span>Manager</span>
                 </NuxtLink>
               </div>
@@ -134,31 +134,7 @@ async function restoreSite(domain: string) {
   gap: 0.5rem;
   justify-content: flex-end;
 }
-.btn-sm {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.82rem;
-}
 .manager-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  color: var(--text);
-  font-size: 0.85rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition:
-    border-color 0.15s,
-    color 0.15s,
-    background 0.15s;
-}
-.manager-link:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-muted);
   text-decoration: none;
 }
 .github-cell {
@@ -166,24 +142,12 @@ async function restoreSite(domain: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 .created-col {
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   color: var(--muted);
   white-space: nowrap;
-}
-.badge-pending {
-  background: rgba(245, 158, 11, 0.18);
-  color: #d97706;
-  font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-}
-.status-ok {
-  font-size: 0.85rem;
-  color: var(--muted);
 }
 .row-pending td {
   opacity: 0.92;

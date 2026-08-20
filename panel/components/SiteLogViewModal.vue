@@ -310,11 +310,6 @@ onUnmounted(() => stopPolling())
   flex-shrink: 0;
 }
 
-.btn-sm {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.82rem;
-}
-
 .log-tabs {
   display: flex;
   flex-wrap: wrap;

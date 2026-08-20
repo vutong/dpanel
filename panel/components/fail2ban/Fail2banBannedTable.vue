@@ -8,6 +8,15 @@
         placeholder="Filter by IP, country, or jail…"
       />
       <span class="count muted">{{ filtered.length }} IP(s)</span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm toolbar-refresh"
+        :disabled="refreshing"
+        @click="emit('refresh')"
+      >
+        <AppIcon name="refresh" :size="14" />
+        {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+      </button>
     </div>
 
     <p v-if="!geoip?.ready" class="geo-banner muted">
@@ -96,9 +105,10 @@ const props = defineProps<{
   ipGeo?: Record<string, IpGeoEntry>
   geoip?: GeoipStatus | null
   syncBusy?: boolean
+  refreshing?: boolean
 }>()
 
-const emit = defineEmits<{ unban: [string]; 'sync-geoip': [] }>()
+const emit = defineEmits<{ unban: [string]; 'sync-geoip': []; refresh: [] }>()
 
 const search = ref('')
 
@@ -171,8 +181,8 @@ const filtered = computed(() => {
 
 <style scoped>
 .banned-wrap {
-  font-size: 0.8125rem;
-  line-height: 1.4;
+  font-size: 0.875rem;
+  line-height: 1.45;
 }
 
 .toolbar {
@@ -186,10 +196,16 @@ const filtered = computed(() => {
 .search {
   min-width: 220px;
   max-width: 320px;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8125rem;
 }
 
 .count {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.toolbar-refresh {
+  margin-left: auto;
 }
 
 .geo-banner {

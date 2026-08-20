@@ -42,7 +42,8 @@ const emit = defineEmits<{ 'update:modelValue': [Fail2banTabId] }>()
   border: none;
   background: transparent;
   color: var(--muted);
-  font-size: 0.875rem;
+  font-family: inherit;
+  font-size: var(--text-md);
   padding: 0.5rem 0.75rem;
   border-radius: 6px 6px 0 0;
   cursor: pointer;

@@ -24,13 +24,13 @@
     </div>
 
     <div v-if="sites.length" class="site-row">
-      <select v-model="scanDomain" class="input" :disabled="!installed || scanLocked">
+      <select v-model="scanDomain" class="select" :disabled="!installed || scanLocked">
         <option value="">Select website…</option>
         <option v-for="s in sites" :key="s.domain" :value="s.domain">{{ s.domain }}</option>
       </select>
       <button
         type="button"
-        class="btn btn-sm"
+        class="btn btn-ghost btn-sm"
         :disabled="!scanDomain || !installed || scanLocked || scanBusy"
         @click="emit('scan-site', scanDomain)"
       >

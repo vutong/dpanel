@@ -34,7 +34,7 @@
     <footer class="dashboard-footer">
       <button
         type="button"
-        class="btn btn-sm clean-btn"
+        class="btn btn-ghost btn-sm clean-btn"
         :disabled="cleanBusy || updateBusy || rebooting"
         @click="onCleanJobsClick"
       >
@@ -43,7 +43,7 @@
       </button>
       <button
         type="button"
-        class="btn btn-sm update-btn"
+        class="btn btn-ghost btn-sm update-btn"
         :disabled="updateBusy || cleanBusy"
         @click="onUpdateClick"
       >
@@ -52,7 +52,7 @@
       </button>
       <button
         type="button"
-        class="btn btn-sm reboot-btn"
+        class="btn btn-ghost btn-sm reboot-btn"
         :disabled="rebooting || cleanBusy"
         @click="onRebootClick"
       >
@@ -307,26 +307,15 @@ onUnmounted(() => {
 }
 
 .clean-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--border);
-  background: transparent;
   color: var(--muted);
 }
 
 .clean-btn:hover:not(:disabled) {
-  background: var(--surface-elevated);
-  border-color: var(--muted);
   color: var(--text);
 }
 
 .update-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--accent);
-  background: transparent;
+  border-color: var(--accent);
   color: var(--accent);
 }
 
@@ -337,11 +326,7 @@ onUnmounted(() => {
 }
 
 .reboot-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border: 1px solid var(--danger);
-  background: transparent;
+  border-color: var(--danger);
   color: var(--danger);
 }
 

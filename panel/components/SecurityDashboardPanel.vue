@@ -12,10 +12,12 @@
 
     <template v-else>
       <div class="status-row">
-        <div class="pill" :class="fail2banOk ? 'pill-ok' : 'pill-warn'">
+        <div v-if="fail2banOk" class="status-active">Fail2ban: Active</div>
+        <div v-else class="pill pill-warn">
           Fail2ban: {{ fail2banLabel }}
         </div>
-        <div class="pill" :class="clamOk ? 'pill-ok' : 'pill-warn'">
+        <div v-if="clamOk" class="status-active">ClamAV: Active</div>
+        <div v-else class="pill pill-warn">
           ClamAV: {{ clamLabel }}
         </div>
       </div>
@@ -98,28 +100,9 @@ const clamLabel = computed(() => {
   margin-bottom: 0.75rem;
 }
 
-.pill {
-  font-size: 0.8125rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-
-.pill-ok {
-  color: var(--success, #16a34a);
-}
-
-.pill-warn {
-  color: var(--warning, #ca8a04);
-}
-
 .hint {
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   margin: 0 0 0.75rem;
 }
 
-.muted {
-  color: var(--muted);
-  font-size: 0.875rem;
-}
 </style>

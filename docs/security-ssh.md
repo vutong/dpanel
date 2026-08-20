@@ -142,7 +142,7 @@ Dashboard hiển thị widget Security (trạng thái Fail2ban/ClamAV).
 | GET | `/api/security/status` | Tổng quan Fail2ban + ClamAV |
 | POST | `/api/security/fail2ban/install` | Cài Fail2ban |
 | POST | `/api/security/clamav/install` | Cài ClamAV |
-| GET | `/api/security/events` | Dữ liệu event nội bộ cho các widget bảo mật (`?source=fail2ban` filter) |
+| GET | `/api/security/events` | Events (`?source=&limit=` max 350; optional `since`, `ip`, `domain`) |
 | GET | `/api/security/fail2ban` | Overview nhanh (installed, counts, settings) |
 | GET | `/api/security/fail2ban/jails` | Jails + runtime config (tab Jails & Settings) |
 | GET | `/api/security/fail2ban/banned` | Banned IPs + country (tab Banned IPs) |

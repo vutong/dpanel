@@ -61,7 +61,7 @@ defineEmits<{ click: [event: MouseEvent] }>()
   top: 50%;
   transform: translateY(-50%);
   padding: 0.3rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;

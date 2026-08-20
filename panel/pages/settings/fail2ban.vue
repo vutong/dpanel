@@ -17,7 +17,8 @@
       <div v-show="activeTab === 'overview'" class="tab-panel">
         <div class="card status-card">
           <div class="status-pills">
-            <div class="pill" :class="statusPillClass">
+            <div v-if="data?.installed && data.active" class="status-active">Active</div>
+            <div v-else class="pill" :class="statusPillClass">
               {{ statusPillLabel }}
             </div>
             <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
@@ -33,7 +34,11 @@
             </div>
             <div>
               <dt>Service</dt>
-              <dd>{{ data?.active ? 'Active' : data?.installed ? 'Inactive' : '—' }}</dd>
+              <dd>
+                <span v-if="data?.active" class="status-active">Active</span>
+                <span v-else-if="data?.installed" class="status-inactive">Inactive</span>
+                <span v-else>—</span>
+              </dd>
             </div>
             <div>
               <dt>Banned IPs</dt>
@@ -68,7 +73,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-sm"
+              class="btn btn-ghost btn-sm"
               :disabled="!data?.installed || reloadBusy"
               @click="onReload"
             >
@@ -95,7 +100,45 @@
         <div class="card section">
           <div class="section-head">
             <h2 class="section-title">Recent Fail2ban events</h2>
-            <span class="section-badge">Last 5</span>
+            <div class="events-filters">
+              <label class="field-inline">
+                <span class="label-sm">
+                  Count
+                  <span
+                    class="hint-icon"
+                    title="Allows displaying up to 350 results"
+                    aria-label="Allows displaying up to 350 results"
+                  >
+                    <AppIcon name="info" :size="12" />
+                  </span>
+                </span>
+                <select v-model.number="eventsLimit" class="select select-sm">
+                  <option :value="25">25</option>
+                  <option :value="50">50</option>
+                  <option :value="100">100</option>
+                  <option :value="200">200</option>
+                  <option :value="350">350</option>
+                </select>
+              </label>
+              <label class="field-inline">
+                <span class="label-sm">Date</span>
+                <select v-model="eventsDateRange" class="select select-sm">
+                  <option value="all">All</option>
+                  <option value="today">Today</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                </select>
+              </label>
+              <label class="field-inline">
+                <span class="label-sm">IP</span>
+                <input
+                  v-model.trim="eventsIpFilter"
+                  type="search"
+                  class="input input-sm events-ip"
+                  placeholder="Filter IP…"
+                />
+              </label>
+            </div>
           </div>
           <PageLoader v-if="eventsPending" label="Loading events…" />
           <ul v-else-if="recentEvents.length" class="events-list">
@@ -105,7 +148,13 @@
               <span class="muted">{{ ev.detail || '' }}</span>
             </li>
           </ul>
-          <p v-else class="muted">No Fail2ban events recorded yet.</p>
+          <p v-else class="muted">
+            {{
+              eventsIpFilter || eventsDateRange !== 'all'
+                ? 'No events match the current filters.'
+                : 'No Fail2ban events recorded yet.'
+            }}
+          </p>
         </div>
       </div>
 
@@ -129,17 +178,19 @@
       <!-- Banned IPs -->
       <div v-show="activeTab === 'banned'" class="tab-panel">
         <div v-if="!isInstalled" class="card muted">Install Fail2ban first.</div>
-        <PageLoader v-else-if="bannedLoading || !bannedLoaded" label="Loading banned IPs…" />
-        <div v-else-if="bannedError" class="card muted warn">{{ bannedError }}</div>
+        <PageLoader v-else-if="!bannedLoaded && bannedLoading" label="Loading banned IPs…" />
+        <div v-else-if="!bannedLoaded && bannedError" class="card muted warn">{{ bannedError }}</div>
         <Fail2banBannedTable
-          v-else
+          v-else-if="bannedLoaded"
           :jails="bannedJails"
           :banned-ips="bannedIpsList"
           :ip-geo="bannedIpGeo"
           :geoip="bannedGeoip"
           :sync-busy="syncGeoBusy"
+          :refreshing="bannedLoading"
           @unban="unban"
           @sync-geoip="onSyncGeoip"
+          @refresh="loadBanned(true)"
         />
       </div>
 
@@ -251,10 +302,46 @@ const saveBusy = ref(false)
 const syncGeoBusy = ref(false)
 const activeTab = ref<Fail2banTabId>('overview')
 
-const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEvent[] }>(
-  '/api/security/events?limit=5&source=fail2ban',
-  { key: 'fail2ban-recent-events' }
-)
+const eventsLimit = ref(25)
+const eventsDateRange = ref<'all' | 'today' | '7d' | '30d'>('all')
+const eventsIpFilter = ref('')
+const eventsIpQuery = ref('')
+
+let eventsIpTimer: ReturnType<typeof setTimeout> | null = null
+watch(eventsIpFilter, (value) => {
+  if (eventsIpTimer) clearTimeout(eventsIpTimer)
+  eventsIpTimer = setTimeout(() => {
+    eventsIpQuery.value = value
+  }, 300)
+})
+
+function eventsSinceIso(range: typeof eventsDateRange.value): string | null {
+  if (range === 'all') return null
+  const now = new Date()
+  if (range === 'today') {
+    const start = new Date(now)
+    start.setHours(0, 0, 0, 0)
+    return start.toISOString()
+  }
+  const days = range === '7d' ? 7 : 30
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
+const eventsUrl = computed(() => {
+  const q = new URLSearchParams({
+    source: 'fail2ban',
+    limit: String(eventsLimit.value)
+  })
+  const since = eventsSinceIso(eventsDateRange.value)
+  if (since) q.set('since', since)
+  if (eventsIpQuery.value) q.set('ip', eventsIpQuery.value)
+  return `/api/security/events?${q}`
+})
+
+const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEvent[] }>(eventsUrl, {
+  key: 'fail2ban-recent-events',
+  watch: [eventsUrl]
+})
 
 const recentEvents = computed(() => evData.value?.events ?? [])
 
@@ -588,6 +675,18 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.page-desc {
+  color: var(--muted);
+  margin: 0.35rem 0 1.25rem;
+  max-width: 52rem;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.page-desc code {
+  font-size: 0.85em;
+}
+
 .status-card {
   margin-bottom: 1rem;
 }
@@ -597,25 +696,6 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
-}
-
-.pill {
-  font-size: 0.8125rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-
-.pill-ok {
-  color: var(--success, #16a34a);
-}
-
-.pill-warn {
-  color: var(--warning, #ca8a04);
-}
-
-.muted-pill {
-  color: var(--muted);
 }
 
 .status-dl {
@@ -650,6 +730,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
@@ -659,9 +740,43 @@ onMounted(async () => {
   font-size: 0.9375rem;
 }
 
-.link-sm {
+.events-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.label-sm {
   font-size: 0.8125rem;
-  color: var(--accent);
+  color: var(--muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hint-icon {
+  display: inline-flex;
+  color: var(--muted);
+  cursor: help;
+  opacity: 0.85;
+}
+
+.hint-icon:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+.events-ip {
+  min-width: 8rem;
+  max-width: 10rem;
 }
 
 .events-list {

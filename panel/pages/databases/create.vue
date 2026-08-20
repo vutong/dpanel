@@ -7,7 +7,7 @@
     <form class="card form" @submit.prevent="submit">
       <div class="field">
         <label class="label">Website</label>
-        <select v-model="siteDomain" class="input" required>
+        <select v-model="siteDomain" class="select" required>
           <option disabled value="">Select a website…</option>
           <option v-for="s in sites" :key="s.domain" :value="s.domain">
             {{ s.domain }} ({{ runtimeLabel(s.runtime) }})

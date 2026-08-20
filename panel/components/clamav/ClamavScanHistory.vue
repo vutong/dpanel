@@ -3,13 +3,14 @@
     <div class="toolbar">
       <label class="field-inline">
         <span class="label-sm">Filter</span>
-        <select v-model="filterDomain" class="input input-sm" @change="load">
+        <select v-model="filterDomain" class="select select-sm" @change="load">
           <option value="">All scans</option>
           <option v-for="s in sites" :key="s.domain" :value="s.domain">{{ s.domain }}</option>
         </select>
       </label>
-      <button type="button" class="btn btn-sm" :disabled="loading" @click="load">
-        {{ loading ? 'Loading…' : 'Refresh' }}
+      <button type="button" class="btn btn-ghost btn-sm toolbar-refresh" :disabled="loading" @click="load">
+        <AppIcon name="refresh" :size="14" />
+        {{ loading ? 'Refreshing…' : 'Refresh' }}
       </button>
     </div>
 
@@ -118,6 +119,10 @@ onMounted(() => load())
 </script>
 
 <style scoped>
+.history {
+  margin-bottom: 1rem;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -133,13 +138,17 @@ onMounted(() => load())
 }
 
 .label-sm {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   color: var(--muted);
+  white-space: nowrap;
 }
 
-.input-sm {
-  width: auto;
+.select-sm {
   min-width: 10rem;
+}
+
+.toolbar-refresh {
+  margin-left: auto;
 }
 
 .table-wrap {

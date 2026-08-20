@@ -19,6 +19,7 @@
           <span v-if="site.pendingDeleteAt" class="badge badge-pending">
             Pending delete — expires {{ formatDate(site.pendingDeleteExpiresAt || undefined) }}
           </span>
+          <span v-else class="status-active">Active</span>
         </div>
         <dl class="meta-grid">
           <div>
@@ -1048,7 +1049,8 @@ a.tile {
   padding: 0;
   border: none;
   background: none;
-  font-size: 0.85rem;
+  font-family: inherit;
+  font-size: var(--text-sm);
   color: var(--muted);
   cursor: pointer;
   text-decoration: underline;

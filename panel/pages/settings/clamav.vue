@@ -18,14 +18,24 @@
         <div class="card status-card">
           <div class="status-pills">
             <div
+              v-if="data?.installed && data.daemonActive"
+              class="status-active"
+            >
+              Daemon active
+            </div>
+            <div
+              v-else
               class="pill"
               :class="statusPillClass"
             >
               {{ statusPillLabel }}
             </div>
             <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
-            <div v-if="data?.installed" class="pill">
-              freshclam: {{ data.freshclamActive ? 'active' : 'inactive' }}
+            <div v-if="data?.installed && data.freshclamActive" class="status-active">
+              freshclam: Active
+            </div>
+            <div v-else-if="data?.installed" class="status-inactive">
+              freshclam: Inactive
             </div>
             <div v-if="scanLocked" class="pill pill-accent">Scan running</div>
           </div>
@@ -37,11 +47,19 @@
             </div>
             <div>
               <dt>Daemon</dt>
-              <dd>{{ data?.daemonActive ? 'Active' : data?.installed ? 'Inactive' : '—' }}</dd>
+              <dd>
+                <span v-if="data?.daemonActive" class="status-active">Active</span>
+                <span v-else-if="data?.installed" class="status-inactive">Inactive</span>
+                <span v-else>—</span>
+              </dd>
             </div>
             <div>
               <dt>freshclam</dt>
-              <dd>{{ data?.freshclamActive ? 'Active' : data?.installed ? 'Inactive' : '—' }}</dd>
+              <dd>
+                <span v-if="data?.freshclamActive" class="status-active">Active</span>
+                <span v-else-if="data?.installed" class="status-inactive">Inactive</span>
+                <span v-else>—</span>
+              </dd>
             </div>
             <div>
               <dt>Signatures</dt>
@@ -78,7 +96,7 @@
             </button>
             <button
               type="button"
-              class="btn btn-sm"
+              class="btn btn-ghost btn-sm"
               :disabled="!data?.installed || updateBusy"
               @click="onUpdate"
             >
@@ -97,8 +115,46 @@
 
         <div class="card section">
           <div class="section-head">
-            <h2 class="section-title">Recent malware events</h2>
-            <span class="section-badge">Last 5</span>
+            <h2 class="section-title">Recent ClamAV events</h2>
+            <div class="events-filters">
+              <label class="field-inline">
+                <span class="label-sm">
+                  Count
+                  <span
+                    class="hint-icon"
+                    title="Allows displaying up to 350 results"
+                    aria-label="Allows displaying up to 350 results"
+                  >
+                    <AppIcon name="info" :size="12" />
+                  </span>
+                </span>
+                <select v-model.number="eventsLimit" class="select select-sm">
+                  <option :value="25">25</option>
+                  <option :value="50">50</option>
+                  <option :value="100">100</option>
+                  <option :value="200">200</option>
+                  <option :value="350">350</option>
+                </select>
+              </label>
+              <label class="field-inline">
+                <span class="label-sm">Date</span>
+                <select v-model="eventsDateRange" class="select select-sm">
+                  <option value="all">All</option>
+                  <option value="today">Today</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                </select>
+              </label>
+              <label class="field-inline">
+                <span class="label-sm">Website</span>
+                <select v-model="eventsWebsiteFilter" class="select select-sm events-website">
+                  <option value="">All</option>
+                  <option v-for="s in sites" :key="s.domain" :value="s.domain">
+                    {{ s.domain }}
+                  </option>
+                </select>
+              </label>
+            </div>
           </div>
           <PageLoader v-if="eventsPending" label="Loading events…" />
           <ul v-else-if="recentEvents.length" class="events-list">
@@ -108,7 +164,13 @@
               <code v-if="ev.path">{{ ev.path }}</code>
             </li>
           </ul>
-          <p v-else class="muted">No ClamAV events recorded yet.</p>
+          <p v-else class="muted">
+            {{
+              eventsWebsiteFilter || eventsDateRange !== 'all'
+                ? 'No events match the current filters.'
+                : 'No ClamAV events recorded yet.'
+            }}
+          </p>
         </div>
       </div>
 
@@ -202,10 +264,38 @@ const activeTab = ref<ClamavTabId>(
     : 'overview') as ClamavTabId
 )
 
-const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEvent[] }>(
-  '/api/security/events?limit=5&source=clamav',
-  { key: 'clamav-recent-events' }
-)
+const eventsLimit = ref(25)
+const eventsDateRange = ref<'all' | 'today' | '7d' | '30d'>('all')
+const eventsWebsiteFilter = ref('')
+
+function eventsSinceIso(range: typeof eventsDateRange.value): string | null {
+  if (range === 'all') return null
+  const now = new Date()
+  if (range === 'today') {
+    const start = new Date(now)
+    start.setHours(0, 0, 0, 0)
+    return start.toISOString()
+  }
+  const days = range === '7d' ? 7 : 30
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
+const eventsUrl = computed(() => {
+  const q = new URLSearchParams({
+    source: 'clamav',
+    limit: String(eventsLimit.value)
+  })
+  const since = eventsSinceIso(eventsDateRange.value)
+  if (since) q.set('since', since)
+  if (eventsWebsiteFilter.value) q.set('domain', eventsWebsiteFilter.value)
+  return `/api/security/events?${q}`
+})
+
+const { data: evData, pending: eventsPending } = useFetch<{ events?: SecurityEvent[] }>(eventsUrl, {
+  key: 'clamav-recent-events',
+  watch: [eventsUrl]
+})
+
 const recentEvents = computed(() => evData.value?.events ?? [])
 
 const {
@@ -404,6 +494,18 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.page-desc {
+  color: var(--muted);
+  margin: 0.35rem 0 1.25rem;
+  max-width: 52rem;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.page-desc code {
+  font-size: 0.85em;
+}
+
 .status-card {
   margin-bottom: 1rem;
 }
@@ -413,29 +515,6 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
-}
-
-.pill {
-  font-size: 0.8125rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 999px;
-  background: var(--surface-2);
-}
-
-.pill-ok {
-  color: var(--success, #16a34a);
-}
-
-.pill-warn {
-  color: var(--warning, #ca8a04);
-}
-
-.pill-accent {
-  color: var(--accent);
-}
-
-.muted-pill {
-  color: var(--muted);
 }
 
 .status-dl {
@@ -476,6 +555,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
@@ -485,9 +565,43 @@ onMounted(async () => {
   font-size: 0.9375rem;
 }
 
-.link-sm {
+.events-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.label-sm {
   font-size: 0.8125rem;
-  color: var(--accent);
+  color: var(--muted);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.hint-icon {
+  display: inline-flex;
+  color: var(--muted);
+  cursor: help;
+  opacity: 0.85;
+}
+
+.hint-icon:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+.events-website {
+  min-width: 10rem;
+  max-width: 14rem;
 }
 
 .events-list {

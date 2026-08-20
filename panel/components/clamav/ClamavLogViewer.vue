@@ -3,7 +3,7 @@
     <div class="toolbar">
       <label class="field-inline">
         <span class="label-sm">Source</span>
-        <select v-model="logSource" class="input input-sm">
+        <select v-model="logSource" class="select select-sm">
           <option value="clamav">clamav.log</option>
           <option value="freshclam">freshclam.log</option>
           <option value="clamd">clamd.log</option>
@@ -12,7 +12,7 @@
       </label>
       <label class="field-inline">
         <span class="label-sm">Lines</span>
-        <select v-model.number="lineCount" class="input input-sm">
+        <select v-model.number="lineCount" class="select select-sm">
           <option :value="100">100</option>
           <option :value="200">200</option>
           <option :value="500">500</option>
@@ -25,8 +25,9 @@
         placeholder="Filter…"
         @keydown.enter="load"
       />
-      <button type="button" class="btn btn-sm" :disabled="loading" @click="load">
-        {{ loading ? 'Loading…' : 'Refresh' }}
+      <button type="button" class="btn btn-ghost btn-sm toolbar-refresh" :disabled="loading" @click="load">
+        <AppIcon name="refresh" :size="14" />
+        {{ loading ? 'Refreshing…' : 'Refresh' }}
       </button>
       <span v-if="path" class="path muted">{{ path }}</span>
     </div>
@@ -117,19 +118,21 @@ defineExpose({ load })
 }
 
 .label-sm {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   color: var(--muted);
-}
-
-.input-sm {
-  width: auto;
-  min-width: 4.5rem;
 }
 
 .search {
   min-width: 180px;
   flex: 1;
   max-width: 280px;
+  padding: 0.28rem 0.6rem;
+  font-size: var(--text-xs);
+  min-height: var(--control-h-sm);
+}
+
+.toolbar-refresh {
+  margin-left: auto;
 }
 
 .path {
