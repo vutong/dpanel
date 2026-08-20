@@ -11,23 +11,26 @@ export default defineEventHandler(async (event) => {
 
   assertSiteNotPending(await getSite(domain))
 
+  let result: ReturnType<typeof beginClamavScan>
   try {
-    const result = beginClamavScan(domain)
-    if (!result.accepted) {
-      throw createError({
-        statusCode: 409,
-        statusMessage: result.message || 'Scan already running'
-      })
-    }
-    return {
-      ...result,
-      background: true,
-      domain
-    }
+    result = beginClamavScan(domain)
   } catch (e: unknown) {
     throw createError({
       statusCode: 500,
       statusMessage: e instanceof Error ? e.message : 'Could not start scan'
     })
+  }
+
+  if (!result.accepted) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: result.message || 'Scan already running'
+    })
+  }
+
+  return {
+    ...result,
+    background: true,
+    domain
   }
 })
