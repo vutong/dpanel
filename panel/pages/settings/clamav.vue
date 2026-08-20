@@ -254,11 +254,21 @@ const historyRef = ref<{ refresh?: () => void } | null>(null)
 const scanModalOpen = ref(false)
 const scanModalDomain = ref<string | null>(null)
 
-const activeTab = ref<ClamavTabId>(
-  (['overview', 'scan', 'results', 'logs', 'guide'].includes(String(route.query.tab))
-    ? String(route.query.tab)
-    : 'overview') as ClamavTabId
+const activeTab = ref<ClamavTabId>(tabFromQuery(route.query.tab))
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    activeTab.value = tabFromQuery(tab)
+  }
 )
+
+function tabFromQuery(raw: unknown): ClamavTabId {
+  const tab = String(raw || '')
+  return (['overview', 'scan', 'results', 'logs', 'guide'].includes(tab)
+    ? tab
+    : 'overview') as ClamavTabId
+}
 
 const eventsLimit = ref(25)
 const eventsDateRange = ref<'all' | 'today' | '7d' | '30d'>('all')
