@@ -31,7 +31,8 @@ echo install_ok
 _run_install() {
   if [[ -f /.dockerenv ]] && command -v docker >/dev/null 2>&1; then
     docker info >/dev/null 2>&1 || die "Cannot reach Docker daemon"
-    host_exec_capture "${INSTALL_CMD}" || die "Fail2ban install failed"
+    local out=""
+    out="$(host_exec_capture "${INSTALL_CMD}")" || die "${out:-Fail2ban install failed}"
   else
     [[ "${EUID:-0}" -eq 0 ]] || die "Run as root on host"
     bash -lc "${INSTALL_CMD}" || die "Fail2ban install failed"

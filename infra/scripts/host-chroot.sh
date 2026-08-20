@@ -8,13 +8,14 @@ STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 host_exec() {
   local cmd="$1"
   if [[ -f /.dockerenv ]] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    # Run bash on the host directly via chroot. Do not wrap multiline commands in
+    # alpine sh -ec with bash printf %q — ash does not understand $'...\n...' quoting.
     docker run --rm --privileged \
       -v /:/host \
       -e "STACK_ROOT=${STACK_ROOT}" \
-      alpine:3.20 sh -ec "
-        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-        chroot /host /bin/bash -lc $(printf '%q' "$cmd")
-      "
+      --entrypoint chroot \
+      alpine:3.20 \
+      /host /bin/bash -lc "$cmd"
   else
     bash -lc "$cmd"
   fi

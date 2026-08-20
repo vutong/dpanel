@@ -1,5 +1,6 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import { installFail2ban } from '../../../utils/host-security'
+import { scriptErrorMessage } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -8,7 +9,7 @@ export default defineEventHandler(async (event) => {
   } catch (e: unknown) {
     throw createError({
       statusCode: 500,
-      statusMessage: e instanceof Error ? e.message : 'Fail2ban install failed'
+      statusMessage: scriptErrorMessage(e)
     })
   }
 })
