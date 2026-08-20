@@ -8,9 +8,9 @@ STACK_ROOT="${STACK_ROOT:-/opt/stack}"
 host_exec() {
   local cmd="$1"
   if [[ -f /.dockerenv ]] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    # Run bash on the host directly via chroot. Do not wrap multiline commands in
-    # alpine sh -ec with bash printf %q — ash does not understand $'...\n...' quoting.
-    docker run --rm --privileged \
+    # --network host: chroot reads host /etc/resolv.conf (often 127.0.0.53). In bridge
+    # mode that stub is unreachable, so apt-get/git/curl fail with "Temporary failure resolving".
+    docker run --rm --privileged --network host \
       -v /:/host \
       -e "STACK_ROOT=${STACK_ROOT}" \
       --entrypoint chroot \

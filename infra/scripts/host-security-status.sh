@@ -39,7 +39,7 @@ def run_host(cmd):
             q = cmd.replace("'", "'\"'\"'")
             r = subprocess.run(
                 [
-                    "docker", "run", "--rm", "--privileged",
+                    "docker", "run", "--rm", "--privileged", "--network", "host",
                     "-v", "/:/host",
                     "-e", f"STACK_ROOT={stack}",
                     "alpine:3.20", "sh", "-ec",
