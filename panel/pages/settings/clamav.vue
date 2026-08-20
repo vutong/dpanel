@@ -33,13 +33,13 @@
 
         <div class="actions">
           <button
-            v-if="!data?.installed"
+            v-if="!data?.installed || data?.installStatus === 'running'"
             type="button"
             class="btn btn-primary"
-            :disabled="installBusy"
+            :disabled="installBusy || data?.installStatus === 'running'"
             @click="onInstall"
           >
-            {{ installBusy ? 'Installing…' : 'Install ClamAV' }}
+            {{ installBusy || data?.installStatus === 'running' ? 'Installing…' : 'Install ClamAV' }}
           </button>
           <button
             type="button"
@@ -62,6 +62,9 @@
             Refresh
           </button>
         </div>
+        <p v-if="data?.installStatus === 'running'" class="install-hint muted">
+          Installation runs in the background (signature download may take several minutes). This page refreshes every 5 seconds.
+        </p>
       </div>
 
       <div v-if="scanResult" class="card section">
@@ -106,6 +109,8 @@ type ClamData = {
   daemonActive?: boolean
   freshclamActive?: boolean
   signatureDate?: string | null
+  installStatus?: 'none' | 'running' | 'ok' | 'error'
+  installMessage?: string
 }
 
 type ScanResult = {
@@ -128,29 +133,37 @@ const refreshBusy = ref(false)
 const scanDomain = ref('')
 const scanResult = ref<ScanResult | null>(null)
 
-async function load() {
-  refreshBusy.value = true
+const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
+  load: () => load(true),
+  data,
+  installBusy,
+  showAlert,
+  successMessage: 'ClamAV installed'
+})
+
+async function load(silent = false) {
+  if (!silent) refreshBusy.value = true
   try {
     data.value = await $fetch<ClamData>('/api/security/clamav')
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Could not load ClamAV', false)
+    if (!silent) {
+      showAlert(e instanceof Error ? e.message : 'Could not load ClamAV', false)
+    }
   } finally {
     loading.value = false
-    refreshBusy.value = false
+    if (!silent) refreshBusy.value = false
   }
 }
 
 async function onInstall() {
   if (!confirm('Install ClamAV on this VPS? Signature download may take several minutes.')) return
-  installBusy.value = true
   try {
-    await $fetch('/api/security/clamav/install', { method: 'POST', timeout: 600_000 })
-    showAlert('ClamAV installed', true)
-    await load()
+    await $fetch('/api/security/clamav/install', { method: 'POST' })
+    showAlert('Installation started in the background', true)
+    await load(true)
+    startPoll()
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Install failed', false)
-  } finally {
-    installBusy.value = false
+    showAlert(e instanceof Error ? e.message : 'Could not start install', false)
   }
 }
 
@@ -188,7 +201,10 @@ async function onScan(domain?: string) {
   }
 }
 
-onMounted(() => void load())
+onMounted(async () => {
+  await load()
+  resumePollIfRunning()
+})
 </script>
 
 <style scoped>
@@ -255,5 +271,10 @@ onMounted(() => void load())
 
 .muted {
   color: var(--muted);
+}
+
+.install-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
 }
 </style>

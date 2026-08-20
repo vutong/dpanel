@@ -134,25 +134,24 @@
             <span class="metric-icon" aria-hidden="true">💾</span>
             <div class="metric-body">
               <span class="metric-name">Disk</span>
-              <span class="metric-detail">
-                {{ formatBytes(host?.diskUsedBytes) }}
-                <span v-if="host?.diskKind" class="disk-kind">{{ host.diskKind }}</span>
-                <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
-                <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
-              </span>
-              <div class="bar metric-bar">
-                <div class="bar-fill disk-sys" :style="{ width: `${systemDiskPct}%` }" />
-              </div>
-              <div class="disk-badge-row">
-                <span class="hw-badge disk-badge">{{ storageBadgeText }}</span>
+              <div class="metric-detail-row">
+                <span class="metric-detail">
+                  {{ formatBytes(host?.diskUsedBytes) }}
+                  <span v-if="host?.diskKind" class="disk-kind">{{ host.diskKind }}</span>
+                  <span class="metric-pct">({{ systemDiskPct.toFixed(0) }}%)</span>
+                  <span class="metric-of">/ {{ formatBytes(host?.diskTotalBytes) }}</span>
+                </span>
                 <button
                   type="button"
-                  class="disk-test-btn"
+                  class="disk-check-btn"
                   :disabled="diskTesting"
                   @click="runDiskTest"
                 >
                   {{ diskTesting ? 'Checking…' : 'Check' }}
                 </button>
+              </div>
+              <div class="bar metric-bar">
+                <div class="bar-fill disk-sys" :style="{ width: `${systemDiskPct}%` }" />
               </div>
               <p v-if="diskTestError" class="disk-test-error">{{ diskTestError }}</p>
             </div>
@@ -263,23 +262,6 @@ const loadHint = computed(() => {
   const n = cpuCores.value.length
   if (n > 0) return `${n} logical core(s)`
   return null
-})
-
-const storageBadgeText = computed(() => {
-  const s = disk.value?.storage
-  if (!s?.kind || s.kind === 'unknown') {
-    return s?.device ? `${s.device} · not tested` : 'Not tested'
-  }
-  const kindMap = { hdd: 'HDD', ssd: 'SSD', nvme: 'NVMe' } as const
-  const parts: string[] = [kindMap[s.kind as keyof typeof kindMap] || s.kind.toUpperCase()]
-  if (s.readMbps != null && s.readMbps > 0) {
-    parts.push(`${Math.round(s.readMbps)} MB/s read`)
-  }
-  if (s.writeMbps != null && s.writeMbps > 0) {
-    parts.push(`${Math.round(s.writeMbps)} MB/s write`)
-  }
-  if (s.device) parts.push(s.device)
-  return parts.join(' · ')
 })
 
 function diskKindLabel(kind: string) {
@@ -487,7 +469,53 @@ onUnmounted(() => {
   font-size: 0.8125rem;
   color: var(--text);
   line-height: 1.35;
+}
+
+.metric-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
   margin-bottom: 0.35rem;
+}
+
+.metric-detail-row .metric-detail {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.disk-check-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0 0.55rem;
+  min-height: 1.75rem;
+  line-height: 1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.disk-check-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.disk-check-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.disk-test-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--danger, #ef4444);
 }
 
 .metric-pct {
@@ -513,6 +541,10 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
+.metric-body > .metric-detail {
+  margin-bottom: 0.35rem;
+}
+
 .metric-bar {
   height: 5px;
   border-radius: 3px;
@@ -532,67 +564,6 @@ onUnmounted(() => {
   background: #a78bfa;
   border-radius: 3px;
   transition: width 0.35s ease;
-}
-
-.disk-badge-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
-  margin-top: 0.55rem;
-}
-
-.hw-badge.disk-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--text);
-  background: var(--surface-elevated);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0 0.45rem;
-  min-height: 1.75rem;
-  line-height: 1;
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-}
-
-.disk-test-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--surface-elevated);
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 500;
-  padding: 0 0.55rem;
-  min-height: 1.75rem;
-  line-height: 1;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.disk-test-btn:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.disk-test-btn:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-
-.disk-test-error {
-  margin: 0.35rem 0 0;
-  font-size: 0.75rem;
-  color: var(--danger, #ef4444);
 }
 
 .cpu-list {

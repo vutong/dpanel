@@ -29,19 +29,22 @@
 
         <div class="actions">
           <button
-            v-if="!data?.installed"
+            v-if="!data?.installed || data?.installStatus === 'running'"
             type="button"
             class="btn btn-primary"
-            :disabled="installBusy"
+            :disabled="installBusy || data?.installStatus === 'running'"
             @click="onInstall"
           >
-            {{ installBusy ? 'Installing…' : 'Install Fail2ban' }}
+            {{ installBusy || data?.installStatus === 'running' ? 'Installing…' : 'Install Fail2ban' }}
           </button>
           <button type="button" class="btn btn-ghost btn-sm" :disabled="refreshBusy" @click="load">
             <AppIcon name="refresh" :size="14" />
             Refresh
           </button>
         </div>
+        <p v-if="data?.installStatus === 'running'" class="install-hint muted">
+          Installation runs in the background. This page refreshes every 5 seconds.
+        </p>
       </div>
 
       <div v-if="data?.jails?.length" class="card section">
@@ -88,6 +91,8 @@ type Fail2banData = {
   active?: boolean
   jails?: { name: string; bannedIps: string[] }[]
   bannedIps?: string[]
+  installStatus?: 'none' | 'running' | 'ok' | 'error'
+  installMessage?: string
 }
 
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
@@ -97,29 +102,37 @@ const loading = ref(true)
 const installBusy = ref(false)
 const refreshBusy = ref(false)
 
-async function load() {
-  refreshBusy.value = true
+const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
+  load: () => load(true),
+  data,
+  installBusy,
+  showAlert,
+  successMessage: 'Fail2ban installed'
+})
+
+async function load(silent = false) {
+  if (!silent) refreshBusy.value = true
   try {
     data.value = await $fetch<Fail2banData>('/api/security/fail2ban')
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Could not load Fail2ban', false)
+    if (!silent) {
+      showAlert(e instanceof Error ? e.message : 'Could not load Fail2ban', false)
+    }
   } finally {
     loading.value = false
-    refreshBusy.value = false
+    if (!silent) refreshBusy.value = false
   }
 }
 
 async function onInstall() {
   if (!confirm('Install Fail2ban on this VPS?')) return
-  installBusy.value = true
   try {
-    await $fetch('/api/security/fail2ban/install', { method: 'POST', timeout: 300_000 })
-    showAlert('Fail2ban installed', true)
-    await load()
+    await $fetch('/api/security/fail2ban/install', { method: 'POST' })
+    showAlert('Installation started in the background', true)
+    await load(true)
+    startPoll()
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Install failed', false)
-  } finally {
-    installBusy.value = false
+    showAlert(e instanceof Error ? e.message : 'Could not start install', false)
   }
 }
 
@@ -134,7 +147,10 @@ async function unban(ip: string) {
   }
 }
 
-onMounted(() => void load())
+onMounted(async () => {
+  await load()
+  resumePollIfRunning()
+})
 </script>
 
 <style scoped>
@@ -204,5 +220,10 @@ onMounted(() => void load())
 
 .muted {
   color: var(--muted);
+}
+
+.install-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
 }
 </style>
