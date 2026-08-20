@@ -1,9 +1,9 @@
 import { requireAuth } from '../../../utils/auth-guard'
-import { getGeoipStatus, syncGeoipDatabase } from '../../../utils/geoip'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
   try {
+    const { getGeoipStatus, syncGeoipDatabase } = await import('../../../utils/geoip')
     const res = await syncGeoipDatabase()
     const status = getGeoipStatus()
     return {

@@ -67,16 +67,34 @@ def is_valid_ban_ip(s):
     return True
 
 
+def extract_wrapped_field(status, label):
+    lines = (status or "").splitlines()
+    for i, line in enumerate(lines):
+        if label not in line:
+            continue
+        value = line.split(label, 1)[1].strip()
+        extra = []
+        for next_line in lines[i + 1 :]:
+            stripped = next_line.strip()
+            if not stripped:
+                break
+            if re.match(r"^[|`\\-]+\s*[A-Za-z].*:", stripped):
+                break
+            if ":" in stripped and not re.match(r"^[0-9a-fA-F:. /\t-]+$", stripped):
+                break
+            extra.append(stripped)
+        return " ".join([value] + extra).strip()
+    return ""
+
+
 def parse_banned_from_status(status):
     entries = []
-    m = re.search(r"Banned IP list:\s*(.+)", status)
-    if m:
-        rest = m.group(1).strip()
-        if rest and rest not in ("-", "none", "None"):
-            for ip in rest.split():
-                ip = ip.strip()
-                if is_valid_ban_ip(ip):
-                    entries.append({"ip": ip, "bannedAt": None})
+    rest = extract_wrapped_field(status, "Banned IP list:")
+    if rest and rest not in ("-", "none", "None"):
+        for ip in rest.split():
+            ip = ip.strip()
+            if is_valid_ban_ip(ip):
+                entries.append({"ip": ip, "bannedAt": None})
     return entries
 
 
@@ -105,10 +123,10 @@ def stat_field(status, label):
 
 
 def jail_names_from_status(status):
-    m = re.search(r"Jail list:\s*(.+)", status)
-    if not m:
+    rest = extract_wrapped_field(status, "Jail list:")
+    if not rest:
         return []
-    return [j.strip() for j in m.group(1).split(",") if j.strip()]
+    return [j.strip() for j in rest.split(",") if j.strip()]
 
 
 def base_out():
