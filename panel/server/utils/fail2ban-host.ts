@@ -125,5 +125,3 @@ export function enrichFail2banJailsFromSettings(
 
   return { ...host, jails }
 }
-
-export { filterBannedIps, isValidBanIp }

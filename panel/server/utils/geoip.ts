@@ -15,8 +15,6 @@ import { open } from 'mmdb-lib'
 import { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 import { stackRoot } from './stack'
 
-export { filterBannedIps, isValidBanIp } from './fail2ban-ip'
-
 const execFileAsync = promisify(execFile)
 
 /** Known MaxMind GeoLite2 editions the panel may sync and query. */

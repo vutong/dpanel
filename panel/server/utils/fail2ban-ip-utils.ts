@@ -1,4 +1,4 @@
-import type { Fail2banBannedEntry, Fail2banJailRow } from './fail2ban-host'
+import type { Fail2banJailRow } from './fail2ban-host'
 import { filterBannedIps, isValidBanIp } from './fail2ban-ip'
 
 export function collectBannedIps(jails: Fail2banJailRow[], bannedIps: string[]): string[] {
@@ -10,5 +10,3 @@ export function collectBannedIps(jails: Fail2banJailRow[], bannedIps: string[]):
   }
   return [...set]
 }
-
-export type { Fail2banBannedEntry }

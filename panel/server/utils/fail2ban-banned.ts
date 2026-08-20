@@ -6,8 +6,6 @@ import {
   type IpGeoEntry
 } from './geoip'
 
-export { queryFail2ban, syncFail2banBanEventsFromIps } from './fail2ban-host'
-
 export function buildIpGeoMap(
   jails: Fail2banJailRow[],
   bannedIps: string[]

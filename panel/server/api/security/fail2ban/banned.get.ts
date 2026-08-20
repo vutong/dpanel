@@ -1,10 +1,9 @@
 import { requireAuth } from '../../../utils/auth-guard'
 import {
   buildGeoipStatusPayload,
-  buildIpGeoMap,
-  queryFail2ban,
-  syncFail2banBanEventsFromIps
+  buildIpGeoMap
 } from '../../../utils/fail2ban-banned'
+import { queryFail2ban, syncFail2banBanEventsFromIps } from '../../../utils/fail2ban-host'
 import { scriptErrorMessage } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
