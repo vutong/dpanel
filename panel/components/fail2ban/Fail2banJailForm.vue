@@ -53,7 +53,7 @@
         </template>
       </dl>
 
-      <div class="fields-grid">
+      <div v-if="draft.jails[jail.name]" class="fields-grid">
         <label class="toggle-row">
           <input v-model="draft.jails[jail.name].enabled" type="checkbox" />
           Enabled
@@ -92,35 +92,47 @@
     </div>
 
     <div class="save-row">
-      <button type="button" class="btn btn-primary" :disabled="saving" @click="openConfirm">
-        {{ saving ? 'Saving…' : 'Save settings' }}
+      <button type="button" class="btn btn-primary" :disabled="saving || applying" @click="openConfirm">
+        {{ saving || applying ? 'Saving…' : 'Save settings' }}
       </button>
+      <p v-if="formFeedback" class="form-feedback" :class="formFeedbackOk ? 'ok' : 'err'">
+        {{ formFeedback }}
+      </p>
     </div>
 
-    <div v-if="confirmOpen" class="modal-backdrop" @click.self="closeConfirm">
-      <div class="modal card" role="dialog">
-        <h2>Apply Fail2ban settings?</h2>
-        <p class="muted">This writes config on the VPS host and reloads Fail2ban.</p>
-        <ul v-if="changeSummary.length" class="changes">
-          <li v-for="(c, i) in changeSummary" :key="i">{{ c }}</li>
-        </ul>
-        <label v-if="hasSshdChanges" class="confirm-check">
-          <input v-model="sshConfirm" type="checkbox" />
-          I have an open SSH session
-        </label>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" @click="closeConfirm">Cancel</button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            :disabled="saving || (hasSshdChanges && !sshConfirm)"
-            @click="confirmSave"
-          >
-            Apply
-          </button>
+    <Teleport to="body">
+      <div v-if="confirmOpen" class="modal-backdrop" @click.self="closeConfirm">
+        <div class="modal card" role="dialog" aria-modal="true">
+          <h2>Apply Fail2ban settings?</h2>
+          <p class="muted">This writes config on the VPS host and reloads Fail2ban.</p>
+          <ul v-if="changeSummary.length" class="changes">
+            <li v-for="(c, i) in changeSummary" :key="i">{{ c }}</li>
+          </ul>
+          <p v-else class="muted changes-empty">No changes detected — settings will be re-applied as-is.</p>
+          <label v-if="hasSshdChanges" class="confirm-check">
+            <input v-model="sshConfirm" type="checkbox" />
+            I have an open SSH session
+          </label>
+          <p v-if="applyBlocked" class="apply-blocked">
+            Tick the SSH confirmation above to apply <code>sshd</code> changes.
+          </p>
+          <p v-if="modalError" class="modal-error">{{ modalError }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" :disabled="applying" @click="closeConfirm">
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="applying || applyBlocked"
+              @click="confirmSave"
+            >
+              {{ applying ? 'Applying…' : 'Apply' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -149,18 +161,18 @@ type Settings = {
   jails: Record<string, JailSettings>
 }
 
+type SaveResult = { ok: boolean; message: string }
+
 const props = defineProps<{
   settings: Settings
   jails: JailDetail[]
   installed: boolean
   clientIp?: string | null
   saving?: boolean
+  onSave: (settings: Settings) => Promise<SaveResult>
 }>()
 
-const emit = defineEmits<{
-  save: [Settings]
-  'reset-jail': [string]
-}>()
+const emit = defineEmits<{ 'reset-jail': [string] }>()
 
 const draft = reactive<{ ignoreip: string[]; jails: Record<string, JailSettings> }>({
   ignoreip: [],
@@ -179,8 +191,13 @@ const ignoreipText = computed({
 
 const confirmOpen = ref(false)
 const sshConfirm = ref(false)
+const applying = ref(false)
+const modalError = ref('')
+const formFeedback = ref('')
+const formFeedbackOk = ref(true)
 
 function syncDraft(from: Settings) {
+  if (confirmOpen.value || applying.value) return
   draft.ignoreip = [...(from.ignoreip || [])]
   draft.jails = {}
   const names = new Set<string>()
@@ -191,9 +208,9 @@ function syncDraft(from: Settings) {
     const saved = from.jails[name]
     draft.jails[name] = {
       enabled: saved?.enabled ?? live?.enabled ?? true,
-      maxretry: saved?.maxretry ?? live?.maxretry ?? 5,
-      findtime: saved?.findtime ?? live?.findtime ?? 600,
-      bantime: saved?.bantime ?? live?.bantime ?? 3600
+      maxretry: Number(saved?.maxretry ?? live?.maxretry ?? 5),
+      findtime: Number(saved?.findtime ?? live?.findtime ?? 600),
+      bantime: Number(saved?.bantime ?? live?.bantime ?? 3600)
     }
   }
 }
@@ -219,7 +236,9 @@ const jailList = computed(() => {
     return (
       live || {
         name,
-        managedBy: name.startsWith('nginx-') ? 'dpanel' : 'system'
+        managedBy: (name === 'nginx-dpanel-login' || name === 'nginx-php-exploit'
+          ? 'dpanel'
+          : 'system') as 'dpanel' | 'system'
       }
     )
   }) as JailDetail[]
@@ -227,17 +246,21 @@ const jailList = computed(() => {
 
 const sshdWarning = computed(() => jailList.value.some((j) => j.name === 'sshd'))
 
-const hasSshdChanges = computed(() => {
-  const orig = props.settings.jails.sshd
-  const cur = draft.jails.sshd
-  if (!orig || !cur) return false
+function jailChanged(name: string, prev: JailSettings | undefined, cur: JailSettings | undefined): boolean {
+  if (!prev || !cur) return false
   return (
-    orig.enabled !== cur.enabled ||
-    orig.maxretry !== cur.maxretry ||
-    orig.findtime !== cur.findtime ||
-    orig.bantime !== cur.bantime
+    Boolean(prev.enabled) !== Boolean(cur.enabled) ||
+    Number(prev.maxretry) !== Number(cur.maxretry) ||
+    Number(prev.findtime) !== Number(cur.findtime) ||
+    Number(prev.bantime) !== Number(cur.bantime)
   )
-})
+}
+
+const hasSshdChanges = computed(() =>
+  jailChanged('sshd', props.settings.jails.sshd, draft.jails.sshd)
+)
+
+const applyBlocked = computed(() => hasSshdChanges.value && !sshConfirm.value)
 
 const changeSummary = computed(() => {
   const lines: string[] = []
@@ -250,12 +273,7 @@ const changeSummary = computed(() => {
       lines.push(`${name}: new jail settings`)
       continue
     }
-    if (
-      prev.enabled !== cfg.enabled ||
-      prev.maxretry !== cfg.maxretry ||
-      prev.findtime !== cfg.findtime ||
-      prev.bantime !== cfg.bantime
-    ) {
+    if (jailChanged(name, prev, cfg)) {
       lines.push(
         `${name}: enabled=${cfg.enabled}, maxretry=${cfg.maxretry}, findtime=${cfg.findtime}, bantime=${cfg.bantime}`
       )
@@ -271,21 +289,46 @@ function addClientIp() {
   }
 }
 
+function buildPayload(): Settings {
+  return {
+    ignoreip: [...draft.ignoreip],
+    jails: structuredClone(draft.jails)
+  }
+}
+
 function openConfirm() {
+  formFeedback.value = ''
+  modalError.value = ''
   sshConfirm.value = false
   confirmOpen.value = true
 }
 
 function closeConfirm() {
+  if (applying.value) return
   confirmOpen.value = false
+  modalError.value = ''
 }
 
-function confirmSave() {
-  emit('save', {
-    ignoreip: [...draft.ignoreip],
-    jails: structuredClone(draft.jails)
-  })
-  closeConfirm()
+async function confirmSave() {
+  if (applyBlocked.value || applying.value) return
+  modalError.value = ''
+  applying.value = true
+  try {
+    const result = await props.onSave(buildPayload())
+    if (result.ok) {
+      formFeedbackOk.value = true
+      formFeedback.value = result.message
+      applying.value = false
+      confirmOpen.value = false
+      modalError.value = ''
+    } else {
+      modalError.value = result.message
+    }
+  } catch (e: unknown) {
+    modalError.value = e instanceof Error ? e.message : 'Apply failed'
+  } finally {
+    applying.value = false
+  }
 }
 </script>
 
@@ -396,10 +439,28 @@ function confirmSave() {
   margin-top: 0.5rem;
 }
 
+.form-feedback {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+}
+
+.form-feedback.ok {
+  color: var(--success, #16a34a);
+}
+
+.form-feedback.err {
+  color: var(--danger);
+}
+
 .changes {
   margin: 0.75rem 0;
   padding-left: 1.25rem;
   font-size: 0.8125rem;
+}
+
+.changes-empty {
+  font-size: 0.8125rem;
+  margin: 0.75rem 0 0;
 }
 
 .confirm-check {
@@ -407,7 +468,19 @@ function confirmSave() {
   gap: 0.5rem;
   align-items: center;
   font-size: 0.875rem;
-  margin-bottom: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.apply-blocked {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--warning, #ca8a04);
+}
+
+.modal-error {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  color: var(--danger);
 }
 
 .modal-backdrop {
@@ -417,7 +490,7 @@ function confirmSave() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 2000;
   padding: 1rem;
 }
 
@@ -435,6 +508,7 @@ function confirmSave() {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 .muted {

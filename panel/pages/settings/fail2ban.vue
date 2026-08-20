@@ -41,6 +41,12 @@
             </div>
           </dl>
 
+          <p v-if="data?.installed && !data?.active" class="inactive-hint alert alert-warn">
+            Fail2ban is installed but the service is <strong>not running</strong>. Bans are not active.
+            Click <strong>Start service</strong> — if it fails, check the <strong>Logs</strong> tab or fix jail
+            config under <strong>Jails &amp; Settings</strong> (invalid config prevents start).
+          </p>
+
           <div class="actions">
             <button
               v-if="!data?.installed || data?.installStatus === 'running'"
@@ -50,6 +56,15 @@
               @click="onInstall"
             >
               {{ installBusy || data?.installStatus === 'running' ? 'Installing…' : 'Install Fail2ban' }}
+            </button>
+            <button
+              v-if="data?.installed && !data?.active"
+              type="button"
+              class="btn btn-primary"
+              :disabled="startBusy"
+              @click="onStart"
+            >
+              {{ startBusy ? 'Starting…' : 'Start service' }}
             </button>
             <button
               type="button"
@@ -104,7 +119,7 @@
           :installed="!!data?.installed"
           :client-ip="data?.clientIp"
           :saving="saveBusy"
-          @save="onSaveSettings"
+          :on-save="onSaveSettings"
           @reset-jail="onResetJail"
         />
       </div>
@@ -183,6 +198,7 @@ const loading = ref(true)
 const installBusy = ref(false)
 const refreshBusy = ref(false)
 const reloadBusy = ref(false)
+const startBusy = ref(false)
 const saveBusy = ref(false)
 const activeTab = ref<Fail2banTabId>('overview')
 
@@ -244,6 +260,19 @@ async function onInstall() {
   }
 }
 
+async function onStart() {
+  startBusy.value = true
+  try {
+    await $fetch('/api/security/fail2ban/start', { method: 'POST' })
+    showAlert('Fail2ban service started', true)
+    await load(true)
+  } catch (e: unknown) {
+    showAlert(fetchErrorMessage(e), false)
+  } finally {
+    startBusy.value = false
+  }
+}
+
 async function onReload() {
   reloadBusy.value = true
   try {
@@ -268,7 +297,10 @@ async function unban(ip: string) {
   }
 }
 
-async function onSaveSettings(settings: { ignoreip: string[]; jails: Record<string, JailSettings> }) {
+async function onSaveSettings(settings: {
+  ignoreip: string[]
+  jails: Record<string, JailSettings>
+}): Promise<{ ok: boolean; message: string }> {
   saveBusy.value = true
   try {
     const res = await $fetch<{ settings: typeof settings; warnings?: string[] }>(
@@ -277,10 +309,14 @@ async function onSaveSettings(settings: { ignoreip: string[]; jails: Record<stri
     )
     data.value = { ...data.value, settings: res.settings }
     const warn = res.warnings?.length ? ` (${res.warnings.join('; ')})` : ''
-    showAlert(`Settings applied${warn}`, true)
+    const message = `Settings applied${warn}`
+    showAlert(message, true)
     await load(true)
+    return { ok: true, message }
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Save failed', false)
+    const message = fetchErrorMessage(e)
+    showAlert(message, false)
+    return { ok: false, message }
   } finally {
     saveBusy.value = false
   }
@@ -310,6 +346,21 @@ function formatTime(iso: string) {
   } catch {
     return iso
   }
+}
+
+function fetchErrorMessage(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const err = e as {
+      data?: { statusMessage?: string; message?: string }
+      statusMessage?: string
+      message?: string
+    }
+    if (err.data?.statusMessage) return err.data.statusMessage
+    if (err.statusMessage) return err.statusMessage
+    if (err.data?.message) return err.data.message
+    if (err.message && !err.message.startsWith('[PUT]')) return err.message
+  }
+  return 'Save failed'
 }
 
 onMounted(async () => {
@@ -418,6 +469,12 @@ onMounted(async () => {
 .install-hint {
   margin: 0.75rem 0 0;
   font-size: 0.8125rem;
+}
+
+.inactive-hint {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 .muted {
