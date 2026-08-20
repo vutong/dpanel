@@ -12,7 +12,7 @@
       <span class="progress-dot" aria-hidden="true" />
       <div class="progress-text">
         <strong>{{ lockLabel }}</strong>
-        <span v-if="polling" class="muted">Refreshing every few seconds…</span>
+        <span class="muted">Open the scan dialog for live status, or check Results when finished.</span>
       </div>
     </div>
 
@@ -23,10 +23,10 @@
         <button
           type="button"
           class="btn btn-primary"
-          :disabled="!installed || scanLocked || scanBusy"
-          @click="emit('scan-all')"
+          :disabled="!installed || scanLocked"
+          @click="emit('open-scan', null)"
         >
-          {{ scanBusy && !scanDomain ? 'Starting…' : 'Scan all apps' }}
+          Scan all apps…
         </button>
       </section>
 
@@ -47,10 +47,10 @@
             <button
               type="button"
               class="btn btn-primary"
-              :disabled="!scanDomain || !installed || scanLocked || scanBusy"
-              @click="emit('scan-site', scanDomain)"
+              :disabled="!scanDomain || !installed || scanLocked"
+              @click="emit('open-scan', scanDomain)"
             >
-              {{ scanBusy && scanDomain ? 'Starting…' : 'Scan site' }}
+              Scan site…
             </button>
           </div>
         </template>
@@ -65,14 +65,11 @@ const props = defineProps<{
   installed: boolean
   sites: { domain: string }[]
   scanLocked: boolean
-  scanBusy: boolean
-  polling: boolean
   activeTarget?: string | null
 }>()
 
 const emit = defineEmits<{
-  'scan-all': []
-  'scan-site': [domain: string]
+  'open-scan': [domain: string | null]
 }>()
 
 const scanDomain = ref('')

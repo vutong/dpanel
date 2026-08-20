@@ -199,7 +199,6 @@
             <AppIcon name="scan" :size="22" />
             <span class="tile-title">Scan Virus</span>
             <span class="tile-desc">ClamAV malware scan for this site</span>
-            <span v-if="lastScanBadge && !scanLocked" class="scan-badge" :class="lastScanBadgeClass">{{ lastScanBadge }}</span>
             <span v-if="scanLocked" class="scan-badge scan-badge--running">Scanning…</span>
           </button>
         </div>
@@ -513,12 +512,6 @@ const comingSoon = [
 ]
 
 const clamScanOpen = ref(false)
-const lastSiteScan = ref<{
-  status: string
-  infectedCount?: number
-  finishedAt?: string
-  startedAt: string
-} | null>(null)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 const {
@@ -526,45 +519,11 @@ const {
   polling: scanPolling,
   startPoll: startClamPoll,
   resumePollIfRunning: resumeClamPoll
-} = useClamavScan({
-  showAlert,
-  onComplete: async () => {
-    await loadSiteScanStatus()
-  }
-})
+} = useClamavScan()
 
 const scanLocked = computed(
   () => scanPolling.value || activeScan.value?.status === 'running'
 )
-
-const lastScanBadge = computed(() => {
-  const s = lastSiteScan.value
-  if (!s || s.status === 'running') return ''
-  if (s.status === 'error') return 'Last: error'
-  if ((s.infectedCount ?? 0) > 0) return `${s.infectedCount} hit(s)`
-  return 'Last: clean'
-})
-
-const lastScanBadgeClass = computed(() => {
-  const s = lastSiteScan.value
-  if (!s) return ''
-  if (s.status === 'error') return 'scan-badge--error'
-  if ((s.infectedCount ?? 0) > 0) return 'scan-badge--warn'
-  return 'scan-badge--ok'
-})
-
-async function loadSiteScanStatus() {
-  if (!domainParam.value) return
-  try {
-    const res = await $fetch<{
-      lastScan?: typeof lastSiteScan.value
-      globalScanRunning?: boolean
-    }>(`/api/websites/${encodeURIComponent(domainParam.value)}/clamav-scan`)
-    lastSiteScan.value = res.lastScan ?? null
-  } catch {
-    lastSiteScan.value = null
-  }
-}
 
 function openClamScan() {
   clearAlert()
@@ -574,7 +533,6 @@ function openClamScan() {
 function onClamScanStarted(scanId: string) {
   clearAlert()
   startClamPoll(scanId)
-  void loadSiteScanStatus()
 }
 
 const busy = ref(false)
@@ -747,7 +705,6 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
 // Resume console after refresh if update/rebuild is still running (same idea as Update Dpanel).
 onMounted(() => {
   if (!import.meta.client || !domainParam.value) return
-  void loadSiteScanStatus()
   void resumeClamPoll()
   void $fetch<{ status?: string; op?: string }>(
     `/api/websites/${encodeURIComponent(domainParam.value)}/operation`
@@ -1012,15 +969,6 @@ a.tile {
   border-radius: 4px;
   background: var(--surface-2);
   color: var(--muted);
-}
-.scan-badge--ok {
-  color: var(--success, #16a34a);
-}
-.scan-badge--warn {
-  color: var(--warning, #ca8a04);
-}
-.scan-badge--error {
-  color: var(--danger, #dc2626);
 }
 .scan-badge--running {
   color: var(--accent);

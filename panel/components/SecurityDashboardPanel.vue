@@ -5,31 +5,27 @@
         <AppIcon name="shield" :size="18" />
         Security
       </h2>
-      <NuxtLink to="/settings/fail2ban" class="link-sm">Fail2ban</NuxtLink>
     </div>
 
     <PageLoader v-if="pending" label="Loading security…" />
 
     <template v-else>
-      <div class="status-row">
-        <div v-if="fail2banOk" class="status-active">Fail2ban: Active</div>
-        <div v-else class="pill pill-warn">
-          Fail2ban: {{ fail2banLabel }}
+      <div class="svc-list">
+        <div class="svc-row">
+          <NuxtLink to="/settings/fail2ban" class="svc-name">Fail2ban</NuxtLink>
+          <span v-if="fail2banOk" class="status-active">Active</span>
+          <span v-else class="status-inactive">{{ fail2banLabel }}</span>
         </div>
-        <div v-if="clamOk" class="status-active">ClamAV: Active</div>
-        <div v-else class="pill pill-warn">
-          ClamAV: {{ clamLabel }}
+        <div class="svc-row">
+          <NuxtLink to="/settings/clamav" class="svc-name">ClamAV</NuxtLink>
+          <span v-if="clamOk" class="status-active">Active</span>
+          <span v-else class="status-inactive">{{ clamLabel }}</span>
         </div>
       </div>
 
       <p v-if="!installedAny" class="muted hint">
-        Host security packages not installed.
-        <NuxtLink to="/settings/fail2ban">Fail2ban</NuxtLink>
-        ·
-        <NuxtLink to="/settings/clamav">ClamAV</NuxtLink>
+        Host security packages are not installed yet. Open Fail2ban or ClamAV to install.
       </p>
-
-      <p v-else class="muted">Use Fail2ban and ClamAV pages to manage host security.</p>
     </template>
   </div>
 </template>
@@ -57,14 +53,13 @@ const installedAny = computed(
 )
 
 const fail2banLabel = computed(() => {
-  if (!status.value?.fail2ban?.installed) return 'not installed'
-  return status.value.fail2ban.active ? 'active' : 'inactive'
+  if (!status.value?.fail2ban?.installed) return 'Not installed'
+  return status.value.fail2ban.active ? 'Active' : 'Inactive'
 })
 const clamLabel = computed(() => {
-  if (!status.value?.clamav?.installed) return 'not installed'
-  return status.value.clamav.daemonActive ? 'active' : 'inactive'
+  if (!status.value?.clamav?.installed) return 'Not installed'
+  return status.value.clamav.daemonActive ? 'Active' : 'Inactive'
 })
-
 </script>
 
 <style scoped>
@@ -88,21 +83,44 @@ const clamLabel = computed(() => {
   font-size: 1rem;
 }
 
-.link-sm {
-  font-size: 0.8125rem;
-  color: var(--accent);
+.svc-list {
+  display: flex;
+  flex-direction: column;
 }
 
-.status-row {
+.svc-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.svc-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.svc-row:first-child {
+  padding-top: 0;
+}
+
+.svc-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.svc-name:hover {
+  color: var(--accent);
 }
 
 .hint {
   font-size: var(--text-sm);
-  margin: 0 0 0.75rem;
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
-
 </style>

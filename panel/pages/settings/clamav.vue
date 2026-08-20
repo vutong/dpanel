@@ -173,11 +173,15 @@
           :installed="!!data?.installed"
           :sites="sites"
           :scan-locked="scanLocked"
-          :scan-busy="scanBusy"
-          :polling="scanPolling"
           :active-target="activeScan?.target"
-          @scan-all="onScanAll"
-          @scan-site="onScanSite"
+          @open-scan="openScanModal"
+        />
+        <SiteClamScanModal
+          :open="scanModalOpen"
+          :domain="scanModalDomain"
+          @close="scanModalOpen = false"
+          @started="onScanModalStarted"
+          @completed="onScanModalCompleted"
         />
       </div>
 
@@ -245,9 +249,10 @@ const installBusy = ref(false)
 const updateBusy = ref(false)
 const startBusy = ref(false)
 const refreshBusy = ref(false)
-const scanBusy = ref(false)
 const selectedScanId = ref<string | null>(null)
 const historyRef = ref<{ refresh?: () => void } | null>(null)
+const scanModalOpen = ref(false)
+const scanModalDomain = ref<string | null>(null)
 
 const activeTab = ref<ClamavTabId>(
   (['overview', 'scan', 'results', 'logs', 'guide'].includes(String(route.query.tab))
@@ -292,10 +297,9 @@ const recentEvents = computed(() => evData.value?.events ?? [])
 const {
   activeScan,
   polling: scanPolling,
-  startScan,
+  startPoll: startScanPoll,
   resumePollIfRunning: resumeScanPoll
 } = useClamavScan({
-  showAlert,
   onComplete: (scan) => {
     void load(true)
     historyRef.value?.refresh?.()
@@ -304,7 +308,10 @@ const {
 })
 
 const scanLocked = computed(
-  () => scanPolling.value || activeScan.value?.status === 'running' || !!data.value?.activeScan
+  () =>
+    scanPolling.value ||
+    activeScan.value?.status === 'running' ||
+    data.value?.activeScan?.status === 'running'
 )
 
 const isInstalled = computed(() => data.value?.installed === true)
@@ -440,29 +447,22 @@ async function onUpdate() {
   }
 }
 
-async function onScanAll() {
-  if (!confirm('Scan all files under apps/? This may take a long time on large sites.')) return
+function openScanModal(domain: string | null) {
   clearAlert()
-  scanBusy.value = true
-  try {
-    await startScan()
-  } catch (e: unknown) {
-    showAlert(fetchApiErrorMessage(e, 'Could not start scan'), false)
-  } finally {
-    scanBusy.value = false
-  }
+  scanModalDomain.value = domain
+  scanModalOpen.value = true
 }
 
-async function onScanSite(domain: string) {
+function onScanModalStarted(scanId: string) {
   clearAlert()
-  scanBusy.value = true
-  try {
-    await startScan({ domain })
-  } catch (e: unknown) {
-    showAlert(fetchApiErrorMessage(e, 'Could not start scan'), false)
-  } finally {
-    scanBusy.value = false
-  }
+  startScanPoll(scanId)
+  void loadSummary(true)
+}
+
+function onScanModalCompleted(scan: ClamavScanSummary) {
+  selectedScanId.value = scan.id
+  historyRef.value?.refresh?.()
+  void load(true)
 }
 
 function onSelectScan(id: string) {
