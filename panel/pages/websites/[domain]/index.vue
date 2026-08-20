@@ -193,13 +193,13 @@
             type="button"
             class="tile"
             :class="{ 'tile--locked': scanLocked }"
-            :disabled="busy || scanLocked"
-            @click="clamScanOpen = true"
+            :disabled="busy"
+            @click="openClamScan"
           >
             <AppIcon name="scan" :size="22" />
             <span class="tile-title">Scan Virus</span>
             <span class="tile-desc">ClamAV malware scan for this site</span>
-            <span v-if="lastScanBadge" class="scan-badge" :class="lastScanBadgeClass">{{ lastScanBadge }}</span>
+            <span v-if="lastScanBadge && !scanLocked" class="scan-badge" :class="lastScanBadgeClass">{{ lastScanBadge }}</span>
             <span v-if="scanLocked" class="scan-badge scan-badge--running">Scanning…</span>
           </button>
         </div>
@@ -566,8 +566,15 @@ async function loadSiteScanStatus() {
   }
 }
 
+function openClamScan() {
+  clearAlert()
+  clamScanOpen.value = true
+}
+
 function onClamScanStarted(scanId: string) {
+  clearAlert()
   startClamPoll(scanId)
+  void loadSiteScanStatus()
 }
 
 const busy = ref(false)

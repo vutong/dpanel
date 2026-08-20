@@ -16,26 +16,13 @@
       <!-- Overview -->
       <div v-show="activeTab === 'overview'" class="tab-panel">
         <div class="card status-card">
-          <div class="status-pills">
+          <div v-if="showStatusPills" class="status-pills">
             <div
-              v-if="data?.installed && data.daemonActive"
-              class="status-active"
-            >
-              Daemon active
-            </div>
-            <div
-              v-else
+              v-if="!data?.installed || data?.ok === false"
               class="pill"
               :class="statusPillClass"
             >
               {{ statusPillLabel }}
-            </div>
-            <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
-            <div v-if="data?.installed && data.freshclamActive" class="status-active">
-              freshclam: Active
-            </div>
-            <div v-else-if="data?.installed" class="status-inactive">
-              freshclam: Inactive
             </div>
             <div v-if="scanLocked" class="pill pill-accent">Scan running</div>
           </div>
@@ -64,6 +51,10 @@
             <div>
               <dt>Signatures</dt>
               <dd>{{ data?.signatureDate || '—' }}</dd>
+            </div>
+            <div>
+              <dt>Version</dt>
+              <dd>{{ data?.version ? `v${data.version}` : '—' }}</dd>
             </div>
           </dl>
 
@@ -319,18 +310,16 @@ const scanLocked = computed(
 const isInstalled = computed(() => data.value?.installed === true)
 
 const statusPillLabel = computed(() => {
-  if (data.value?.installed === true) {
-    return data.value.daemonActive ? 'Daemon active' : 'Daemon inactive'
-  }
   if (data.value?.installed === false) return 'Not installed'
   if (data.value?.ok === false) return 'Status unavailable'
   return '—'
 })
 
-const statusPillClass = computed(() => {
-  if (data.value?.installed === true && data.value.daemonActive) return 'pill-ok'
-  return 'pill-warn'
-})
+const statusPillClass = computed(() => 'pill-warn')
+
+const showStatusPills = computed(
+  () => !data.value?.installed || data.value?.ok === false || scanLocked.value
+)
 
 const installedLabel = computed(() => {
   if (data.value?.installed === true) return 'Yes'
@@ -453,22 +442,24 @@ async function onUpdate() {
 
 async function onScanAll() {
   if (!confirm('Scan all files under apps/? This may take a long time on large sites.')) return
+  clearAlert()
   scanBusy.value = true
   try {
     await startScan()
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Could not start scan', false)
+    showAlert(fetchApiErrorMessage(e, 'Could not start scan'), false)
   } finally {
     scanBusy.value = false
   }
 }
 
 async function onScanSite(domain: string) {
+  clearAlert()
   scanBusy.value = true
   try {
     await startScan({ domain })
   } catch (e: unknown) {
-    showAlert(e instanceof Error ? e.message : 'Could not start scan', false)
+    showAlert(fetchApiErrorMessage(e, 'Could not start scan'), false)
   } finally {
     scanBusy.value = false
   }

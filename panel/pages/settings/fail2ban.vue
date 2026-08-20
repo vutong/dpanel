@@ -16,15 +16,10 @@
       <!-- Overview -->
       <div v-show="activeTab === 'overview'" class="tab-panel">
         <div class="card status-card">
-          <div class="status-pills">
-            <div v-if="data?.installed && data.active" class="status-active">Active</div>
-            <div v-else class="pill" :class="statusPillClass">
+          <div v-if="showStatusPills" class="status-pills">
+            <div class="pill" :class="statusPillClass">
               {{ statusPillLabel }}
             </div>
-            <div v-if="data?.version" class="pill muted-pill">v{{ data.version }}</div>
-            <div class="pill">{{ jailCount }} jail(s)</div>
-            <div class="pill">{{ bannedCount }} banned</div>
-            <div class="pill">{{ failedCount }} currently failed</div>
           </div>
 
           <dl class="status-dl">
@@ -41,8 +36,20 @@
               </dd>
             </div>
             <div>
-              <dt>Banned IPs</dt>
+              <dt>Jail(s)</dt>
+              <dd>{{ jailCount }}</dd>
+            </div>
+            <div>
+              <dt>Banned</dt>
               <dd>{{ bannedCount }}</dd>
+            </div>
+            <div>
+              <dt>Suspected</dt>
+              <dd>{{ failedCount }}</dd>
+            </div>
+            <div>
+              <dt>Version</dt>
+              <dd>{{ data?.version ? `v${data.version}` : '—' }}</dd>
             </div>
           </dl>
 
@@ -348,19 +355,16 @@ const recentEvents = computed(() => evData.value?.events ?? [])
 const isInstalled = computed(() => data.value?.installed === true)
 
 const statusPillLabel = computed(() => {
-  if (data.value?.installed === true) {
-    return data.value.active ? 'Active' : 'Inactive'
-  }
   if (data.value?.installed === false) return 'Not installed'
   if (data.value?.ok === false) return 'Status unavailable'
   return '—'
 })
 
-const statusPillClass = computed(() => {
-  if (data.value?.installed === true && data.value.active) return 'pill-ok'
-  if (data.value?.installed === true || data.value?.installed === false) return 'pill-warn'
-  return 'pill-warn'
-})
+const statusPillClass = computed(() => 'pill-warn')
+
+const showStatusPills = computed(
+  () => data.value?.installed === false || data.value?.ok === false
+)
 
 const installedLabel = computed(() => {
   if (data.value?.installed === true) return 'Yes'

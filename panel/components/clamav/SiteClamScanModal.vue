@@ -1,67 +1,78 @@
 <template>
-  <div v-if="open" class="stream-backdrop" @click.self="emit('close')">
-    <div class="stream-modal card" role="dialog" aria-labelledby="clam-scan-title">
-      <header class="stream-header">
-        <div>
-          <h2 id="clam-scan-title">Scan Virus</h2>
-          <p class="stream-sub">{{ domain }}</p>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">Close</button>
-      </header>
-
-      <PageLoader v-if="precheckPending" label="Checking ClamAV…" />
-
-      <template v-else>
-        <div v-if="!clamInstalled" class="alert alert-warn">
-          ClamAV is not installed on this VPS.
-          <NuxtLink to="/settings/clamav" class="link-inline">Install from Settings → ClamAV</NuxtLink>
-        </div>
-
-        <div v-else-if="globalScanRunning && !domainScanRunning" class="alert alert-warn">
-          Another scan is running
-          (<code>{{ activeScan?.target === 'all' ? 'all apps' : activeScan?.target }}</code>).
-          Wait for it to finish.
-        </div>
-
-        <dl v-if="lastScan" class="last-scan">
+  <Teleport to="body">
+    <div v-if="open" class="stream-backdrop" @click.self="emit('close')">
+      <div class="stream-modal card" role="dialog" aria-modal="true" aria-labelledby="clam-scan-title">
+        <header class="stream-header">
           <div>
-            <dt>Last scan</dt>
-            <dd>{{ formatTime(lastScan.finishedAt || lastScan.startedAt) }}</dd>
+            <h2 id="clam-scan-title">Scan Virus</h2>
+            <p class="stream-sub">{{ domain }}</p>
           </div>
-          <div>
-            <dt>Result</dt>
-            <dd>
-              <span v-if="lastScan.status === 'running'" class="badge-running">Running</span>
-              <span v-else-if="lastScan.status === 'error'" class="badge-error">Error</span>
-              <span v-else-if="(lastScan.infectedCount ?? 0) > 0" class="badge-warn">
-                {{ lastScan.infectedCount }} infected
-              </span>
-              <span v-else class="badge-ok">Clean</span>
-            </dd>
+          <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">Close</button>
+        </header>
+
+        <PageLoader v-if="precheckPending" label="Checking ClamAV…" />
+
+        <template v-else>
+          <div v-if="!clamInstalled" class="alert alert-warn">
+            ClamAV is not installed on this VPS.
+            <NuxtLink to="/settings/clamav" class="link-inline">Install from Settings → ClamAV</NuxtLink>
           </div>
-        </dl>
-        <p v-else class="muted">No scan recorded for this site yet.</p>
 
-        <p v-if="polling" class="scan-progress muted">
-          Scan started — running in background. You can close this dialog; check back shortly.
-        </p>
-        <p v-if="startError" class="alert alert-error">{{ startError }}</p>
-      </template>
+          <div v-else-if="otherScanRunning" class="alert alert-warn">
+            Another scan is running
+            (<code>{{ activeScan?.target === 'all' ? 'all apps' : activeScan?.target }}</code>).
+            Wait for it to finish.
+          </div>
 
-      <footer class="stream-footer">
-        <NuxtLink to="/settings/clamav?tab=results" class="btn btn-ghost btn-sm">All results</NuxtLink>
-        <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          :disabled="!canScan || starting"
-          @click="onStart"
-        >
-          {{ starting ? 'Starting…' : domainScanRunning || polling ? 'Scan running…' : 'Start scan' }}
-        </button>
-      </footer>
+          <div v-else-if="domainScanRunning || polling" class="status-box status-box--running">
+            <strong>Scan in progress</strong>
+            <p class="muted">
+              Running in the background. You can close this dialog and check back — results also appear under
+              <NuxtLink to="/settings/clamav?tab=results" class="link-inline">Settings → ClamAV → Results</NuxtLink>.
+            </p>
+          </div>
+
+          <dl v-if="lastScan && !domainScanRunning && !polling" class="last-scan">
+            <div>
+              <dt>Last scan</dt>
+              <dd>{{ formatTime(lastScan.finishedAt || lastScan.startedAt) }}</dd>
+            </div>
+            <div>
+              <dt>Result</dt>
+              <dd>
+                <span v-if="lastScan.status === 'running'" class="badge-running">Running</span>
+                <span v-else-if="lastScan.status === 'error'" class="badge-error">Error</span>
+                <span v-else-if="(lastScan.infectedCount ?? 0) > 0" class="badge-warn">
+                  {{ lastScan.infectedCount }} infected
+                </span>
+                <span v-else class="badge-ok">Clean</span>
+              </dd>
+            </div>
+          </dl>
+          <p v-else-if="clamInstalled && !otherScanRunning && !domainScanRunning && !polling" class="muted">
+            No scan recorded for this site yet.
+          </p>
+
+          <p v-if="startError" class="alert alert-error">{{ startError }}</p>
+        </template>
+
+        <footer class="stream-footer">
+          <NuxtLink to="/settings/clamav?tab=results" class="btn btn-ghost btn-sm">All results</NuxtLink>
+          <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">
+            {{ domainScanRunning || polling ? 'Close' : 'Cancel' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!canScan || starting"
+            @click="onStart"
+          >
+            {{ starting ? 'Starting…' : domainScanRunning || polling ? 'Scan running…' : 'Start scan' }}
+          </button>
+        </footer>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -82,6 +93,11 @@ const globalScanRunning = ref(false)
 const domainScanRunning = ref(false)
 const starting = ref(false)
 const polling = ref(false)
+const startError = ref('')
+
+const otherScanRunning = computed(
+  () => globalScanRunning.value && !domainScanRunning.value && !polling.value
+)
 
 const canScan = computed(
   () =>
@@ -89,12 +105,14 @@ const canScan = computed(
     !globalScanRunning.value &&
     !domainScanRunning.value &&
     !polling.value &&
-    !starting.value
+    !starting.value &&
+    !precheckPending.value
 )
 
 async function precheck() {
   if (!props.domain) return
   precheckPending.value = true
+  startError.value = ''
   try {
     const [clam, site] = await Promise.all([
       $fetch<{ installed?: boolean }>('/api/security/clamav'),
@@ -108,16 +126,18 @@ async function precheck() {
     lastScan.value = site.lastScan ?? null
     activeScan.value = site.activeScan ?? null
     globalScanRunning.value = !!site.globalScanRunning
-    domainScanRunning.value = site.activeScan?.status === 'running'
-    polling.value = domainScanRunning.value
-  } catch {
+    const runningThis =
+      site.activeScan?.status === 'running' &&
+      (site.activeScan.target === props.domain || site.activeScan.domain === props.domain)
+    domainScanRunning.value = runningThis
+    polling.value = runningThis
+  } catch (e: unknown) {
     clamInstalled.value = false
+    startError.value = fetchApiErrorMessage(e, 'Could not check ClamAV status')
   } finally {
     precheckPending.value = false
   }
 }
-
-const startError = ref('')
 
 async function onStart() {
   if (!canScan.value) return
@@ -133,10 +153,18 @@ async function onStart() {
     }
     polling.value = true
     domainScanRunning.value = true
+    globalScanRunning.value = true
+    activeScan.value = {
+      id: res.scanId,
+      target: props.domain,
+      domain: props.domain,
+      scanPath: `apps/${props.domain}`,
+      status: 'running',
+      startedAt: new Date().toISOString()
+    }
     emit('started', res.scanId)
-    emit('close')
   } catch (e: unknown) {
-    startError.value = e instanceof Error ? e.message : 'Could not start scan'
+    startError.value = fetchApiErrorMessage(e, 'Could not start scan')
   } finally {
     starting.value = false
   }
@@ -153,7 +181,7 @@ function formatTime(iso: string) {
 watch(
   () => props.open,
   (isOpen) => {
-    if (isOpen) precheck()
+    if (isOpen) void precheck()
   }
 )
 </script>
@@ -195,11 +223,35 @@ watch(
   color: var(--muted);
 }
 
+.status-box {
+  margin: 0.75rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.status-box--running {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.status-box strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.status-box p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
 .last-scan {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
-  margin: 1rem 0;
+  margin: 1rem 0 0;
 }
 
 .last-scan dt {
@@ -230,12 +282,6 @@ watch(
 
 .link-inline {
   color: var(--accent);
-  margin-left: 0.25rem;
-}
-
-.scan-progress {
-  font-size: 0.875rem;
-  margin: 0.75rem 0 0;
 }
 
 .stream-footer {
