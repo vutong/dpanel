@@ -151,7 +151,7 @@
                   :disabled="diskTesting"
                   @click="runDiskTest"
                 >
-                  {{ diskTesting ? 'Testing…' : 'Test' }}
+                  {{ diskTesting ? 'Checking…' : 'Check' }}
                 </button>
               </div>
               <p v-if="diskTestError" class="disk-test-error">{{ diskTestError }}</p>
@@ -536,13 +536,16 @@ onUnmounted(() => {
 
 .disk-badge-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.45rem;
   margin-top: 0.55rem;
 }
 
 .hw-badge.disk-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-transform: none;
   letter-spacing: 0;
   font-size: 0.68rem;
@@ -551,20 +554,27 @@ onUnmounted(() => {
   background: var(--surface-elevated);
   border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 0.22rem 0.45rem;
-  line-height: 1.35;
+  padding: 0 0.45rem;
+  min-height: 1.75rem;
+  line-height: 1;
   flex: 1;
   min-width: 0;
+  text-align: center;
 }
 
 .disk-test-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   border: 1px solid var(--border);
   background: var(--surface-elevated);
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 500;
-  padding: 0.22rem 0.5rem;
+  padding: 0 0.55rem;
+  min-height: 1.75rem;
+  line-height: 1;
   border-radius: 6px;
   cursor: pointer;
 }
