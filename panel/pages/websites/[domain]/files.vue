@@ -10,7 +10,27 @@
       <span class="crumb-current">Files</span>
     </nav>
 
-    <PageLoader v-if="pending && !listing" label="Loading files…" />
+    <div v-if="filesLoading" class="fm-skel" aria-busy="true">
+      <header class="fm-head">
+        <div>
+          <h1>File manager</h1>
+          <p class="fm-sub"><span class="skeleton skeleton-line" style="width: 12rem" aria-hidden="true" /></p>
+        </div>
+        <div class="fm-actions" aria-hidden="true">
+          <span class="skeleton skeleton-text" style="width: 4.5rem; height: 1.75rem" />
+          <span class="skeleton skeleton-text" style="width: 5rem; height: 1.75rem" />
+          <span class="skeleton skeleton-text" style="width: 4rem; height: 1.75rem" />
+        </div>
+      </header>
+      <div class="card table-wrap" aria-hidden="true">
+        <div v-for="n in 8" :key="n" class="skeleton-row" style="padding: 0.55rem 0">
+          <span class="skeleton skeleton-line" style="width: 4%" />
+          <span class="skeleton skeleton-line" style="width: 45%" />
+          <span class="skeleton skeleton-line" style="width: 12%" />
+          <span class="skeleton skeleton-line" style="width: 18%" />
+        </div>
+      </div>
+    </div>
     <div v-else-if="loadError" class="alert alert-error">{{ loadError }}</div>
     <template v-else-if="listing">
       <header class="fm-head">
@@ -275,7 +295,12 @@
             <AppIcon name="x" :size="16" />
           </button>
         </div>
-        <PageLoader v-if="previewKind === 'loading'" label="Loading preview…" />
+        <div v-if="previewKind === 'loading'" class="preview-skel" aria-hidden="true">
+          <span class="skeleton skeleton-block" style="height: 8rem; margin-bottom: 0.75rem" />
+          <span class="skeleton skeleton-line" style="width: 90%; margin-bottom: 0.4rem" />
+          <span class="skeleton skeleton-line" style="width: 75%; margin-bottom: 0.4rem" />
+          <span class="skeleton skeleton-line" style="width: 60%" />
+        </div>
         <p v-else-if="previewKind === 'error'" class="alert alert-error">{{ previewError }}</p>
         <img
           v-else-if="previewKind === 'image' && previewImageUrl"
@@ -355,6 +380,7 @@ const { data, pending, error, refresh } = await useFetch<Listing>(
 )
 
 const listing = computed(() => data.value)
+const filesLoading = computed(() => pending.value && !error.value)
 const loadError = computed(() => {
   if (!error.value) return ''
   const e = error.value as { data?: { statusMessage?: string }; statusMessage?: string }

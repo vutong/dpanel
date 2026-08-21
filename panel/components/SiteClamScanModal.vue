@@ -10,7 +10,16 @@
           <button type="button" class="btn btn-ghost btn-sm" @click="onClose">Close</button>
         </header>
 
-        <PageLoader v-if="precheckPending" label="Checking ClamAV…" />
+        <div v-if="precheckPending" class="precheck-skel" aria-busy="true">
+          <div class="status-box" aria-hidden="true">
+            <span class="skeleton" style="width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-top: 0.35rem; flex-shrink: 0" />
+            <div style="flex: 1">
+              <span class="skeleton skeleton-line" style="width: 40%; margin-bottom: 0.5rem" />
+              <span class="skeleton skeleton-line" style="width: 90%; margin-bottom: 0.35rem" />
+              <span class="skeleton skeleton-line" style="width: 70%" />
+            </div>
+          </div>
+        </div>
 
         <template v-else>
           <div v-if="!clamInstalled" class="alert alert-warn">

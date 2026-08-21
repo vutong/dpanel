@@ -94,7 +94,7 @@ const { data: fail2ban, pending: fail2banPending } = useFetch<Fail2banSummary>(
   }
 )
 
-/** Full block skeleton until status arrives; counts can fill later. */
+/** First paint only — interval refresh keeps values (background poll). */
 const pending = computed(() => statusPending.value && !status.value)
 
 const fail2banOk = computed(

@@ -221,5 +221,20 @@ Nguồn sự thật duy nhất: `panel/assets/css/main.css` (tokens + class dùn
 | **Select** | `class="select"` (+ `select-sm` toolbar) — **không** dùng `input` trên `<select>`. Arrow/custom appearance đã có trong global CSS. |
 | **Active** | Dùng `status-active` (chấm xanh + quầng + chữ xanh nhỏ). Inactive: `status-inactive`. Không plain text muted cho Active. |
 | **Pill / badge** | Global `.pill` / `.pill-ok` / `.pill-warn` / `.badge` (+ `badge-node` / `badge-php` / `badge-pending`). |
+| **Skeleton / loading** | Progressive, per-section — xem bảng dưới. |
+
+#### Skeleton loading (bắt buộc cho mọi page / panel)
+
+**Nguyên tắc:** layout + tiêu đề + khung section hiện ngay; **không** dùng full-page `PageLoader` để chặn cả trang khi chỉ một phần data chưa về. Phần nào xong thì hiện nội dung thật; phần còn loading giữ skeleton.
+
+| Quy tắc | Chi tiết |
+|---------|----------|
+| **Class** | Dùng global `.skeleton` (+ `.skeleton-text` / `.skeleton-text-lg` / `.skeleton-line` / `.skeleton-line-sm` / `.skeleton-bar` / `.skeleton-block` / `.skeleton-row`) trong `main.css`. Không invent shimmer/spinner riêng cho chỗ trống dữ liệu. |
+| **Theo section** | Mỗi khối độc lập (stat card, bảng, chart, sidebar metrics, log viewer, modal body…) có skeleton riêng. Nhiều `useFetch` / poll → phần A xong hiện A, phần B vẫn skeleton. |
+| **Không block toàn trang** | Tránh `v-if="pending"` bọc cả page bằng `PageLoader`. Chỉ `PageLoader` khi thật sự không có layout thay thế (vd. redirect auth check rất ngắn) — ưu tiên skeleton. |
+| **Lần đầu vs refresh** | Skeleton khi section đang fetch (`pending` / `loading`), **kể cả user refresh / `refresh()` / đổi filter** — tránh cảm giác “đứng im”. Không giữ UI cũ im lặng lúc chờ. **Ngoại lệ poll nền:** docker stats (vài giây) và dashboard Security interval — giữ số liệu cũ, không flash skeleton mỗi tick. |
+| **Empty vs loading** | Loading / refreshing → skeleton. Xong + rỗng → empty state (text muted), **không** để skeleton vĩnh viễn. |
+| **Modal / drawer** | Hiện khung modal + title ngay; body skeleton đến khi fetch xong. |
+| **Dashboard mẫu** | `pages/index.vue` + `DockerStatsPanel` + `SecurityDashboardPanel` — làm theo pattern này khi thêm page mới. |
 
 Khi thêm UI mới: ưu tiên class global trước; chỉ scoped CSS cho layout trang (grid, spacing), không copy lại style control.

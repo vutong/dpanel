@@ -10,12 +10,23 @@
 
     <Fail2banTabs v-model="activeTab" :tabs="tabItems" />
 
-    <PageLoader v-if="loading" label="Loading Fail2ban…" />
-
-    <template v-else>
-      <!-- Overview -->
-      <div v-show="activeTab === 'overview'" class="tab-panel">
-        <div class="card status-card">
+    <!-- Overview -->
+    <div v-show="activeTab === 'overview'" class="tab-panel">
+      <div class="card status-card">
+        <template v-if="loading">
+          <dl class="status-dl" aria-hidden="true">
+            <div v-for="n in 6" :key="n">
+              <span class="skeleton skeleton-line-sm" style="width: 3rem; margin-bottom: 0.35rem" />
+              <span class="skeleton skeleton-text-lg" style="width: 2.5rem" />
+            </div>
+          </dl>
+          <div class="actions" aria-hidden="true">
+            <span class="skeleton skeleton-text" style="width: 7rem; height: 1.75rem" />
+            <span class="skeleton skeleton-text" style="width: 5.5rem; height: 1.75rem" />
+            <span class="skeleton skeleton-text" style="width: 4.5rem; height: 1.75rem" />
+          </div>
+        </template>
+        <template v-else>
           <div v-if="showStatusPills" class="status-pills">
             <div class="pill" :class="statusPillClass">
               {{ statusPillLabel }}
@@ -102,116 +113,157 @@
           <p v-if="data?.installStatus === 'running'" class="install-hint muted">
             Installation runs in the background. This page refreshes every 5 seconds.
           </p>
-        </div>
+        </template>
+      </div>
 
-        <div class="card section">
-          <div class="section-head">
-            <h2 class="section-title">Recent Fail2ban events</h2>
-            <div class="events-filters">
-              <label class="field-inline">
-                <span class="label-sm">
-                  Count
-                  <span
-                    class="hint-icon"
-                    title="Allows displaying up to 350 results"
-                    aria-label="Allows displaying up to 350 results"
-                  >
-                    <AppIcon name="info" :size="12" />
-                  </span>
+      <div class="card section">
+        <div class="section-head">
+          <h2 class="section-title">Recent Fail2ban events</h2>
+          <div class="events-filters">
+            <label class="field-inline">
+              <span class="label-sm">
+                Count
+                <span
+                  class="hint-icon"
+                  title="Allows displaying up to 350 results"
+                  aria-label="Allows displaying up to 350 results"
+                >
+                  <AppIcon name="info" :size="12" />
                 </span>
-                <select v-model.number="eventsLimit" class="select select-sm">
-                  <option :value="25">25</option>
-                  <option :value="50">50</option>
-                  <option :value="100">100</option>
-                  <option :value="200">200</option>
-                  <option :value="350">350</option>
-                </select>
-              </label>
-              <label class="field-inline">
-                <span class="label-sm">Date</span>
-                <select v-model="eventsDateRange" class="select select-sm">
-                  <option value="all">All</option>
-                  <option value="today">Today</option>
-                  <option value="7d">7 days</option>
-                  <option value="30d">30 days</option>
-                </select>
-              </label>
-              <label class="field-inline">
-                <span class="label-sm">IP</span>
-                <input
-                  v-model.trim="eventsIpFilter"
-                  type="search"
-                  class="input input-sm events-ip"
-                  placeholder="Filter IP…"
-                />
-              </label>
-            </div>
+              </span>
+              <select v-model.number="eventsLimit" class="select select-sm">
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+                <option :value="200">200</option>
+                <option :value="350">350</option>
+              </select>
+            </label>
+            <label class="field-inline">
+              <span class="label-sm">Date</span>
+              <select v-model="eventsDateRange" class="select select-sm">
+                <option value="all">All</option>
+                <option value="today">Today</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+              </select>
+            </label>
+            <label class="field-inline">
+              <span class="label-sm">IP</span>
+              <input
+                v-model.trim="eventsIpFilter"
+                type="search"
+                class="input input-sm events-ip"
+                placeholder="Filter IP…"
+              />
+            </label>
           </div>
-          <PageLoader v-if="eventsPending" label="Loading events…" />
-          <ul v-else-if="recentEvents.length" class="events-list">
-            <li v-for="ev in recentEvents" :key="ev.id">
-              <span class="ev-time">{{ formatTime(ev.at) }}</span>
-              <span>{{ ev.ip || '—' }}</span>
-              <span class="muted">{{ ev.detail || '' }}</span>
-            </li>
-          </ul>
-          <p v-else class="muted">
-            {{
-              eventsIpFilter || eventsDateRange !== 'all'
-                ? 'No events match the current filters.'
-                : 'No Fail2ban events recorded yet.'
-            }}
-          </p>
+        </div>
+        <div v-if="eventsPending" aria-hidden="true">
+          <div v-for="n in 5" :key="n" class="skeleton-row" style="padding: 0.35rem 0; margin-bottom: 0">
+            <span class="skeleton skeleton-line" style="width: 8rem" />
+            <span class="skeleton skeleton-line" style="width: 6rem" />
+            <span class="skeleton skeleton-line" style="width: 40%" />
+          </div>
+        </div>
+        <ul v-else-if="recentEvents.length" class="events-list">
+          <li v-for="ev in recentEvents" :key="ev.id">
+            <span class="ev-time">{{ formatTime(ev.at) }}</span>
+            <span>{{ ev.ip || '—' }}</span>
+            <span class="muted">{{ ev.detail || '' }}</span>
+          </li>
+        </ul>
+        <p v-else class="muted">
+          {{
+            eventsIpFilter || eventsDateRange !== 'all'
+              ? 'No events match the current filters.'
+              : 'No Fail2ban events recorded yet.'
+          }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Jails & Settings -->
+    <div v-show="activeTab === 'jails'" class="tab-panel">
+      <div v-if="!isInstalled && !loading" class="card muted">Install Fail2ban first.</div>
+      <div v-else-if="jailsError" class="card muted warn">{{ jailsError }}</div>
+      <div
+        v-else-if="loading || jailsLoading || !jailsLoaded"
+        class="card"
+        aria-hidden="true"
+      >
+        <span class="skeleton skeleton-line" style="width: 30%; margin-bottom: 1rem" />
+        <span class="skeleton skeleton-block" style="height: 3.5rem; margin-bottom: 1rem" />
+        <div class="skeleton-row">
+          <span class="skeleton skeleton-line" style="width: 35%" />
+          <span class="skeleton skeleton-line" style="width: 20%" />
+        </div>
+        <div class="skeleton-row">
+          <span class="skeleton skeleton-line" style="width: 40%" />
+          <span class="skeleton skeleton-line" style="width: 18%" />
+        </div>
+        <div class="skeleton-row">
+          <span class="skeleton skeleton-line" style="width: 28%" />
+          <span class="skeleton skeleton-line" style="width: 22%" />
+        </div>
+        <span class="skeleton skeleton-block" style="height: 5rem; margin-top: 0.5rem" />
+      </div>
+      <Fail2banJailForm
+        v-else
+        :settings="data?.settings ?? { ignoreip: ['127.0.0.1/8', '::1'], jails: {} }"
+        :jails="jailsForForm"
+        :installed="!!data?.installed"
+        :client-ip="data?.clientIp"
+        :saving="saveBusy"
+        :on-save="onSaveSettings"
+        @reset-jail="onResetJail"
+      />
+    </div>
+
+    <!-- Banned IPs -->
+    <div v-show="activeTab === 'banned'" class="tab-panel">
+      <div v-if="!isInstalled && !loading" class="card muted">Install Fail2ban first.</div>
+      <div v-else-if="!bannedLoaded && bannedError" class="card muted warn">{{ bannedError }}</div>
+      <div
+        v-else-if="loading || bannedLoading || !bannedLoaded"
+        class="card"
+        aria-hidden="true"
+      >
+        <div v-for="n in 6" :key="n" class="skeleton-row" style="padding: 0.4rem 0; margin-bottom: 0">
+          <span class="skeleton skeleton-line" style="width: 22%" />
+          <span class="skeleton skeleton-line" style="width: 18%" />
+          <span class="skeleton skeleton-line" style="width: 14%" />
+          <span class="skeleton skeleton-line" style="width: 12%" />
         </div>
       </div>
+      <Fail2banBannedTable
+        v-else-if="bannedLoaded"
+        :jails="bannedJails"
+        :banned-ips="bannedIpsList"
+        :ip-geo="bannedIpGeo"
+        :geoip="bannedGeoip"
+        :sync-busy="syncGeoBusy"
+        :refreshing="bannedLoading"
+        @unban="unban"
+        @sync-geoip="onSyncGeoip"
+        @refresh="loadBanned(true)"
+      />
+    </div>
 
-      <!-- Jails & Settings -->
-      <div v-show="activeTab === 'jails'" class="tab-panel">
-        <div v-if="!isInstalled" class="card muted">Install Fail2ban first.</div>
-        <PageLoader v-else-if="jailsLoading || !jailsLoaded" label="Loading jails…" />
-        <div v-else-if="jailsError" class="card muted warn">{{ jailsError }}</div>
-        <Fail2banJailForm
-          v-else
-          :settings="data.settings ?? { ignoreip: ['127.0.0.1/8', '::1'], jails: {} }"
-          :jails="jailsForForm"
-          :installed="!!data?.installed"
-          :client-ip="data?.clientIp"
-          :saving="saveBusy"
-          :on-save="onSaveSettings"
-          @reset-jail="onResetJail"
-        />
-      </div>
+    <!-- Logs -->
+    <div v-show="activeTab === 'logs'" class="tab-panel">
+      <div v-if="!data?.installed && !loading" class="card muted">Install Fail2ban first.</div>
+      <Fail2banLogViewer
+        v-else-if="data?.installed"
+        :installed="!!data?.installed"
+        :active="!!data?.active"
+      />
+    </div>
 
-      <!-- Banned IPs -->
-      <div v-show="activeTab === 'banned'" class="tab-panel">
-        <div v-if="!isInstalled" class="card muted">Install Fail2ban first.</div>
-        <PageLoader v-else-if="!bannedLoaded && bannedLoading" label="Loading banned IPs…" />
-        <div v-else-if="!bannedLoaded && bannedError" class="card muted warn">{{ bannedError }}</div>
-        <Fail2banBannedTable
-          v-else-if="bannedLoaded"
-          :jails="bannedJails"
-          :banned-ips="bannedIpsList"
-          :ip-geo="bannedIpGeo"
-          :geoip="bannedGeoip"
-          :sync-busy="syncGeoBusy"
-          :refreshing="bannedLoading"
-          @unban="unban"
-          @sync-geoip="onSyncGeoip"
-          @refresh="loadBanned(true)"
-        />
-      </div>
-
-      <!-- Logs -->
-      <div v-show="activeTab === 'logs'" class="tab-panel">
-        <div v-if="!data?.installed" class="card muted">Install Fail2ban first.</div>
-        <Fail2banLogViewer v-else :installed="!!data?.installed" :active="!!data?.active" />
-      </div>
-
-      <!-- Guide -->
-      <div v-show="activeTab === 'guide'" class="tab-panel">
-        <Fail2banGuide />
-      </div>
-    </template>
+    <!-- Guide -->
+    <div v-show="activeTab === 'guide'" class="tab-panel">
+      <Fail2banGuide />
+    </div>
   </div>
 </template>
 
@@ -413,7 +465,10 @@ function invalidateTabData() {
 }
 
 async function loadSummary(silent = false) {
-  if (!silent) refreshBusy.value = true
+  if (!silent) {
+    loading.value = true
+    refreshBusy.value = true
+  }
   const prev = data.value
   try {
     const res = await $fetch<Fail2banSummary>('/api/security/fail2ban')

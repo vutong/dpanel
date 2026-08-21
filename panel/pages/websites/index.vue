@@ -7,7 +7,32 @@
 
     <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-    <PageLoader v-if="pending" label="Loading websites…" />
+    <div v-if="listLoading" class="card table-wrap" aria-busy="true">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Runtime</th>
+            <th>Status</th>
+            <th>GitHub</th>
+            <th class="created-col">Created</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="n in 5" :key="n" aria-hidden="true">
+            <td><span class="skeleton skeleton-line" style="width: 70%" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 3.5rem" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 3.25rem" /></td>
+            <td><span class="skeleton skeleton-line" style="width: 55%" /></td>
+            <td class="created-col"><span class="skeleton skeleton-text" style="width: 5rem" /></td>
+            <td class="col-actions">
+              <span class="skeleton skeleton-text" style="width: 4.5rem; margin-left: auto" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div v-else-if="!sites.length" class="card muted">No websites yet. Create your first site.</div>
     <div v-else class="card table-wrap">
       <table class="table">
@@ -87,6 +112,7 @@ type Site = {
 
 const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
+const listLoading = computed(() => pending.value)
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 

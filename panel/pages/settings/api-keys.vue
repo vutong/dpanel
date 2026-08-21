@@ -11,7 +11,30 @@
       <code>.env</code>.
     </p>
 
-    <PageLoader v-if="pending" label="Loading API keys…" />
+    <div v-if="listLoading" class="card table-wrap" aria-busy="true">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>API Key</th>
+            <th>API Secret</th>
+            <th>API Label</th>
+            <th>Permission</th>
+            <th class="col-actions">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="n in 4" :key="n" aria-hidden="true">
+            <td><span class="skeleton skeleton-line" style="width: 65%" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 5rem" /></td>
+            <td><span class="skeleton skeleton-line" style="width: 40%" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 4.5rem" /></td>
+            <td class="col-actions">
+              <span class="skeleton skeleton-text" style="width: 2.5rem; margin-left: auto" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div v-else-if="!keys.length" class="card muted">
       No API keys yet. Create one before apps can sync custom domains or check host availability.
     </div>
@@ -176,6 +199,7 @@ type CreatedPayload = ApiKeyRow & { secret: string }
 
 const { data, pending, refresh } = useFetch<{ keys: ApiKeyRow[] }>('/api/api-keys')
 const keys = computed(() => data.value?.keys ?? [])
+const listLoading = computed(() => pending.value)
 
 const revealed = reactive<Record<string, boolean>>({})
 const editingId = ref<string | null>(null)

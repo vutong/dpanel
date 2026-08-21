@@ -14,7 +14,28 @@
       </button>
     </div>
 
-    <PageLoader v-if="loading && !scans.length" label="Loading scan history…" />
+    <div v-if="loading" class="card table-wrap" aria-busy="true">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Target</th>
+            <th>Status</th>
+            <th>Infected</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="n in 5" :key="n" aria-hidden="true">
+            <td><span class="skeleton skeleton-line" style="width: 70%" /></td>
+            <td><span class="skeleton skeleton-line" style="width: 55%" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 4rem" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 2rem" /></td>
+            <td><span class="skeleton skeleton-text" style="width: 2.5rem; margin-left: auto" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <div v-else-if="!scans.length" class="card muted empty-card">
       No scans recorded yet. Run a scan from the <strong>Scan</strong> tab or a website page.

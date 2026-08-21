@@ -10,12 +10,23 @@
 
     <ClamavTabs v-model="activeTab" :tabs="tabItems" />
 
-    <PageLoader v-if="loading" label="Loading ClamAV…" />
-
-    <template v-else>
-      <!-- Overview -->
-      <div v-show="activeTab === 'overview'" class="tab-panel">
-        <div class="card status-card">
+    <!-- Overview -->
+    <div v-show="activeTab === 'overview'" class="tab-panel">
+      <div class="card status-card">
+        <template v-if="loading">
+          <dl class="status-dl" aria-hidden="true">
+            <div v-for="n in 5" :key="n">
+              <span class="skeleton skeleton-line-sm" style="width: 3rem; margin-bottom: 0.35rem" />
+              <span class="skeleton skeleton-text-lg" style="width: 2.5rem" />
+            </div>
+          </dl>
+          <div class="actions" aria-hidden="true">
+            <span class="skeleton skeleton-text" style="width: 7rem; height: 1.75rem" />
+            <span class="skeleton skeleton-text" style="width: 6rem; height: 1.75rem" />
+            <span class="skeleton skeleton-text" style="width: 4.5rem; height: 1.75rem" />
+          </div>
+        </template>
+        <template v-else>
           <div v-if="showStatusPills" class="status-pills">
             <div
               v-if="!data?.installed || data?.ok === false"
@@ -102,114 +113,120 @@
             Installation runs in the background (signature download may take several minutes). This page
             refreshes every 5 seconds.
           </p>
-        </div>
-
-        <div class="card section">
-          <div class="section-head">
-            <h2 class="section-title">Recent ClamAV events</h2>
-            <div class="events-filters">
-              <label class="field-inline">
-                <span class="label-sm">
-                  Count
-                  <span
-                    class="hint-icon"
-                    title="Allows displaying up to 350 results"
-                    aria-label="Allows displaying up to 350 results"
-                  >
-                    <AppIcon name="info" :size="12" />
-                  </span>
-                </span>
-                <select v-model.number="eventsLimit" class="select select-sm">
-                  <option :value="25">25</option>
-                  <option :value="50">50</option>
-                  <option :value="100">100</option>
-                  <option :value="200">200</option>
-                  <option :value="350">350</option>
-                </select>
-              </label>
-              <label class="field-inline">
-                <span class="label-sm">Date</span>
-                <select v-model="eventsDateRange" class="select select-sm">
-                  <option value="all">All</option>
-                  <option value="today">Today</option>
-                  <option value="7d">7 days</option>
-                  <option value="30d">30 days</option>
-                </select>
-              </label>
-              <label class="field-inline">
-                <span class="label-sm">Website</span>
-                <select v-model="eventsWebsiteFilter" class="select select-sm events-website">
-                  <option value="">All</option>
-                  <option v-for="s in sites" :key="s.domain" :value="s.domain">
-                    {{ s.domain }}
-                  </option>
-                </select>
-              </label>
-            </div>
-          </div>
-          <PageLoader v-if="eventsPending" label="Loading events…" />
-          <ul v-else-if="recentEvents.length" class="events-list">
-            <li v-for="ev in recentEvents" :key="ev.id">
-              <span class="ev-time">{{ formatTime(ev.at) }}</span>
-              <span>{{ ev.domain || '—' }}</span>
-              <code v-if="ev.path">{{ ev.path }}</code>
-            </li>
-          </ul>
-          <p v-else class="muted">
-            {{
-              eventsWebsiteFilter || eventsDateRange !== 'all'
-                ? 'No events match the current filters.'
-                : 'No ClamAV events recorded yet.'
-            }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Scan -->
-      <div v-show="activeTab === 'scan'" class="tab-panel">
-        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
-        <ClamavScanPanel
-          v-else-if="activeTab === 'scan'"
-          :installed="!!data?.installed"
-          :sites="sites"
-          :scan-locked="scanLocked"
-          :active-target="activeScan?.target"
-          @open-scan="openScanModal"
-        />
-        <SiteClamScanModal
-          :open="scanModalOpen"
-          :domain="scanModalDomain"
-          @close="scanModalOpen = false"
-          @started="onScanModalStarted"
-          @completed="onScanModalCompleted"
-        />
-      </div>
-
-      <!-- Results -->
-      <div v-show="activeTab === 'results'" class="tab-panel">
-        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
-        <template v-else-if="activeTab === 'results'">
-          <ClamavScanHistory
-            ref="historyRef"
-            :sites="sites"
-            :selected-id="selectedScanId"
-            @select="onSelectScan"
-          />
-          <ClamavResultsPanel :scan-id="selectedScanId" />
         </template>
       </div>
 
-      <!-- Logs -->
-      <div v-show="activeTab === 'logs'" class="tab-panel">
-        <div v-if="!isInstalled" class="card muted">Install ClamAV first.</div>
-        <ClamavLogViewer v-else-if="activeTab === 'logs'" :installed="!!data?.installed" />
+      <div class="card section">
+        <div class="section-head">
+          <h2 class="section-title">Recent ClamAV events</h2>
+          <div class="events-filters">
+            <label class="field-inline">
+              <span class="label-sm">
+                Count
+                <span
+                  class="hint-icon"
+                  title="Allows displaying up to 350 results"
+                  aria-label="Allows displaying up to 350 results"
+                >
+                  <AppIcon name="info" :size="12" />
+                </span>
+              </span>
+              <select v-model.number="eventsLimit" class="select select-sm">
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+                <option :value="200">200</option>
+                <option :value="350">350</option>
+              </select>
+            </label>
+            <label class="field-inline">
+              <span class="label-sm">Date</span>
+              <select v-model="eventsDateRange" class="select select-sm">
+                <option value="all">All</option>
+                <option value="today">Today</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+              </select>
+            </label>
+            <label class="field-inline">
+              <span class="label-sm">Website</span>
+              <select v-model="eventsWebsiteFilter" class="select select-sm events-website">
+                <option value="">All</option>
+                <option v-for="s in sites" :key="s.domain" :value="s.domain">
+                  {{ s.domain }}
+                </option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div v-if="eventsPending" aria-hidden="true">
+          <div v-for="n in 5" :key="n" class="skeleton-row" style="padding: 0.35rem 0; margin-bottom: 0">
+            <span class="skeleton skeleton-line" style="width: 8rem" />
+            <span class="skeleton skeleton-line" style="width: 10rem" />
+            <span class="skeleton skeleton-line" style="width: 35%" />
+          </div>
+        </div>
+        <ul v-else-if="recentEvents.length" class="events-list">
+          <li v-for="ev in recentEvents" :key="ev.id">
+            <span class="ev-time">{{ formatTime(ev.at) }}</span>
+            <span>{{ ev.domain || '—' }}</span>
+            <code v-if="ev.path">{{ ev.path }}</code>
+          </li>
+        </ul>
+        <p v-else class="muted">
+          {{
+            eventsWebsiteFilter || eventsDateRange !== 'all'
+              ? 'No events match the current filters.'
+              : 'No ClamAV events recorded yet.'
+          }}
+        </p>
       </div>
+    </div>
 
-      <!-- Guide -->
-      <div v-show="activeTab === 'guide'" class="tab-panel">
-        <ClamavGuide />
-      </div>
-    </template>
+    <!-- Scan -->
+    <div v-show="activeTab === 'scan'" class="tab-panel">
+      <div v-if="!isInstalled && !loading" class="card muted">Install ClamAV first.</div>
+      <ClamavScanPanel
+        v-else-if="isInstalled && activeTab === 'scan'"
+        :installed="!!data?.installed"
+        :sites="sites"
+        :scan-locked="scanLocked"
+        :active-target="activeScan?.target"
+        @open-scan="openScanModal"
+      />
+      <SiteClamScanModal
+        :open="scanModalOpen"
+        :domain="scanModalDomain"
+        @close="scanModalOpen = false"
+        @started="onScanModalStarted"
+        @completed="onScanModalCompleted"
+      />
+    </div>
+
+    <!-- Results -->
+    <div v-show="activeTab === 'results'" class="tab-panel">
+      <div v-if="!isInstalled && !loading" class="card muted">Install ClamAV first.</div>
+      <template v-else-if="isInstalled && activeTab === 'results'">
+        <ClamavScanHistory
+          ref="historyRef"
+          :sites="sites"
+          :selected-id="selectedScanId"
+          @select="onSelectScan"
+        />
+        <ClamavResultsPanel :scan-id="selectedScanId" />
+      </template>
+    </div>
+
+    <!-- Logs -->
+    <div v-show="activeTab === 'logs'" class="tab-panel">
+      <div v-if="!isInstalled && !loading" class="card muted">Install ClamAV first.</div>
+      <ClamavLogViewer v-else-if="isInstalled && activeTab === 'logs'" :installed="!!data?.installed" />
+    </div>
+
+    <!-- Guide -->
+    <div v-show="activeTab === 'guide'" class="tab-panel">
+      <ClamavGuide />
+    </div>
   </div>
 </template>
 
@@ -364,7 +381,10 @@ const { startPoll, resumePollIfRunning } = useSecurityInstallPoll({
 })
 
 async function loadSummary(silent = false) {
-  if (!silent) refreshBusy.value = true
+  if (!silent) {
+    loading.value = true
+    refreshBusy.value = true
+  }
   const prev = data.value
   try {
     const res = await $fetch<ClamData>('/api/security/clamav')

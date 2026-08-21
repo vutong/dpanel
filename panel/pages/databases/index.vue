@@ -5,7 +5,28 @@
       <NuxtLink to="/databases/create" class="btn btn-primary">+ Create database</NuxtLink>
     </div>
 
-    <PageLoader v-if="pending" label="Loading databases…" />
+    <div v-if="listLoading" class="card table-wrap" aria-busy="true">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Database</th>
+            <th>User</th>
+            <th>Website</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="n in 5" :key="n" aria-hidden="true">
+            <td><span class="skeleton skeleton-line" style="width: 55%" /></td>
+            <td><span class="skeleton skeleton-line" style="width: 45%" /></td>
+            <td><span class="skeleton skeleton-line" style="width: 60%" /></td>
+            <td class="col-actions">
+              <span class="skeleton skeleton-text" style="width: 3.5rem; margin-left: auto" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div v-else-if="!databases.length" class="card muted">
       No user databases yet.
       <NuxtLink to="/databases/create">Create a database</NuxtLink>
@@ -162,6 +183,7 @@ type DatabaseRow = {
 
 const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[] }>('/api/databases')
 const databases = computed(() => data.value?.databases ?? [])
+const listLoading = computed(() => pending.value)
 
 const modifyTarget = ref<DatabaseRow | null>(null)
 const modifyPhase = ref<'confirm' | 'done'>('confirm')

@@ -1,6 +1,13 @@
 <template>
   <div class="results">
-    <PageLoader v-if="loading" label="Loading results…" />
+    <div v-if="loading" class="card summary" aria-busy="true">
+      <dl class="meta" aria-hidden="true">
+        <div v-for="n in 4" :key="n">
+          <dt><span class="skeleton skeleton-line-sm" style="width: 3rem" /></dt>
+          <dd><span class="skeleton skeleton-line" style="width: 70%; margin-top: 0.35rem" /></dd>
+        </div>
+      </dl>
+    </div>
 
     <div v-else-if="!scan" class="card muted empty-card">
       Select a scan from the <strong>Results</strong> history, or run a new scan.

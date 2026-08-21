@@ -8,7 +8,14 @@
         </p>
       </header>
 
-      <PageLoader v-if="loading" label="Loading .env…" />
+      <div v-if="loading" class="field" aria-busy="true">
+        <span class="skeleton skeleton-block" style="height: 14rem" aria-hidden="true" />
+        <div class="skeleton-row" style="margin-top: 0.75rem" aria-hidden="true">
+          <span class="skeleton" style="width: 1rem; height: 1rem; border-radius: 3px" />
+          <span class="skeleton skeleton-line" style="width: 55%" />
+        </div>
+        <span class="skeleton skeleton-line" style="width: 85%; margin-top: 0.5rem" aria-hidden="true" />
+      </div>
       <template v-else>
         <p v-if="loadError" class="alert alert-error">{{ loadError }}</p>
         <div v-else class="field">
@@ -60,6 +67,7 @@ const emit = defineEmits<{
 
 const content = ref('')
 const loading = ref(false)
+const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const restartAfterSave = ref(true)
@@ -68,8 +76,6 @@ const fileExists = ref(false)
 async function loadEnv() {
   loading.value = true
   loadError.value = ''
-  content.value = ''
-  fileExists.value = false
   try {
     const res = await $fetch<{ content?: string; exists?: boolean }>(
       `/api/websites/${encodeURIComponent(props.domain)}/env`
@@ -81,6 +87,7 @@ async function loadEnv() {
     loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load .env'
   } finally {
     loading.value = false
+    loaded.value = true
   }
 }
 
@@ -118,7 +125,12 @@ function onCancel() {
 watch(
   () => [props.open, props.domain] as const,
   ([isOpen, domain]) => {
-    if (isOpen && domain) void loadEnv()
+    if (isOpen && domain) {
+      loaded.value = false
+      content.value = ''
+      fileExists.value = false
+      void loadEnv()
+    }
   },
   { immediate: true }
 )

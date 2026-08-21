@@ -9,7 +9,20 @@
         </p>
       </header>
 
-      <PageLoader v-if="loading" label="Loading…" />
+      <div v-if="loading" aria-busy="true">
+        <div class="usage-line" aria-hidden="true">
+          <span class="skeleton skeleton-line-sm" style="width: 6rem" />
+          <span class="skeleton skeleton-line" style="width: 40%" />
+        </div>
+        <div class="field" aria-hidden="true">
+          <span class="skeleton skeleton-line-sm" style="width: 5rem; margin-bottom: 0.4rem" />
+          <span class="skeleton skeleton-block" style="height: 2.25rem; margin-bottom: 0.85rem" />
+          <span class="skeleton skeleton-line-sm" style="width: 5.5rem; margin-bottom: 0.4rem" />
+          <span class="skeleton skeleton-block" style="height: 2.25rem; margin-bottom: 0.85rem" />
+          <span class="skeleton skeleton-line-sm" style="width: 5rem; margin-bottom: 0.4rem" />
+          <span class="skeleton skeleton-block" style="height: 2.25rem" />
+        </div>
+      </div>
       <template v-else>
         <p v-if="loadError" class="alert alert-error">{{ loadError }}</p>
         <template v-else>
@@ -76,6 +89,7 @@ const props = defineProps<{ open: boolean; domain: string }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const loading = ref(false)
+const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const cpuLimit = ref(0)
@@ -86,7 +100,10 @@ const appDirBytes = ref<number | null>(null)
 watch(
   () => [props.open, props.domain] as const,
   ([open, domain]) => {
-    if (open && domain) void load()
+    if (open && domain) {
+      loaded.value = false
+      void load()
+    }
   }
 )
 
@@ -108,6 +125,7 @@ async function load() {
     loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load resources'
   } finally {
     loading.value = false
+    loaded.value = true
   }
 }
 

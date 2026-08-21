@@ -32,14 +32,20 @@
       <span v-if="path" class="path muted">{{ path }}</span>
     </div>
 
-    <PageLoader v-if="loading && !lines.length" label="Loading logs…" />
+    <div v-if="loading" class="card log-box" aria-busy="true">
+      <div class="log-skel" aria-hidden="true">
+        <div v-for="n in 10" :key="n" class="skeleton-row" style="margin-bottom: 0.45rem">
+          <span class="skeleton skeleton-line" :style="{ width: `${55 + (n % 4) * 10}%` }" />
+        </div>
+      </div>
+    </div>
 
     <div v-else-if="warning" class="card muted warn">{{ warning }}</div>
 
     <div v-else class="card log-box">
-      <pre class="log-pre"><code v-for="(line, i) in lines" :key="i">{{ line }}
+      <pre v-if="lines.length" class="log-pre"><code v-for="(line, i) in lines" :key="i">{{ line }}
 </code></pre>
-      <p v-if="!lines.length" class="muted empty">No log lines.</p>
+      <p v-else class="muted empty">No log lines.</p>
     </div>
   </div>
 </template>
@@ -143,6 +149,10 @@ defineExpose({ load })
 .log-box {
   padding: 0;
   overflow: hidden;
+}
+
+.log-skel {
+  padding: 0.75rem 1rem;
 }
 
 .log-pre {

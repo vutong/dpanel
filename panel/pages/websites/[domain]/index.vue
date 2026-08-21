@@ -7,7 +7,34 @@
       </NuxtLink>
     </nav>
 
-    <PageLoader v-if="pending" label="Loading site…" />
+    <div v-if="siteLoading" class="site-skel" aria-busy="true">
+      <header class="site-header card" aria-hidden="true">
+        <div class="site-header-main">
+          <span class="skeleton skeleton-text-lg" style="width: 14rem; height: 1.5rem" />
+          <span class="skeleton skeleton-text" style="width: 3.5rem" />
+          <span class="skeleton skeleton-text" style="width: 3.25rem" />
+        </div>
+        <div class="skel-meta">
+          <span class="skeleton skeleton-line" style="width: 40%" />
+          <span class="skeleton skeleton-line" style="width: 55%" />
+        </div>
+      </header>
+      <div class="card section" aria-hidden="true">
+        <span class="skeleton skeleton-line" style="width: 30%; margin-bottom: 1rem" />
+        <span class="skeleton skeleton-block" style="height: 4.5rem" />
+      </div>
+      <div class="card section" aria-hidden="true">
+        <span class="skeleton skeleton-line" style="width: 25%; margin-bottom: 1rem" />
+        <div class="skeleton-row">
+          <span class="skeleton skeleton-line" style="width: 35%" />
+          <span class="skeleton skeleton-line" style="width: 20%" />
+        </div>
+        <div class="skeleton-row">
+          <span class="skeleton skeleton-line" style="width: 40%" />
+          <span class="skeleton skeleton-line" style="width: 18%" />
+        </div>
+      </div>
+    </div>
     <div v-else-if="loadError" class="alert alert-error">{{ loadError }}</div>
     <template v-else-if="site">
       <header class="site-header card">
@@ -551,6 +578,7 @@ const { data, pending, error, refresh } = await useFetch<{
 
 const site = computed(() => data.value?.site)
 const resources = computed(() => data.value?.resources)
+const siteLoading = computed(() => pending.value && !error.value)
 const loadError = computed(() => {
   if (!error.value) return ''
   const e = error.value as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -917,6 +945,15 @@ function confirmDelete() {
 <style scoped>
 .breadcrumb {
   margin-bottom: 1rem;
+}
+.site-skel .section {
+  margin-top: 1rem;
+}
+.skel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 .crumb-link {
   display: inline-flex;

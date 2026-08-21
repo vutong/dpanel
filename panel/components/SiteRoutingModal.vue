@@ -8,7 +8,20 @@
         </p>
       </header>
 
-      <PageLoader v-if="loading" label="Loading…" />
+      <div v-if="loading" class="routing-body" aria-busy="true">
+        <div class="field" aria-hidden="true">
+          <span class="skeleton skeleton-line-sm" style="width: 6rem; margin-bottom: 0.5rem" />
+          <span class="skeleton skeleton-block" style="height: 2.5rem; margin-bottom: 0.5rem" />
+          <span class="skeleton skeleton-line" style="width: 80%; margin-bottom: 0.75rem" />
+          <span class="skeleton skeleton-block" style="height: 4rem" />
+        </div>
+        <div class="block" aria-hidden="true">
+          <span class="skeleton skeleton-line" style="width: 40%; margin-bottom: 0.5rem" />
+          <span class="skeleton skeleton-line" style="width: 90%; margin-bottom: 0.35rem" />
+          <span class="skeleton skeleton-line" style="width: 75%; margin-bottom: 0.75rem" />
+          <span class="skeleton skeleton-block" style="height: 2.5rem" />
+        </div>
+      </div>
       <template v-else>
         <p v-if="loadError" class="alert alert-error">{{ loadError }}</p>
         <template v-else>
@@ -104,6 +117,7 @@ const emit = defineEmits<{
 
 const wildcardBase = ref('')
 const loading = ref(false)
+const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const serverIp = ref('')
@@ -128,8 +142,6 @@ const dnsTargetIp = computed(() => serverIp.value || 'Your VPS IP')
 async function loadRouting() {
   loading.value = true
   loadError.value = ''
-  wildcardBase.value = ''
-  serverIp.value = ''
   try {
     const res = await $fetch<{
       routing?: { wildcardBase?: string }
@@ -142,6 +154,7 @@ async function loadRouting() {
     loadError.value = err.data?.statusMessage || err.statusMessage || 'Could not load wildcard settings'
   } finally {
     loading.value = false
+    loaded.value = true
   }
 }
 
@@ -169,7 +182,12 @@ function onCancel() {
 watch(
   () => [props.open, props.domain] as const,
   ([isOpen, d]) => {
-    if (isOpen && d) loadRouting()
+    if (isOpen && d) {
+      loaded.value = false
+      wildcardBase.value = ''
+      serverIp.value = ''
+      void loadRouting()
+    }
   }
 )
 </script>
@@ -205,6 +223,12 @@ watch(
   font-size: 0.85rem;
   color: var(--muted, #64748b);
   line-height: 1.45;
+}
+
+.routing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .domain-readonly {

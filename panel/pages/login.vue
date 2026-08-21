@@ -1,68 +1,67 @@
 <template>
   <div class="login-page">
-    <PageLoader v-if="!ready" label="Loading…" class="login-loader" />
+    <div class="login-top">
+      <ThemeToggle />
+    </div>
 
-    <template v-else>
-      <div class="login-top">
-        <ThemeToggle />
+    <div class="login-card card">
+      <div class="login-brand">
+        <div class="login-logo">
+          <AppIcon name="dashboard" :size="28" />
+        </div>
+        <div>
+          <h1>dpanel</h1>
+          <p class="login-tagline">VPS control panel</p>
+        </div>
       </div>
 
-      <div class="login-card card">
-        <div class="login-brand">
-          <div class="login-logo">
-            <AppIcon name="dashboard" :size="28" />
-          </div>
-          <div>
-            <h1>dpanel</h1>
-            <p class="login-tagline">VPS control panel</p>
+      <p class="login-subtitle">Sign in to manage websites and MariaDB</p>
+
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+
+      <form class="login-form" @submit.prevent="submit">
+        <div class="field">
+          <label class="label" for="email">Email</label>
+          <div class="input-wrap">
+            <AppIcon name="mail" :size="18" class="input-icon" />
+            <input
+              id="email"
+              v-model="email"
+              class="input input-with-icon"
+              type="email"
+              required
+              autocomplete="username"
+              placeholder="admin@example.com"
+            />
           </div>
         </div>
-
-        <p class="login-subtitle">Sign in to manage websites and MariaDB</p>
-
-        <div v-if="error" class="alert alert-error">{{ error }}</div>
-
-        <form class="login-form" @submit.prevent="submit">
-          <div class="field">
-            <label class="label" for="email">Email</label>
-            <div class="input-wrap">
-              <AppIcon name="mail" :size="18" class="input-icon" />
-              <input
-                id="email"
-                v-model="email"
-                class="input input-with-icon"
-                type="email"
-                required
-                autocomplete="username"
-                placeholder="admin@example.com"
-              />
-            </div>
+        <div class="field">
+          <label class="label" for="password">Password</label>
+          <div class="input-wrap">
+            <AppIcon name="lock" :size="18" class="input-icon" />
+            <input
+              id="password"
+              v-model="password"
+              class="input input-with-icon"
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="••••••••"
+            />
           </div>
-          <div class="field">
-            <label class="label" for="password">Password</label>
-            <div class="input-wrap">
-              <AppIcon name="lock" :size="18" class="input-icon" />
-              <input
-                id="password"
-                v-model="password"
-                class="input input-with-icon"
-                type="password"
-                required
-                autocomplete="current-password"
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-          <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
-            <span v-if="loading" class="login-btn-inner">
-              <span class="login-btn-spinner" aria-hidden="true" />
-              Signing in…
-            </span>
-            <span v-else>Sign in</span>
-          </button>
-        </form>
-      </div>
-    </template>
+        </div>
+        <button class="btn btn-primary login-submit" type="submit" :disabled="loading || checking">
+          <span v-if="loading" class="login-btn-inner">
+            <span class="login-btn-spinner" aria-hidden="true" />
+            Signing in…
+          </span>
+          <span v-else-if="checking" class="login-btn-inner">
+            <span class="skeleton skeleton-text" style="width: 4rem; background: rgba(255,255,255,0.35)" aria-hidden="true" />
+          </span>
+          <span v-else>Sign in</span>
+        </button>
+      </form>
+    </div>
   </div>
 </template>
 
@@ -70,11 +69,11 @@
 definePageMeta({ layout: false })
 
 const { initTheme } = useTheme()
-const ready = ref(false)
 const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const checking = ref(true)
 
 onMounted(async () => {
   initTheme()
@@ -87,7 +86,7 @@ onMounted(async () => {
   } catch {
     /* show login form */
   }
-  ready.value = true
+  checking.value = false
 })
 
 async function submit() {
@@ -119,10 +118,6 @@ async function submit() {
   background: var(--bg);
   background-image: var(--login-glow);
   position: relative;
-}
-
-.login-loader {
-  min-height: 100vh;
 }
 
 .login-page::before {

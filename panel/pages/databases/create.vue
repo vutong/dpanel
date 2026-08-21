@@ -1,13 +1,14 @@
 <template>
   <div>
-    <PageLoader v-if="pageLoading" label="Loading…" />
-    <template v-else>
     <h1>Create database</h1>
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
     <form class="card form" @submit.prevent="submit">
       <div class="field">
         <label class="label">Website</label>
-        <select v-model="siteDomain" class="select" required>
+        <template v-if="sitesLoading">
+          <span class="skeleton skeleton-block" style="height: 2rem" aria-hidden="true" />
+        </template>
+        <select v-else v-model="siteDomain" class="select" required>
           <option disabled value="">Select a website…</option>
           <option v-for="s in sites" :key="s.domain" :value="s.domain">
             {{ s.domain }} ({{ runtimeLabel(s.runtime) }})
@@ -15,7 +16,7 @@
         </select>
         <p class="hint">
           MariaDB works with <strong>Node SSR</strong> and <strong>PHP</strong> sites.
-          <template v-if="!sites.length">
+          <template v-if="!sitesLoading && !sites.length">
             No websites yet —
             <NuxtLink to="/websites/create">create a website</NuxtLink>
             first.
@@ -73,18 +74,17 @@
       <p><strong>Password:</strong> <code>{{ created.password }}</code></p>
       <p class="muted">Save these credentials — the password will not be shown again after you leave this page.</p>
     </div>
-    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-const { loading: pageLoading } = usePageInit()
 const route = useRoute()
 
-const { data: sitesData } = await useFetch<{ sites: { domain: string; runtime: string }[] }>(
-  '/api/websites'
-)
+const { data: sitesData, pending: sitesPending } = await useFetch<{
+  sites: { domain: string; runtime: string }[]
+}>('/api/websites')
 const sites = computed(() => sitesData.value?.sites ?? [])
+const sitesLoading = computed(() => sitesPending.value)
 
 const preset = String(route.query.site || '').trim().toLowerCase()
 const siteDomain = ref(

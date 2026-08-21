@@ -1,7 +1,5 @@
 <template>
   <div>
-    <PageLoader v-if="pageLoading" label="Loading…" />
-    <template v-else>
     <h1>Create website</h1>
     <p class="muted">Enter domain and runtime. Optionally clone application code from GitHub.</p>
     <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
@@ -63,7 +61,6 @@
         {{ submitting ? 'Creating...' : 'Create & deploy' }}
       </button>
     </form>
-    </template>
 
     <SiteOpStreamModal
       :open="streamOpen"
@@ -76,7 +73,6 @@
 </template>
 
 <script setup lang="ts">
-const { loading: pageLoading } = usePageInit()
 const domain = ref('')
 const runtime = ref('')
 const cloneGithub = ref(false)
