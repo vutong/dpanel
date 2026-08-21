@@ -5,15 +5,21 @@
 
     <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
-    <PageLoader v-if="loading" label="Loading dashboard…" />
-    <div v-else class="grid stat-grid">
+    <div class="grid stat-grid">
       <NuxtLink to="/websites" class="card stat-card">
         <div class="stat-icon stat-icon-node">
           <AppIcon name="cpu" :size="22" />
         </div>
         <div>
           <h2>NODE</h2>
-          <p class="stat-value">{{ nodeCount }} <span class="stat-unit">site(s)</span></p>
+          <p class="stat-value">
+            <template v-if="summaryPending">
+              <span class="stat-placeholder" aria-hidden="true">—</span>
+            </template>
+            <template v-else>
+              {{ nodeCount }} <span class="stat-unit">site(s)</span>
+            </template>
+          </p>
         </div>
       </NuxtLink>
       <NuxtLink to="/websites" class="card stat-card">
@@ -22,7 +28,14 @@
         </div>
         <div>
           <h2>PHP</h2>
-          <p class="stat-value">{{ phpCount }} <span class="stat-unit">site(s)</span></p>
+          <p class="stat-value">
+            <template v-if="summaryPending">
+              <span class="stat-placeholder" aria-hidden="true">—</span>
+            </template>
+            <template v-else>
+              {{ phpCount }} <span class="stat-unit">site(s)</span>
+            </template>
+          </p>
         </div>
       </NuxtLink>
       <NuxtLink to="/databases" class="card stat-card">
@@ -31,7 +44,14 @@
         </div>
         <div>
           <h2>MariaDB</h2>
-          <p class="stat-value">{{ dbCount }} <span class="stat-unit">database(s)</span></p>
+          <p class="stat-value">
+            <template v-if="summaryPending">
+              <span class="stat-placeholder" aria-hidden="true">—</span>
+            </template>
+            <template v-else>
+              {{ dbCount }} <span class="stat-unit">database(s)</span>
+            </template>
+          </p>
         </div>
       </NuxtLink>
       <NuxtLink to="/settings/api-keys" class="card stat-card">
@@ -40,12 +60,22 @@
         </div>
         <div>
           <h2>API Keys</h2>
-          <p class="stat-value">{{ apiKeyCount }} <span class="stat-unit">key(s)</span></p>
+          <p class="stat-value">
+            <template v-if="summaryPending">
+              <span class="stat-placeholder" aria-hidden="true">—</span>
+            </template>
+            <template v-else>
+              {{ apiKeyCount }} <span class="stat-unit">key(s)</span>
+            </template>
+          </p>
         </div>
       </NuxtLink>
     </div>
 
-    <DockerStatsPanel />
+    <div v-if="!statsReady" class="card docker-stats-placeholder">
+      <p class="muted">Loading host stats…</p>
+    </div>
+    <DockerStatsPanel v-else />
 
     <footer class="dashboard-footer">
       <button
@@ -86,20 +116,24 @@
 </template>
 
 <script setup lang="ts">
-const { data: sites, pending: sitesPending } = useFetch('/api/websites')
-const { data: dbs, pending: dbsPending } = useFetch('/api/databases')
-const { data: apiKeys, pending: keysPending } = useFetch('/api/api-keys')
-const loading = computed(() => sitesPending.value || dbsPending.value || keysPending.value)
+type DashboardSummary = {
+  nodeSites: number
+  phpSites: number
+  databases: number
+  apiKeys: number
+}
 
-const siteList = computed(() => sites.value?.sites ?? [])
-const nodeCount = computed(
-  () => siteList.value.filter((s: { runtime?: string }) => s.runtime === 'node').length
+const { data: summary, pending: summaryPending } = useFetch<DashboardSummary>(
+  '/api/dashboard/summary',
+  { key: 'dashboard-summary' }
 )
-const phpCount = computed(
-  () => siteList.value.filter((s: { runtime?: string }) => s.runtime === 'php').length
-)
-const dbCount = computed(() => dbs.value?.databases?.length ?? 0)
-const apiKeyCount = computed(() => apiKeys.value?.keys?.length ?? 0)
+
+const nodeCount = computed(() => summary.value?.nodeSites ?? 0)
+const phpCount = computed(() => summary.value?.phpSites ?? 0)
+const dbCount = computed(() => summary.value?.databases ?? 0)
+const apiKeyCount = computed(() => summary.value?.apiKeys ?? 0)
+
+const statsReady = ref(false)
 
 const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
 
@@ -110,11 +144,24 @@ const cleanBusy = ref(false)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 let rebootPollTimer: ReturnType<typeof setTimeout> | null = null
+let statsIdleHandle: number | null = null
+let statsFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearRebootPoll() {
   if (rebootPollTimer) {
     clearTimeout(rebootPollTimer)
     rebootPollTimer = null
+  }
+}
+
+function scheduleStatsPanel() {
+  const reveal = () => {
+    statsReady.value = true
+  }
+  if (import.meta.client && typeof window.requestIdleCallback === 'function') {
+    statsIdleHandle = window.requestIdleCallback(() => reveal(), { timeout: 800 })
+  } else {
+    statsFallbackTimer = setTimeout(reveal, 100)
   }
 }
 
@@ -234,6 +281,7 @@ function onRebootClick() {
 
 onMounted(() => {
   if (!import.meta.client) return
+  scheduleStatsPanel()
   if (sessionStorage.getItem(REBOOT_WAIT_KEY) === '1') {
     rebooting.value = true
     startRebootWatch()
@@ -250,6 +298,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearRebootPoll()
+  if (statsIdleHandle != null && typeof window.cancelIdleCallback === 'function') {
+    window.cancelIdleCallback(statsIdleHandle)
+  }
+  if (statsFallbackTimer) clearTimeout(statsFallbackTimer)
 })
 </script>
 
@@ -332,12 +384,29 @@ onUnmounted(() => {
   font-size: 1.35rem;
   font-weight: 700;
   color: var(--text);
+  min-height: 1.6em;
+}
+
+.stat-placeholder {
+  color: var(--muted);
+  font-weight: 500;
+  opacity: 0.55;
 }
 
 .stat-unit {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--muted);
+}
+
+.docker-stats-placeholder {
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 0;
+}
+
+.docker-stats-placeholder .muted {
+  margin: 0;
+  font-size: var(--text-sm);
 }
 
 .dashboard-footer {

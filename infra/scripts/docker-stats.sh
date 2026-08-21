@@ -220,26 +220,57 @@ try:
 except OSError:
     pass
 
-disk_breakdown = []
-for label, sub in [
-    ("Applications", "apps"),
-    ("Data", "data"),
-    ("Logs", "logs"),
-    ("Infra", "infra"),
-    ("Panel", "panel"),
-]:
-    path = os.path.join(stack_root, sub)
-    if not os.path.isdir(path):
-        disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
-        continue
-    try:
-        out = subprocess.check_output(["du", "-sb", path], text=True, timeout=120, stderr=subprocess.DEVNULL)
-        nbytes = int(out.split()[0])
-        disk_breakdown.append({"label": label, "path": sub, "bytes": nbytes})
-    except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
-        disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
+# `du -sb` over apps/data is slow — cache breakdown briefly (poll is ~4s).
+DISK_BREAKDOWN_TTL_SEC = 90
+breakdown_cache_path = os.path.join(stack_root, "data", "panel", "disk-breakdown-cache.json")
 
-disk_breakdown.sort(key=lambda x: x["bytes"], reverse=True)
+def load_disk_breakdown_cache():
+    try:
+        with open(breakdown_cache_path, encoding="utf-8") as f:
+            cached = json.load(f)
+        if time.time() - float(cached.get("t", 0)) < DISK_BREAKDOWN_TTL_SEC:
+            rows = cached.get("breakdown")
+            if isinstance(rows, list):
+                return rows
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
+
+def save_disk_breakdown_cache(rows):
+    try:
+        os.makedirs(os.path.dirname(breakdown_cache_path), exist_ok=True)
+        with open(breakdown_cache_path, "w", encoding="utf-8") as f:
+            json.dump({"t": time.time(), "breakdown": rows}, f)
+    except OSError:
+        pass
+
+disk_breakdown = load_disk_breakdown_cache()
+if disk_breakdown is None:
+    disk_breakdown = []
+    for label, sub in [
+        ("Applications", "apps"),
+        ("Data", "data"),
+        ("Logs", "logs"),
+        ("Infra", "infra"),
+        ("Panel", "panel"),
+    ]:
+        path = os.path.join(stack_root, sub)
+        if not os.path.isdir(path):
+            disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
+            continue
+        try:
+            out = subprocess.check_output(
+                ["du", "-sb", path], text=True, timeout=120, stderr=subprocess.DEVNULL
+            )
+            nbytes = int(out.split()[0])
+            disk_breakdown.append({"label": label, "path": sub, "bytes": nbytes})
+        except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
+            disk_breakdown.append({"label": label, "path": sub, "bytes": 0})
+
+    disk_breakdown.sort(key=lambda x: x["bytes"], reverse=True)
+    save_disk_breakdown_cache(disk_breakdown)
+else:
+    disk_breakdown = sorted(disk_breakdown, key=lambda x: x.get("bytes") or 0, reverse=True)
 
 storage = load_disk_storage()
 system_disk_used = system_disk_total = 0

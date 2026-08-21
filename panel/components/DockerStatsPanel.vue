@@ -402,7 +402,11 @@ function chartPoints(key: 'cpu' | 'mem'): string {
 const cpuPoints = computed(() => chartPoints('cpu'))
 const memPoints = computed(() => chartPoints('mem'))
 
+let pollInFlight = false
+
 async function poll() {
+  if (pollInFlight) return
+  pollInFlight = true
   try {
     const payload = await $fetch<StatsPayload>('/api/docker/stats')
     data.value = payload
@@ -414,6 +418,8 @@ async function poll() {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     const msg = err.data?.statusMessage || err.statusMessage || 'Could not load stats'
     if (!data.value) fetchError.value = msg
+  } finally {
+    pollInFlight = false
   }
 }
 
