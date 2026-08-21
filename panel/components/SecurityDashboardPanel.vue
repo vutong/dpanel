@@ -1,8 +1,21 @@
 <template>
-  <aside class="host-metrics security-metrics" aria-label="Security">
+  <aside class="host-metrics security-metrics" aria-label="Security" :aria-busy="pending">
     <h3 class="metrics-title">Security</h3>
 
-    <PageLoader v-if="pending" label="Loading…" />
+    <template v-if="pending">
+      <div class="svc-list" aria-hidden="true">
+        <div v-for="n in 2" :key="n" class="svc-row">
+          <span class="skeleton skeleton-text" style="width: 4.5rem" />
+          <span class="skeleton skeleton-text" style="width: 3.25rem" />
+        </div>
+      </div>
+      <div class="f2b-stats skel-f2b" aria-hidden="true">
+        <div v-for="n in 3" :key="n">
+          <span class="skeleton skeleton-line-sm" style="width: 2.5rem; margin-bottom: 0.35rem" />
+          <span class="skeleton skeleton-text-lg" style="width: 1.75rem" />
+        </div>
+      </div>
+    </template>
 
     <template v-else>
       <div class="svc-list">
@@ -21,15 +34,30 @@
       <dl class="f2b-stats">
         <div>
           <dt>Jail(s)</dt>
-          <dd>{{ jailCount }}</dd>
+          <dd>
+            <template v-if="fail2banPending && !fail2ban">
+              <span class="skeleton skeleton-text" style="width: 1.5rem" aria-hidden="true" />
+            </template>
+            <template v-else>{{ jailCount }}</template>
+          </dd>
         </div>
         <div>
           <dt>Banned</dt>
-          <dd>{{ bannedCount }}</dd>
+          <dd>
+            <template v-if="fail2banPending && !fail2ban">
+              <span class="skeleton skeleton-text" style="width: 1.5rem" aria-hidden="true" />
+            </template>
+            <template v-else>{{ bannedCount }}</template>
+          </dd>
         </div>
         <div>
           <dt>Suspected</dt>
-          <dd>{{ suspectedCount }}</dd>
+          <dd>
+            <template v-if="fail2banPending && !fail2ban">
+              <span class="skeleton skeleton-text" style="width: 1.5rem" aria-hidden="true" />
+            </template>
+            <template v-else>{{ suspectedCount }}</template>
+          </dd>
         </div>
       </dl>
 
@@ -66,10 +94,8 @@ const { data: fail2ban, pending: fail2banPending } = useFetch<Fail2banSummary>(
   }
 )
 
-const pending = computed(
-  () =>
-    (statusPending.value && !status.value) || (fail2banPending.value && !fail2ban.value)
-)
+/** Full block skeleton until status arrives; counts can fill later. */
+const pending = computed(() => statusPending.value && !status.value)
 
 const fail2banOk = computed(
   () => status.value?.fail2ban?.installed && status.value?.fail2ban?.active
@@ -147,6 +173,10 @@ const suspectedCount = computed(() =>
   border-top: 1px solid var(--border);
 }
 
+.skel-f2b {
+  align-items: start;
+}
+
 .f2b-stats dt {
   font-size: 0.65rem;
   text-transform: uppercase;
@@ -162,6 +192,9 @@ const suspectedCount = computed(() =>
   font-weight: 700;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  min-height: 1.25em;
+  display: flex;
+  align-items: center;
 }
 
 .hint {

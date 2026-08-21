@@ -13,9 +13,7 @@
         <div>
           <h2>NODE</h2>
           <p class="stat-value">
-            <template v-if="summaryPending">
-              <span class="stat-placeholder" aria-hidden="true">—</span>
-            </template>
+            <span v-if="summaryPending" class="skeleton skeleton-text-lg" aria-hidden="true" />
             <template v-else>
               {{ nodeCount }} <span class="stat-unit">site(s)</span>
             </template>
@@ -29,9 +27,7 @@
         <div>
           <h2>PHP</h2>
           <p class="stat-value">
-            <template v-if="summaryPending">
-              <span class="stat-placeholder" aria-hidden="true">—</span>
-            </template>
+            <span v-if="summaryPending" class="skeleton skeleton-text-lg" aria-hidden="true" />
             <template v-else>
               {{ phpCount }} <span class="stat-unit">site(s)</span>
             </template>
@@ -45,9 +41,7 @@
         <div>
           <h2>MariaDB</h2>
           <p class="stat-value">
-            <template v-if="summaryPending">
-              <span class="stat-placeholder" aria-hidden="true">—</span>
-            </template>
+            <span v-if="summaryPending" class="skeleton skeleton-text-lg" aria-hidden="true" />
             <template v-else>
               {{ dbCount }} <span class="stat-unit">database(s)</span>
             </template>
@@ -61,9 +55,7 @@
         <div>
           <h2>API Keys</h2>
           <p class="stat-value">
-            <template v-if="summaryPending">
-              <span class="stat-placeholder" aria-hidden="true">—</span>
-            </template>
+            <span v-if="summaryPending" class="skeleton skeleton-text-lg" aria-hidden="true" />
             <template v-else>
               {{ apiKeyCount }} <span class="stat-unit">key(s)</span>
             </template>
@@ -72,10 +64,7 @@
       </NuxtLink>
     </div>
 
-    <div v-if="!statsReady" class="card docker-stats-placeholder">
-      <p class="muted">Loading host stats…</p>
-    </div>
-    <DockerStatsPanel v-else />
+    <DockerStatsPanel />
 
     <footer class="dashboard-footer">
       <button
@@ -133,8 +122,6 @@ const phpCount = computed(() => summary.value?.phpSites ?? 0)
 const dbCount = computed(() => summary.value?.databases ?? 0)
 const apiKeyCount = computed(() => summary.value?.apiKeys ?? 0)
 
-const statsReady = ref(false)
-
 const REBOOT_WAIT_KEY = 'dpanel-reboot-waiting'
 
 const rebooting = ref(false)
@@ -144,24 +131,11 @@ const cleanBusy = ref(false)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 let rebootPollTimer: ReturnType<typeof setTimeout> | null = null
-let statsIdleHandle: number | null = null
-let statsFallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearRebootPoll() {
   if (rebootPollTimer) {
     clearTimeout(rebootPollTimer)
     rebootPollTimer = null
-  }
-}
-
-function scheduleStatsPanel() {
-  const reveal = () => {
-    statsReady.value = true
-  }
-  if (import.meta.client && typeof window.requestIdleCallback === 'function') {
-    statsIdleHandle = window.requestIdleCallback(() => reveal(), { timeout: 800 })
-  } else {
-    statsFallbackTimer = setTimeout(reveal, 100)
   }
 }
 
@@ -281,7 +255,6 @@ function onRebootClick() {
 
 onMounted(() => {
   if (!import.meta.client) return
-  scheduleStatsPanel()
   if (sessionStorage.getItem(REBOOT_WAIT_KEY) === '1') {
     rebooting.value = true
     startRebootWatch()
@@ -298,10 +271,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearRebootPoll()
-  if (statsIdleHandle != null && typeof window.cancelIdleCallback === 'function') {
-    window.cancelIdleCallback(statsIdleHandle)
-  }
-  if (statsFallbackTimer) clearTimeout(statsFallbackTimer)
 })
 </script>
 
@@ -385,28 +354,14 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--text);
   min-height: 1.6em;
-}
-
-.stat-placeholder {
-  color: var(--muted);
-  font-weight: 500;
-  opacity: 0.55;
+  display: flex;
+  align-items: center;
 }
 
 .stat-unit {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--muted);
-}
-
-.docker-stats-placeholder {
-  padding: 1.25rem 1.35rem;
-  margin-bottom: 0;
-}
-
-.docker-stats-placeholder .muted {
-  margin: 0;
-  font-size: var(--text-sm);
 }
 
 .dashboard-footer {

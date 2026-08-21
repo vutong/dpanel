@@ -1,12 +1,20 @@
 <template>
-  <section class="card docker-stats">
+  <section class="card docker-stats" :aria-busy="statsLoading">
     <p v-if="fetchError && !data" class="alert alert-error">{{ fetchError }}</p>
 
-    <template v-else>
-      <div class="stats-layout">
-        <div class="stats-main">
-          <div class="chart-wrap">
-            <p v-if="history.length < 2" class="chart-wait muted">Collecting samples…</p>
+    <div v-else class="stats-layout">
+      <div class="stats-main">
+        <!-- Chart -->
+        <div class="chart-wrap">
+          <div v-if="!chartReady" class="chart-skeleton" aria-hidden="true">
+            <span class="skeleton skeleton-block chart-skeleton-block" />
+            <div class="chart-axis chart-axis-skel">
+              <span class="skeleton skeleton-text" style="width: 1.5rem" />
+              <span class="skeleton skeleton-text" style="width: 1.5rem" />
+              <span class="skeleton skeleton-text" style="width: 2rem" />
+            </div>
+          </div>
+          <template v-else>
             <svg
               class="chart-svg"
               viewBox="0 0 400 120"
@@ -30,9 +38,28 @@
               <span>50%</span>
               <span>100%</span>
             </div>
-          </div>
+          </template>
+        </div>
 
-          <h3 class="sub-title">Stack disk breakdown</h3>
+        <!-- Disk breakdown -->
+        <h3 class="sub-title">Stack disk breakdown</h3>
+        <template v-if="statsLoading">
+          <div class="disk-summary skel-disk" aria-hidden="true">
+            <div class="disk-head">
+              <span class="skeleton skeleton-text" style="width: 5.5rem" />
+              <span class="skeleton skeleton-text" style="width: 7rem" />
+            </div>
+            <span class="skeleton skeleton-bar" />
+          </div>
+          <div class="skel-table" aria-hidden="true">
+            <div v-for="n in 4" :key="n" class="skeleton-row skel-table-row">
+              <span class="skeleton skeleton-line" style="width: 42%" />
+              <span class="skeleton skeleton-line" style="width: 18%" />
+              <span class="skeleton skeleton-line" style="width: 14%" />
+            </div>
+          </div>
+        </template>
+        <template v-else>
           <div v-if="disk" class="disk-summary">
             <div class="disk-head">
               <span class="metric-label">Stack volume</span>
@@ -67,92 +94,120 @@
               </tbody>
             </table>
           </div>
+        </template>
 
-          <div class="containers-head">
-            <h3 class="sub-title">Containers</h3>
-            <div v-if="containers.length" class="containers-head-actions">
-              <label v-if="containersExpanded" class="limit-select-wrap">
-                <span class="muted">Show</span>
-                <select v-model.number="containerLimit" class="limit-select">
-                  <option v-for="n in containerLimitOptions" :key="n" :value="n">{{ n }}</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                class="toggle-btn"
-                @click="containersExpanded = !containersExpanded"
-              >
-                {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
-              </button>
-            </div>
+        <!-- Containers -->
+        <div class="containers-head">
+          <h3 class="sub-title">Containers</h3>
+          <div v-if="!statsLoading && containers.length" class="containers-head-actions">
+            <label v-if="containersExpanded" class="limit-select-wrap">
+              <span class="muted">Show</span>
+              <select v-model.number="containerLimit" class="limit-select">
+                <option v-for="n in containerLimitOptions" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              class="toggle-btn"
+              @click="containersExpanded = !containersExpanded"
+            >
+              {{ containersExpanded ? 'Hide list' : `Show list (${containers.length})` }}
+            </button>
           </div>
-          <p v-if="!containers.length" class="muted empty">No running containers.</p>
-          <div v-else-if="containersExpanded" class="table-wrap containers-table-wrap">
-            <table class="table stats-table compact">
-              <thead>
-                <tr>
-                  <th>
-                    <button
-                      type="button"
-                      class="th-sort"
-                      :class="{ active: containerSort === 'name' }"
-                      @click="containerSort = 'name'"
-                    >
-                      Container
-                      <span class="sort-icons" aria-hidden="true">
-                        <i class="sort-up" />
-                        <i class="sort-down" />
-                      </span>
-                    </button>
-                  </th>
-                  <th class="num">
-                    <button
-                      type="button"
-                      class="th-sort th-sort-num"
-                      :class="{ active: containerSort === 'cpu' }"
-                      @click="containerSort = 'cpu'"
-                    >
-                      CPU %
-                      <span class="sort-icons" aria-hidden="true">
-                        <i class="sort-up" />
-                        <i class="sort-down" />
-                      </span>
-                    </button>
-                  </th>
-                  <th class="num">
-                    <button
-                      type="button"
-                      class="th-sort th-sort-num"
-                      :class="{ active: containerSort === 'mem' }"
-                      @click="containerSort = 'mem'"
-                    >
-                      RAM
-                      <span class="sort-icons" aria-hidden="true">
-                        <i class="sort-up" />
-                        <i class="sort-down" />
-                      </span>
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="c in visibleContainers" :key="c.name">
-                  <td><code class="cname">{{ c.name }}</code></td>
-                  <td class="num">{{ c.cpuPercent.toFixed(2) }}%</td>
-                  <td class="num">
-                    {{ formatBytes(c.memUsedBytes) }}
-                    <span v-if="c.memLimitBytes" class="limit-of">/ {{ formatBytes(c.memLimitBytes) }}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <span
+            v-else-if="statsLoading"
+            class="skeleton skeleton-text"
+            style="width: 5.5rem"
+            aria-hidden="true"
+          />
+        </div>
+        <div v-if="statsLoading" class="skel-table" aria-hidden="true">
+          <div v-for="n in 3" :key="n" class="skeleton-row skel-table-row">
+            <span class="skeleton skeleton-line" style="width: 48%" />
+            <span class="skeleton skeleton-line" style="width: 16%" />
+            <span class="skeleton skeleton-line" style="width: 22%" />
           </div>
         </div>
+        <p v-else-if="!containers.length" class="muted empty">No running containers.</p>
+        <div v-else-if="containersExpanded" class="table-wrap containers-table-wrap">
+          <table class="table stats-table compact">
+            <thead>
+              <tr>
+                <th>
+                  <button
+                    type="button"
+                    class="th-sort"
+                    :class="{ active: containerSort === 'name' }"
+                    @click="containerSort = 'name'"
+                  >
+                    Container
+                    <span class="sort-icons" aria-hidden="true">
+                      <i class="sort-up" />
+                      <i class="sort-down" />
+                    </span>
+                  </button>
+                </th>
+                <th class="num">
+                  <button
+                    type="button"
+                    class="th-sort th-sort-num"
+                    :class="{ active: containerSort === 'cpu' }"
+                    @click="containerSort = 'cpu'"
+                  >
+                    CPU %
+                    <span class="sort-icons" aria-hidden="true">
+                      <i class="sort-up" />
+                      <i class="sort-down" />
+                    </span>
+                  </button>
+                </th>
+                <th class="num">
+                  <button
+                    type="button"
+                    class="th-sort th-sort-num"
+                    :class="{ active: containerSort === 'mem' }"
+                    @click="containerSort = 'mem'"
+                  >
+                    RAM
+                    <span class="sort-icons" aria-hidden="true">
+                      <i class="sort-up" />
+                      <i class="sort-down" />
+                    </span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in visibleContainers" :key="c.name">
+                <td><code class="cname">{{ c.name }}</code></td>
+                <td class="num">{{ c.cpuPercent.toFixed(2) }}%</td>
+                <td class="num">
+                  {{ formatBytes(c.memUsedBytes) }}
+                  <span v-if="c.memLimitBytes" class="limit-of"
+                    >/ {{ formatBytes(c.memLimitBytes) }}</span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        <div class="stats-side">
-          <aside class="host-metrics" aria-label="Server metrics">
-            <h3 class="metrics-title">Server</h3>
+      <div class="stats-side">
+        <aside class="host-metrics" aria-label="Server metrics">
+          <h3 class="metrics-title">Server</h3>
 
+          <template v-if="statsLoading">
+            <div v-for="n in 3" :key="n" class="metric-row" aria-hidden="true">
+              <span class="skeleton" style="width: 1.25rem; height: 1.25rem; border-radius: 4px" />
+              <div class="metric-body">
+                <span class="skeleton skeleton-text" style="width: 2.5rem; margin-bottom: 0.35rem" />
+                <span class="skeleton skeleton-line" style="width: 70%; margin-bottom: 0.4rem" />
+                <span class="skeleton skeleton-bar" />
+              </div>
+            </div>
+          </template>
+          <template v-else>
             <div class="metric-row">
               <span class="metric-icon" aria-hidden="true">🧠</span>
               <div class="metric-body">
@@ -208,17 +263,23 @@
                     <span class="cpu-pct">{{ core.percent.toFixed(0) }}%</span>
                   </li>
                 </ul>
-                <p v-else class="muted cpu-wait">Sampling cores…</p>
+                <div v-else class="cpu-skel" aria-hidden="true">
+                  <div v-for="n in 4" :key="n" class="skeleton-row" style="margin-bottom: 0.4rem">
+                    <span class="skeleton skeleton-line-sm" style="width: 3rem" />
+                    <span class="skeleton skeleton-bar" style="flex: 1" />
+                    <span class="skeleton skeleton-line-sm" style="width: 2rem" />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div v-if="loadHint" class="load-hint muted">{{ loadHint }}</div>
-          </aside>
+          </template>
+        </aside>
 
-          <SecurityDashboardPanel />
-        </div>
+        <SecurityDashboardPanel />
       </div>
-    </template>
+    </div>
   </section>
 </template>
 
@@ -274,6 +335,11 @@ const diskTestError = ref('')
 const containerLimitOptions = [25, 50, 100, 200, 350] as const
 const containerLimit = ref<(typeof containerLimitOptions)[number]>(25)
 const containerSort = ref<'name' | 'cpu' | 'mem'>('mem')
+
+/** First payload not yet loaded — show per-section skeletons. */
+const statsLoading = computed(() => !data.value && !fetchError.value)
+/** Chart needs ≥2 samples before drawing. */
+const chartReady = computed(() => history.value.length >= 2)
 
 const gridYs = [0, 30, 60, 90, 120]
 
@@ -655,11 +721,6 @@ onUnmounted(() => {
   color: var(--text);
 }
 
-.cpu-wait {
-  font-size: 0.78rem;
-  margin: 0.25rem 0 0;
-}
-
 .load-hint {
   font-size: 0.72rem;
   margin-top: 0.5rem;
@@ -672,15 +733,36 @@ onUnmounted(() => {
   position: relative;
 }
 
-.chart-wait {
-  position: absolute;
-  inset: 0;
+.chart-skeleton {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.85rem;
-  pointer-events: none;
-  z-index: 1;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.chart-skeleton-block {
+  height: 7.5rem;
+  border-radius: 8px;
+}
+
+.chart-axis-skel {
+  display: flex;
+  justify-content: space-between;
+}
+
+.skel-disk {
+  margin-bottom: 0.75rem;
+}
+
+.skel-table {
+  margin: 0.35rem 0 1rem;
+}
+
+.skel-table-row {
+  margin-bottom: 0.55rem;
+}
+
+.cpu-skel {
+  margin-top: 0.35rem;
 }
 
 .chart-svg {
