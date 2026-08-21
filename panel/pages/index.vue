@@ -356,6 +356,7 @@ onUnmounted(() => {
   min-height: 1.6em;
   display: flex;
   align-items: center;
+  gap: 0.35em;
 }
 
 .stat-unit {
