@@ -1,4 +1,5 @@
 import { requireAuth } from '../../utils/auth-guard'
+import { dashboardCacheReadEnabled } from '../../utils/cache-read'
 import {
   readCache,
   readMicroCache,
@@ -105,7 +106,7 @@ async function fetchStatsFromShell(): Promise<DockerStatsResponse | null> {
 export default defineEventHandler(async (event) => {
   requireAuth(event)
 
-  if (process.env.DPANEL_CACHE_READ === '0') {
+  if (!dashboardCacheReadEnabled()) {
     const fresh = await fetchStatsFromShell()
     if (fresh) return fresh
     throw createError({ statusCode: 500, statusMessage: 'Could not load docker stats' })

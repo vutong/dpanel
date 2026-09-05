@@ -707,8 +707,6 @@ main_loop() {
   run_stats_job 0
   log "warm security on start"
   run_security_job 0
-  log "warm host-ip on start"
-  run_host_ip_job 0
 
   local stats_due_at=0
   while true; do
@@ -728,37 +726,13 @@ PY
       fi
     fi
 
-    if any_section_active; then
+    if section_active dashboard; then
       if job_due security "$SECURITY_INTERVAL_ACTIVE"; then
         run_security_job 1
       fi
     elif job_due security "$SECURITY_INTERVAL_IDLE"; then
       run_security_job 0
     fi
-
-    if section_active settings && job_due security-detail "$SECURITY_DETAIL_INTERVAL"; then
-      run_security_detail_job
-    fi
-
-    if try_pop_pending_force databases-list; then
-      run_databases_list_job 1
-    elif section_active databases && job_due databases-list "$DATABASES_LIST_INTERVAL"; then
-      run_databases_list_job 1
-    fi
-
-    if try_pop_pending_force host-ip; then
-      run_host_ip_job 1
-    elif section_active websites && job_due host-ip "$HOST_IP_INTERVAL"; then
-      run_host_ip_job 1
-    fi
-
-    if try_pop_pending_force site-resources; then
-      run_site_resources_job 1
-    elif section_active websites && job_due site-resources "$SITE_RESOURCES_INTERVAL"; then
-      run_site_resources_job 1
-    fi
-
-    run_site_resources_idle_job
 
     if any_section_active; then
       if job_due site-purge "$SITE_PURGE_INTERVAL_ACTIVE"; then

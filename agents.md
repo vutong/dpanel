@@ -242,26 +242,27 @@ Khi thêm UI mới: ưu tiên class global trước; chỉ scoped CSS cho layout
 ### Cache collector & panel read path (v6)
 
 ```
-cache-collector (Docker) → ghi data/panel/cache/*.json + collector-state.json
-panel GET               → đọc cache (không shell, trừ fallback có điều kiện)
-panel POST              → ghi meta.json (presence, opRunning, pendingForce) + registry JSON
+cache-collector (Docker) → ghi stats.json + security.json (dashboard only)
+panel dashboard GET      → đọc cache (/api/docker/stats, /api/dashboard/security)
+panel nghiệp vụ GET      → shell / registry trực tiếp (websites, databases, fail2ban, clamav, …)
+panel POST                 → ghi meta.json (presence, opRunning, pendingForce) + registry JSON
 ```
 
 | File | Owner | Nội dung |
 |------|-------|----------|
 | `data/panel/cache/meta.json` | panel | `sections`, `opRunning`, `pendingForce`, `diskTestActive` |
-| `data/panel/cache/collector-state.json` | collector | `collectorLastRun`, `siteResourcesCursor` |
-| `data/panel/cache/stats.json` | collector | Docker/host stats |
-| `data/panel/cache/security.json` | collector | Fail2ban + ClamAV summary |
+| `data/panel/cache/collector-state.json` | collector | `collectorLastRun` |
+| `data/panel/cache/stats.json` | collector | Docker/host stats (dashboard) |
+| `data/panel/cache/security.json` | collector | Fail2ban + ClamAV summary (dashboard) |
 
 **Env vận hành**
 
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
-| `DPANEL_CACHE_READ=0` | (unset=on) | Rollback: GET gọi shell như cũ |
+| `DPANEL_CACHE_READ=0` | (unset=on) | Rollback: dashboard GET gọi shell như cũ |
 | `DPANEL_COLLECTOR=inline` | — | Dev: stats inline trong dpanel container |
-| `DPANEL_COLLECTOR=inline-full` | — | Dev: stats + security + databases-list |
-| `DPANEL_CACHE_STALE_FALLBACK_SEC` | 180 | Security GET fallback shell khi stale + section active |
+| `DPANEL_COLLECTOR=inline-full` | — | Dev: stats + security inline |
+| `DPANEL_CACHE_STALE_FALLBACK_SEC` | 180 | Dashboard security fallback shell khi stale |
 | `DPANEL_OP_RUNNING_MAX_MS` | 1800000 | Auto-clear `opRunning` kẹt |
 | `DPANEL_OP_RUNNING_GRACE_MS` | 120000 | Grace trước khi clear opRunning |
 

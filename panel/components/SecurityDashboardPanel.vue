@@ -93,25 +93,35 @@ type Fail2banSummary = {
 type SecurityPollPayload = {
   status: Status | null
   fail2ban: Fail2banSummary | null
+  cache?: CacheMetaFields | null
+}
+
+type DashboardSecurityResponse = {
+  status: Status | null
+  fail2ban: Fail2banSummary | null
+  _cache?: CacheMetaFields
 }
 
 const REFRESH_MS = 60_000
 
 const status = ref<Status | null>(null)
 const fail2ban = ref<Fail2banSummary | null>(null)
+const securityCache = ref<CacheMetaFields | null>(null)
 const initialLoad = ref(true)
 
 async function fetchSecurity(): Promise<SecurityPollPayload> {
-  const [statusRes, fail2banRes] = await Promise.all([
-    $fetch<Status>('/api/security/status'),
-    $fetch<Fail2banSummary>('/api/security/fail2ban')
-  ])
-  return { status: statusRes, fail2ban: fail2banRes }
+  const res = await $fetch<DashboardSecurityResponse>('/api/dashboard/security')
+  return {
+    status: res.status,
+    fail2ban: res.fail2ban,
+    cache: res._cache ?? null
+  }
 }
 
 function applySecurityPayload(payload: SecurityPollPayload) {
   status.value = payload.status
   fail2ban.value = payload.fail2ban
+  securityCache.value = payload.cache ?? null
   initialLoad.value = false
 }
 
@@ -131,11 +141,9 @@ const pending = computed(() => initialLoad.value && !status.value)
 
 const fail2banPending = computed(() => initialLoad.value && !fail2ban.value)
 
-const cacheHint = computed(() =>
-  formatCacheHint(pickOldestCache([status.value?._cache, fail2ban.value?._cache]))
-)
+const cacheHint = computed(() => formatCacheHint(securityCache.value))
 const cacheStale = computed(() => {
-  const c = pickOldestCache([status.value?._cache, fail2ban.value?._cache])
+  const c = securityCache.value
   return Boolean(c?.stale || c?.warming)
 })
 

@@ -17,8 +17,14 @@ export type CacheMetaFields = {
 
 const FALLBACK_DEBOUNCE_MS = 30_000
 
+/** Global kill switch — disables dashboard cache reads when `DPANEL_CACHE_READ=0`. */
 export function cacheReadEnabled(): boolean {
   return process.env.DPANEL_CACHE_READ !== '0'
+}
+
+/** Cache is only for dashboard polling (stats + security summary). Business GETs use live data. */
+export function dashboardCacheReadEnabled(): boolean {
+  return cacheReadEnabled()
 }
 
 export function staleFallbackSec(): number {
@@ -51,18 +57,34 @@ export async function readCachePayload<T extends Record<string, unknown>>(
   return { payload, result }
 }
 
-function needsStaleFallback(payload: unknown, result: ReadCacheResult): boolean {
-  if (!payload) return true
+function isPayloadComplete(
+  payload: unknown,
+  isPayloadUsable?: (payload: unknown) => boolean
+): boolean {
+  if (isPayloadUsable) return isPayloadUsable(payload)
+  return !!payload
+}
+
+function needsStaleFallback(
+  payload: unknown,
+  result: ReadCacheResult,
+  isPayloadUsable?: (payload: unknown) => boolean
+): boolean {
+  if (!isPayloadComplete(payload, isPayloadUsable)) return true
   if (result.warming) return true
   if (result.isStale && result.ageSec >= staleFallbackSec()) return true
   return false
 }
 
-function isColdCacheMiss(payload: unknown, result: ReadCacheResult): boolean {
-  return !payload || result.warming
+function isColdCacheMiss(
+  payload: unknown,
+  result: ReadCacheResult,
+  isPayloadUsable?: (payload: unknown) => boolean
+): boolean {
+  return !isPayloadComplete(payload, isPayloadUsable) || result.warming
 }
 
-function freshFallbackResult(): ReadCacheResult {
+export function freshFallbackResult(): ReadCacheResult {
   return {
     envelope: null,
     ageSec: 0,
@@ -77,15 +99,19 @@ export async function readCachePayloadWithFallback<T extends Record<string, unkn
   name: string,
   event: H3Event | undefined,
   fallback: () => Promise<T | null>,
-  opts?: { sections?: CacheSectionKey[] }
+  opts?: {
+    sections?: CacheSectionKey[]
+    isPayloadUsable?: (payload: T | null) => boolean
+  }
 ): Promise<{ payload: T | null; result: ReadCacheResult; fromFallback: boolean }> {
+  const isPayloadUsable = opts?.isPayloadUsable as ((payload: unknown) => boolean) | undefined
   const { payload, result } = await readCachePayload<T>(name, event)
 
-  if (!needsStaleFallback(payload, result)) {
+  if (!needsStaleFallback(payload, result, isPayloadUsable)) {
     return { payload, result, fromFallback: false }
   }
 
-  const coldMiss = isColdCacheMiss(payload, result)
+  const coldMiss = isColdCacheMiss(payload, result, isPayloadUsable)
   const sections = opts?.sections
   if (!coldMiss && sections?.length) {
     const meta = await readCacheMeta()
@@ -96,13 +122,13 @@ export async function readCachePayloadWithFallback<T extends Record<string, unkn
 
   const microKey = `fallback:${name}:${sections?.join(',') || 'any'}`
   const cached = readMicroCache<T>(microKey, FALLBACK_DEBOUNCE_MS)
-  if (cached) {
+  if (cached && isPayloadComplete(cached, isPayloadUsable)) {
     return { payload: cached, result: freshFallbackResult(), fromFallback: true }
   }
 
   try {
     const fresh = await fallback()
-    if (fresh) {
+    if (fresh && isPayloadComplete(fresh, isPayloadUsable)) {
       writeMicroCache(microKey, fresh)
       return { payload: fresh, result: freshFallbackResult(), fromFallback: true }
     }

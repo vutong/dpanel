@@ -10,7 +10,6 @@ import { stackRoot } from '../utils/stack'
 const COLLECTOR_MODE = process.env.DPANEL_COLLECTOR || ''
 const STATS_INTERVAL_MS = Number(process.env.DPANEL_CACHE_STATS_INTERVAL_ACTIVE_MS || 8000)
 const SECURITY_INTERVAL_MS = Number(process.env.DPANEL_CACHE_SECURITY_INTERVAL_ACTIVE_MS || 60_000)
-const DATABASES_INTERVAL_MS = Number(process.env.DPANEL_CACHE_DATABASES_LIST_INTERVAL_MS || 120_000)
 
 function scriptsDir(): string {
   return join(stackRoot(), 'infra', 'scripts')
@@ -96,10 +95,6 @@ async function runSecurityJob(): Promise<void> {
   }
 }
 
-async function runDatabasesJob(): Promise<void> {
-  await writeFromScriptJson('databases-list.json', 'db-list.sh', [], 120, true)
-}
-
 export default defineNitroPlugin(() => {
   if (COLLECTOR_MODE !== 'inline' && COLLECTOR_MODE !== 'inline-full') return
 
@@ -109,10 +104,7 @@ export default defineNitroPlugin(() => {
 
   if (COLLECTOR_MODE === 'inline-full') {
     void runSecurityJob()
-    void runDatabasesJob()
     const securityTimer = setInterval(() => void runSecurityJob(), SECURITY_INTERVAL_MS)
     securityTimer.unref?.()
-    const dbTimer = setInterval(() => void runDatabasesJob(), DATABASES_INTERVAL_MS)
-    dbTimer.unref?.()
   }
 })

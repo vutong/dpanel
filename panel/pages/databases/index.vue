@@ -3,7 +3,6 @@
     <div class="header">
       <div>
         <h1>Databases</h1>
-        <CacheHint :cache="listCache" />
       </div>
       <NuxtLink to="/databases/create" class="btn btn-primary">+ Create database</NuxtLink>
     </div>
@@ -184,11 +183,8 @@ type DatabaseRow = {
   createdAt?: string | null
 }
 
-const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[]; _cache?: CacheMetaFields }>(
-  '/api/databases'
-)
+const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[] }>('/api/databases')
 const databases = computed(() => data.value?.databases ?? [])
-const listCache = computed(() => data.value?._cache)
 const listLoading = computed(() => pending.value)
 
 const modifyTarget = ref<DatabaseRow | null>(null)

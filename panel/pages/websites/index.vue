@@ -3,7 +3,6 @@
     <div class="header">
       <div>
         <h1>Websites</h1>
-        <CacheHint :cache="listCache" />
       </div>
       <NuxtLink to="/websites/create" class="btn btn-primary">+ Create website</NuxtLink>
     </div>
@@ -113,11 +112,8 @@ type Site = {
   suspendedAt?: string | null
 }
 
-const { data, pending, refresh } = useFetch<{ sites: Site[]; _cache?: CacheMetaFields }>(
-  '/api/websites'
-)
+const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
-const listCache = computed(() => data.value?._cache)
 const listLoading = computed(() => pending.value)
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
