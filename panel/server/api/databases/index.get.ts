@@ -41,7 +41,33 @@ export default defineEventHandler(async (event) => {
     ? (cacheResult.envelope.data as DatabaseEntry[])
     : undefined
 
+  if (
+    (!cacheRows || !cacheRows.length) &&
+    (cacheResult.warming || !cacheResult.envelope)
+  ) {
+    try {
+      const out = await runScript('db-list.sh', [], 60_000)
+      const shellRows = JSON.parse(out.trim()) as DatabaseEntry[]
+      if (Array.isArray(shellRows) && shellRows.length) {
+        const databases = mergeDatabasesList(shellRows, registryRows || undefined) as DatabaseEntry[]
+        return attachCacheMeta({ databases }, freshResult())
+      }
+    } catch {
+      /* merge registry only below */
+    }
+  }
+
   const databases = mergeDatabasesList(cacheRows, registryRows || undefined) as DatabaseEntry[]
 
   return attachCacheMeta({ databases }, cacheResult)
 })
+
+function freshResult(): import('../../utils/cache-store').ReadCacheResult {
+  return {
+    envelope: null,
+    ageSec: 0,
+    isStale: false,
+    warming: false,
+    fromL1: false
+  }
+}

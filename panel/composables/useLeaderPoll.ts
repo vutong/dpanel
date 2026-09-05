@@ -14,6 +14,7 @@ export function useLeaderPoll<T>(options: {
   intervalMs: number
   fetcher: () => Promise<T>
   onData: (data: T) => void
+  onError?: (error: unknown) => void
   followerFallbackMs?: number
 }) {
   const { isLeader, isVisible } = useInjectedPresence()
@@ -32,8 +33,8 @@ export function useLeaderPoll<T>(options: {
       options.onData(data)
       lastMessageAt = Date.now()
       channel?.postMessage({ type: 'data', at: lastMessageAt, data })
-    } catch {
-      /* transient network errors — keep last data */
+    } catch (e) {
+      options.onError?.(e)
     } finally {
       inFlight = false
     }

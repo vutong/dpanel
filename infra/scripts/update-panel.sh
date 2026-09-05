@@ -32,5 +32,10 @@ rsync -a "${PANEL_SRC}/package.json" "${PANEL_SRC}/node_modules" "${APP_DIR}/" 2
 
 chmod +x "${STACK_ROOT}/infra/scripts/"*.sh 2>/dev/null || true
 
+mkdir -p "${STACK_ROOT}/data/panel/cache"
+log "Ensuring cache-collector is running"
+stack_compose up -d cache-collector 2>&1 | tee -a "${INSTALL_LOG}" || log "Warning: cache-collector start failed"
+
 stack_compose restart dpanel
 log "Panel updated. URL: http://${PANEL_DOMAIN}"
+log "If dashboard stats are empty: docker compose ps cache-collector && docker logs \$(docker compose ps -q cache-collector | head -1)"

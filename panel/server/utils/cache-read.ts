@@ -58,6 +58,10 @@ function needsStaleFallback(payload: unknown, result: ReadCacheResult): boolean 
   return false
 }
 
+function isColdCacheMiss(payload: unknown, result: ReadCacheResult): boolean {
+  return !payload || result.warming
+}
+
 function freshFallbackResult(): ReadCacheResult {
   return {
     envelope: null,
@@ -81,8 +85,9 @@ export async function readCachePayloadWithFallback<T extends Record<string, unkn
     return { payload, result, fromFallback: false }
   }
 
+  const coldMiss = isColdCacheMiss(payload, result)
   const sections = opts?.sections
-  if (sections?.length) {
+  if (!coldMiss && sections?.length) {
     const meta = await readCacheMeta()
     if (!isAnySectionActive(meta, sections)) {
       return { payload, result, fromFallback: false }

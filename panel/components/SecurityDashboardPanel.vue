@@ -109,14 +109,19 @@ async function fetchSecurity(): Promise<SecurityPollPayload> {
   return { status: statusRes, fail2ban: fail2banRes }
 }
 
+function applySecurityPayload(payload: SecurityPollPayload) {
+  status.value = payload.status
+  fail2ban.value = payload.fail2ban
+  initialLoad.value = false
+}
+
 useLeaderPoll({
   channel: 'dpanel-dashboard-security',
   intervalMs: REFRESH_MS,
   followerFallbackMs: 90_000,
   fetcher: fetchSecurity,
-  onData: (payload) => {
-    status.value = payload.status
-    fail2ban.value = payload.fail2ban
+  onData: applySecurityPayload,
+  onError: () => {
     initialLoad.value = false
   }
 })

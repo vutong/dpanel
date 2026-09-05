@@ -1,5 +1,10 @@
 import { requireAuth } from '../../utils/auth-guard'
-import { readCache, setCacheResponseHeaders } from '../../utils/cache-store'
+import {
+  readCache,
+  readMicroCache,
+  setCacheResponseHeaders,
+  writeMicroCache
+} from '../../utils/cache-store'
 import { isCollectorPaused, reconcileOpRunning } from '../../utils/cache-meta'
 
 export type DockerStatsResponse = {
@@ -48,6 +53,9 @@ const EMPTY_STATS: DockerStatsResponse = {
   containers: []
 }
 
+const STATS_FALLBACK_KEY = 'fallback:stats.json'
+const STATS_FALLBACK_MS = 30_000
+
 function withCacheMeta(
   payload: DockerStatsResponse,
   result: Awaited<ReturnType<typeof readCache>>,
@@ -64,13 +72,43 @@ function withCacheMeta(
   }
 }
 
+function freshResult(): Awaited<ReturnType<typeof readCache>> {
+  return {
+    envelope: null,
+    ageSec: 0,
+    isStale: false,
+    warming: false,
+    fromL1: false
+  }
+}
+
+function hasUsableStats(payload: DockerStatsResponse | null | undefined): boolean {
+  return Boolean(payload?.host?.memTotalBytes)
+}
+
+function normalizeStatsPayload(raw: DockerStatsResponse): DockerStatsResponse {
+  return {
+    ok: raw.ok !== false,
+    host: raw.host,
+    disk: raw.disk ?? EMPTY_STATS.disk,
+    containers: raw.containers ?? []
+  }
+}
+
+async function fetchStatsFromShell(): Promise<DockerStatsResponse | null> {
+  const { parseScriptJson, runScript } = await import('../../utils/stack')
+  const raw = await runScript('docker-stats.sh', [], 45_000)
+  const parsed = parseScriptJson<DockerStatsResponse>(raw)
+  return hasUsableStats(parsed) ? normalizeStatsPayload(parsed) : null
+}
+
 export default defineEventHandler(async (event) => {
   requireAuth(event)
 
   if (process.env.DPANEL_CACHE_READ === '0') {
-    const { parseScriptJson, runScript } = await import('../../utils/stack')
-    const raw = await runScript('docker-stats.sh', [], 45_000)
-    return parseScriptJson<DockerStatsResponse>(raw)
+    const fresh = await fetchStatsFromShell()
+    if (fresh) return fresh
+    throw createError({ statusCode: 500, statusMessage: 'Could not load docker stats' })
   }
 
   const meta = await reconcileOpRunning()
@@ -83,31 +121,30 @@ export default defineEventHandler(async (event) => {
   const data = envelope?.data
 
   if (data && typeof data === 'object' && envelope?.ok !== false) {
-    const payload = data as DockerStatsResponse
-    return withCacheMeta(
-      {
-        ok: payload.ok !== false,
-        host: payload.host,
-        disk: payload.disk,
-        containers: payload.containers ?? []
-      },
-      result,
-      collectorPaused
-    )
+    const payload = normalizeStatsPayload(data as DockerStatsResponse)
+    if (hasUsableStats(payload)) {
+      return withCacheMeta(payload, result, collectorPaused)
+    }
+  }
+
+  const cached = readMicroCache<DockerStatsResponse>(STATS_FALLBACK_KEY, STATS_FALLBACK_MS)
+  if (cached && hasUsableStats(cached)) {
+    return withCacheMeta(cached, freshResult(), collectorPaused)
+  }
+
+  try {
+    const fresh = await fetchStatsFromShell()
+    if (fresh) {
+      writeMicroCache(STATS_FALLBACK_KEY, fresh)
+      return withCacheMeta(fresh, freshResult(), collectorPaused)
+    }
+  } catch {
+    /* fall through to empty */
   }
 
   if (data && typeof data === 'object') {
-    const payload = data as DockerStatsResponse
-    return withCacheMeta(
-      {
-        ok: payload.ok !== false,
-        host: payload.host ?? EMPTY_STATS.host,
-        disk: payload.disk ?? EMPTY_STATS.disk,
-        containers: payload.containers ?? []
-      },
-      { ...result, warming: true, isStale: true },
-      collectorPaused
-    )
+    const payload = normalizeStatsPayload(data as DockerStatsResponse)
+    return withCacheMeta(payload, { ...result, warming: true, isStale: true }, collectorPaused)
   }
 
   return withCacheMeta(EMPTY_STATS, result, collectorPaused)
