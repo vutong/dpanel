@@ -1,4 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
+import { setDiskTestActive } from '../../../utils/cache-meta'
 import { parseScriptJson, runScript } from '../../../utils/stack'
 
 export type DiskProbeResponse = {
@@ -16,6 +17,11 @@ export type DiskProbeResponse = {
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
-  const raw = await runScript('host-disk-probe.sh', ['--force'], 240_000)
-  return parseScriptJson<DiskProbeResponse>(raw)
+  await setDiskTestActive(true)
+  try {
+    const raw = await runScript('host-disk-probe.sh', ['--force'], 240_000)
+    return parseScriptJson<DiskProbeResponse>(raw)
+  } finally {
+    await setDiskTestActive(false)
+  }
 })

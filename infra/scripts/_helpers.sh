@@ -894,6 +894,28 @@ wait_for_dpanel_ready() {
   return 1
 }
 
+# Wait until cache-collector container healthcheck is healthy (or cache is fresh).
+wait_for_collector_healthy() {
+  local max_wait="${1:-180}"
+  local i cid status
+  for ((i = 1; i <= max_wait; i++)); do
+    cid="$(stack_compose ps -q cache-collector 2>/dev/null | head -1)"
+    if [[ -z "${cid}" ]]; then
+      sleep 1
+      continue
+    fi
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${cid}" 2>/dev/null || echo none)"
+    if [[ "${status}" == "healthy" ]]; then
+      return 0
+    fi
+    if [[ -f "${STACK_ROOT}/data/panel/cache/stats.json" ]] && bash "${STACK_ROOT}/infra/scripts/cache-collector-health.sh" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 # nginx -t — prefer docker exec on the running nginx container (no compose plugin needed).
 nginx_test_stack() {
   local quiet="${1:-1}"

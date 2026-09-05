@@ -3,6 +3,8 @@ services:
     image: nginx:1.27-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-nginx
     restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 256m
     ports:
       - "80:80"
       - "8443:8443"
@@ -25,6 +27,8 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-nuxt
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1024m
     env_file: .env
     environment:
       STACK_ROOT: /opt/stack
@@ -107,6 +111,41 @@ services:
     volumes:
       - ./data/redis/persistence:/data
       - ./logs/redis:/var/log/redis
+    networks:
+      - stack
+
+  cache-collector:
+    build:
+      context: ./infra/docker/collector
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-dpanel}-cache-collector
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file: .env
+    environment:
+      STACK_ROOT: /opt/stack
+      DPANEL_PRESENCE_TTL_MS: ${DPANEL_PRESENCE_TTL_MS:-45000}
+      DPANEL_CACHE_STATS_INTERVAL_ACTIVE_MS: ${DPANEL_CACHE_STATS_INTERVAL_ACTIVE_MS:-8000}
+      DPANEL_CACHE_STATS_INTERVAL_IDLE_MS: ${DPANEL_CACHE_STATS_INTERVAL_IDLE_MS:-60000}
+      DPANEL_COLLECTOR_HEALTH_MAX_AGE_SEC: ${DPANEL_COLLECTOR_HEALTH_MAX_AGE_SEC:-600}
+    volumes:
+      - .:/opt/stack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "bash", "/opt/stack/infra/scripts/cache-collector-health.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      dpanel:
+        condition: service_healthy
     networks:
       - stack
 

@@ -238,3 +238,38 @@ Nguồn sự thật duy nhất: `panel/assets/css/main.css` (tokens + class dùn
 | **Dashboard mẫu** | `pages/index.vue` + `DockerStatsPanel` + `SecurityDashboardPanel` — làm theo pattern này khi thêm page mới. |
 
 Khi thêm UI mới: ưu tiên class global trước; chỉ scoped CSS cho layout trang (grid, spacing), không copy lại style control.
+
+### Cache collector & panel read path (v6)
+
+```
+cache-collector (Docker) → ghi data/panel/cache/*.json + collector-state.json
+panel GET               → đọc cache (không shell, trừ fallback có điều kiện)
+panel POST              → ghi meta.json (presence, opRunning, pendingForce) + registry JSON
+```
+
+| File | Owner | Nội dung |
+|------|-------|----------|
+| `data/panel/cache/meta.json` | panel | `sections`, `opRunning`, `pendingForce`, `diskTestActive` |
+| `data/panel/cache/collector-state.json` | collector | `collectorLastRun`, `siteResourcesCursor` |
+| `data/panel/cache/stats.json` | collector | Docker/host stats |
+| `data/panel/cache/security.json` | collector | Fail2ban + ClamAV summary |
+
+**Env vận hành**
+
+| Biến | Mặc định | Ý nghĩa |
+|------|----------|---------|
+| `DPANEL_CACHE_READ=0` | (unset=on) | Rollback: GET gọi shell như cũ |
+| `DPANEL_COLLECTOR=inline` | — | Dev: stats inline trong dpanel container |
+| `DPANEL_COLLECTOR=inline-full` | — | Dev: stats + security + databases-list |
+| `DPANEL_CACHE_STALE_FALLBACK_SEC` | 180 | Security GET fallback shell khi stale + section active |
+| `DPANEL_OP_RUNNING_MAX_MS` | 1800000 | Auto-clear `opRunning` kẹt |
+| `DPANEL_OP_RUNNING_GRACE_MS` | 120000 | Grace trước khi clear opRunning |
+
+**Sự cố thường gặp**
+
+- Collector unhealthy: `docker compose ps cache-collector`, `docker logs …-cache-collector`, `bash infra/scripts/cache-collector-health.sh`
+- Stats stale / paused: kiểm tra `meta.json` `opRunning`; **Clean Job** trên dashboard hoặc `dpanel health --fix`
+- Rollback cache: set `DPANEL_CACHE_READ=0` trong `.env`, `docker compose restart dpanel`
+- Multi-tab: chỉ leader tab poll API; follower nhận qua BroadcastChannel (`useLeaderPoll`)
+
+**CLI:** `dpanel health` kiểm tra cache-collector; `GET /api/internal/cache-status` (auth) cho debug chi tiết.

@@ -1,6 +1,15 @@
 <template>
   <aside class="host-metrics security-metrics" aria-label="Security" :aria-busy="pending">
-    <h3 class="metrics-title">Security</h3>
+    <div class="metrics-head">
+      <h3 class="metrics-title">Security</h3>
+      <p
+        v-if="cacheHint"
+        class="cache-hint"
+        :class="cacheStale ? 'pill pill-warn' : 'muted'"
+      >
+        {{ cacheHint }}
+      </p>
+    </div>
 
     <template v-if="pending">
       <div class="svc-list" aria-hidden="true">
@@ -72,30 +81,58 @@
 type Status = {
   fail2ban?: { installed?: boolean; active?: boolean }
   clamav?: { installed?: boolean; daemonActive?: boolean }
+  _cache?: CacheMetaFields
 }
 
 type Fail2banSummary = {
   jails?: { currentlyFailed?: number }[]
   bannedIps?: string[]
+  _cache?: CacheMetaFields
+}
+
+type SecurityPollPayload = {
+  status: Status | null
+  fail2ban: Fail2banSummary | null
 }
 
 const REFRESH_MS = 60_000
 
-const { data: status, pending: statusPending } = useFetch<Status>('/api/security/status', {
-  key: 'security-status-dashboard',
-  refreshInterval: REFRESH_MS
+const status = ref<Status | null>(null)
+const fail2ban = ref<Fail2banSummary | null>(null)
+const initialLoad = ref(true)
+
+async function fetchSecurity(): Promise<SecurityPollPayload> {
+  const [statusRes, fail2banRes] = await Promise.all([
+    $fetch<Status>('/api/security/status'),
+    $fetch<Fail2banSummary>('/api/security/fail2ban')
+  ])
+  return { status: statusRes, fail2ban: fail2banRes }
+}
+
+useLeaderPoll({
+  channel: 'dpanel-dashboard-security',
+  intervalMs: REFRESH_MS,
+  followerFallbackMs: 90_000,
+  fetcher: fetchSecurity,
+  onData: (payload) => {
+    status.value = payload.status
+    fail2ban.value = payload.fail2ban
+    initialLoad.value = false
+  }
 })
 
-const { data: fail2ban, pending: fail2banPending } = useFetch<Fail2banSummary>(
-  '/api/security/fail2ban',
-  {
-    key: 'security-fail2ban-dashboard',
-    refreshInterval: REFRESH_MS
-  }
-)
-
 /** First paint only — interval refresh keeps values (background poll). */
-const pending = computed(() => statusPending.value && !status.value)
+const pending = computed(() => initialLoad.value && !status.value)
+
+const fail2banPending = computed(() => initialLoad.value && !fail2ban.value)
+
+const cacheHint = computed(() =>
+  formatCacheHint(pickOldestCache([status.value?._cache, fail2ban.value?._cache]))
+)
+const cacheStale = computed(() => {
+  const c = pickOldestCache([status.value?._cache, fail2ban.value?._cache])
+  return Boolean(c?.stale || c?.warming)
+})
 
 const fail2banOk = computed(
   () => status.value?.fail2ban?.installed && status.value?.fail2ban?.active
@@ -131,13 +168,25 @@ const suspectedCount = computed(() =>
   padding: 1rem 1rem 0.85rem;
 }
 
+.metrics-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
 .metrics-title {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin: 0 0 0.85rem;
+  margin: 0;
   font-weight: 600;
+}
+
+.cache-hint {
+  font-size: var(--text-xs);
+  margin: 0;
 }
 
 .svc-list {

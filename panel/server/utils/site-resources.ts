@@ -84,3 +84,22 @@ export async function getAppDirSizeBytes(domain: string): Promise<number | null>
     return null
   }
 }
+
+export type SiteResourcesCacheData = {
+  domain?: string
+  slug?: string
+  config: SiteResourcesConfig
+  appDirBytes: number | null
+}
+
+export async function readSiteResourcesCache(
+  domain: string
+): Promise<{ data: SiteResourcesCacheData | null; warming: boolean }> {
+  const { readCache } = await import('./cache-store')
+  const result = await readCache<SiteResourcesCacheData>(`site-resources/${domainSlug(domain)}.json`)
+  const payload = result.envelope?.data
+  if (payload && typeof payload === 'object' && payload.config) {
+    return { data: payload as SiteResourcesCacheData, warming: false }
+  }
+  return { data: null, warming: result.warming || result.isStale }
+}

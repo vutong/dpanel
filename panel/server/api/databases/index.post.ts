@@ -1,4 +1,5 @@
 import { requireAuth } from '../../utils/auth-guard'
+import { requestForceRefresh } from '../../utils/cache-meta'
 import { parseScriptJson, runScript } from '../../utils/stack'
 import { assertSiteActive, getSite, normalizeSiteDomain } from '../../utils/sites'
 
@@ -37,7 +38,9 @@ export default defineEventHandler(async (event) => {
 
   try {
     const out = await runScript('db-create.sh', args)
-    return parseScriptJson(out)
+    const result = parseScriptJson(out)
+    await requestForceRefresh('databases-list')
+    return result
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Failed to create database'
     throw createError({ statusCode: 500, statusMessage: msg })

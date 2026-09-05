@@ -47,7 +47,7 @@ cd "${STACK_ROOT}"
 [[ -f .env ]] && source .env
 
 CORE_SERVICES="nginx dpanel mariadb php-fpm"
-OPTIONAL_SERVICES="redis phpmyadmin"
+OPTIONAL_SERVICES="redis phpmyadmin cache-collector"
 ISSUES=0
 WARNINGS=0
 declare -a REPORT_LINES=()
@@ -111,11 +111,24 @@ check_panel_tools() {
 }
 
 check_optional_services() {
-  local svc state
+  local svc state health
   for svc in ${OPTIONAL_SERVICES}; do
     state="$(stack_compose ps --format '{{.Service}} {{.State}}' 2>/dev/null | awk -v s="${svc}" '$1==s {print $2; exit}')"
     if [[ "${state}" == "running" ]]; then
-      report "service_${svc}" 1 "${svc} running" "" "warn"
+      if [[ "${svc}" == "cache-collector" ]]; then
+        health="$(stack_compose ps -q cache-collector 2>/dev/null | head -1)"
+        if [[ -n "${health}" ]]; then
+          health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${health}" 2>/dev/null || echo none)"
+        fi
+        if [[ "${health}" == "healthy" ]] || bash "${STACK_ROOT}/infra/scripts/cache-collector-health.sh" 2>/dev/null; then
+          report "service_${svc}" 1 "cache-collector healthy" "" "warn"
+        else
+          report "service_${svc}" 0 "cache-collector running but not healthy" "stack_compose restart cache-collector" "warn"
+          run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose restart cache-collector"
+        fi
+      else
+        report "service_${svc}" 1 "${svc} running" "" "warn"
+      fi
     else
       report "service_${svc}" 0 "${svc} is ${state:-down}" "stack_compose up -d ${svc}" "warn"
       run_fix "cd ${STACK_ROOT} && source infra/scripts/_helpers.sh && stack_compose up -d ${svc}"

@@ -18,6 +18,9 @@ export default defineNuxtConfig({
     // Nitro has no per-route body limit; handler still 413s over 64 MB.
     bodySizeLimit: 65 * 1024 * 1024
   },
+  routeRules: {
+    '/login': { ssr: false }
+  },
   app: {
     head: {
       title: 'dpanel',

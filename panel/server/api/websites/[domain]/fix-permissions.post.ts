@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
         status.op === 'update' || status.op === 'rebuild' || status.op === 'fix-permissions'
           ? (status.op as SiteOpKind)
           : undefined
-      if (isSiteOpProcessAlive(domain, op)) {
+      if (await isSiteOpProcessAlive(domain, op)) {
         throw createError({
           statusCode: 409,
           statusMessage: 'A site operation is already running — wait for it to finish'

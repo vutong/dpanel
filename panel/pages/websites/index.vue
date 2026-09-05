@@ -1,7 +1,10 @@
 <template>
   <div>
     <div class="header">
-      <h1>Websites</h1>
+      <div>
+        <h1>Websites</h1>
+        <CacheHint :cache="listCache" />
+      </div>
       <NuxtLink to="/websites/create" class="btn btn-primary">+ Create website</NuxtLink>
     </div>
 
@@ -110,8 +113,11 @@ type Site = {
   suspendedAt?: string | null
 }
 
-const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
+const { data, pending, refresh } = useFetch<{ sites: Site[]; _cache?: CacheMetaFields }>(
+  '/api/websites'
+)
 const sites = computed(() => data.value?.sites ?? [])
+const listCache = computed(() => data.value?._cache)
 const listLoading = computed(() => pending.value)
 const busy = ref('')
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
@@ -141,10 +147,13 @@ async function restoreSite(domain: string) {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 1.25rem;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+.header h1 {
+  margin: 0 0 0.25rem;
 }
 .muted {
   color: var(--muted);

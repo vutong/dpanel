@@ -1,5 +1,18 @@
 <template>
   <section class="card docker-stats" :aria-busy="statsLoading">
+    <p
+      v-if="collectorPaused"
+      class="collector-pause-hint pill pill-warn"
+    >
+      Background refresh paused while an operation is running.
+    </p>
+    <p
+      v-if="cacheHint"
+      class="cache-hint"
+      :class="cacheStale ? 'pill pill-warn' : 'muted'"
+    >
+      {{ cacheHint }}
+    </p>
     <p v-if="fetchError && !data" class="alert alert-error">{{ fetchError }}</p>
 
     <div v-else class="stats-layout">
@@ -298,6 +311,7 @@ type DiskStorage = {
 }
 
 type StatsPayload = {
+  ok?: boolean
   host: {
     cpuPercent: number
     memUsedBytes: number
@@ -319,12 +333,42 @@ type StatsPayload = {
     memUsedBytes: number
     memLimitBytes: number | null
   }[]
+  _cache?: {
+    ageSec: number
+    stale: boolean
+    warming: boolean
+  }
+  collectorPaused?: boolean
 }
 
 type HistoryPoint = { cpu: number; mem: number }
 
-const POLL_MS = 4000
+const POLL_MS = 8000
 const MAX_POINTS = 45
+const HISTORY_STORAGE_KEY = 'dpanel-dashboard-stats-history'
+
+function loadHistoryFromStorage(): HistoryPoint[] {
+  if (!import.meta.client) return []
+  try {
+    const raw = sessionStorage.getItem(HISTORY_STORAGE_KEY)
+    const parsed = JSON.parse(raw || '[]') as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((p): p is HistoryPoint => typeof p?.cpu === 'number' && typeof p?.mem === 'number')
+      .slice(-MAX_POINTS)
+  } catch {
+    return []
+  }
+}
+
+function persistHistory(points: HistoryPoint[]) {
+  if (!import.meta.client) return
+  try {
+    sessionStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(points.slice(-MAX_POINTS)))
+  } catch {
+    /* quota / private mode */
+  }
+}
 
 const data = ref<StatsPayload | null>(null)
 const fetchError = ref('')
@@ -341,9 +385,48 @@ const statsLoading = computed(() => !data.value && !fetchError.value)
 /** Chart needs ≥2 samples before drawing. */
 const chartReady = computed(() => history.value.length >= 2)
 
+const cacheHint = computed(() =>
+  formatCacheHint(data.value?._cache, {
+    warmingLabel: 'Warming stats cache…',
+    hasData: Boolean(data.value?.host?.memTotalBytes)
+  })
+)
+const cacheStale = computed(
+  () => Boolean(data.value?._cache?.stale || data.value?._cache?.warming)
+)
+const collectorPaused = computed(() => Boolean(data.value?.collectorPaused))
+
 const gridYs = [0, 30, 60, 90, 120]
 
-let timer: ReturnType<typeof setInterval> | null = null
+function applyStatsPayload(payload: StatsPayload) {
+  if (payload._cache?.warming && !payload.host?.memTotalBytes && data.value) {
+    return
+  }
+  data.value = payload
+  fetchError.value = ''
+  if (payload.host?.memTotalBytes) {
+    const mem = memPctFromHost(payload.host)
+    const next = [...history.value, { cpu: payload.host.cpuPercent, mem }]
+    history.value = next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next
+  }
+}
+
+useLeaderPoll({
+  channel: 'dpanel-dashboard-stats',
+  intervalMs: POLL_MS,
+  followerFallbackMs: 60_000,
+  fetcher: async () => {
+    try {
+      return await $fetch<StatsPayload>('/api/docker/stats')
+    } catch (e: unknown) {
+      const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+      const msg = err.data?.statusMessage || err.statusMessage || 'Could not load stats'
+      if (!data.value) fetchError.value = msg
+      throw e
+    }
+  },
+  onData: (payload) => applyStatsPayload(payload)
+})
 
 const host = computed(() => data.value?.host)
 const currentCpu = computed(() => history.value.at(-1)?.cpu ?? data.value?.host.cpuPercent ?? 0)
@@ -468,40 +551,26 @@ function chartPoints(key: 'cpu' | 'mem'): string {
 const cpuPoints = computed(() => chartPoints('cpu'))
 const memPoints = computed(() => chartPoints('mem'))
 
-let pollInFlight = false
-
-async function poll() {
-  if (pollInFlight) return
-  pollInFlight = true
-  try {
-    const payload = await $fetch<StatsPayload>('/api/docker/stats')
-    data.value = payload
-    fetchError.value = ''
-    const mem = memPctFromHost(payload.host)
-    const next = [...history.value, { cpu: payload.host.cpuPercent, mem }]
-    history.value = next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next
-  } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    const msg = err.data?.statusMessage || err.statusMessage || 'Could not load stats'
-    if (!data.value) fetchError.value = msg
-  } finally {
-    pollInFlight = false
-  }
-}
-
 onMounted(() => {
-  void poll()
-  timer = setInterval(() => void poll(), POLL_MS)
+  history.value = loadHistoryFromStorage()
 })
 
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+watch(history, (pts) => persistHistory(pts), { deep: true })
 </script>
 
 <style scoped>
 .docker-stats {
   margin-top: 0;
+}
+
+.cache-hint {
+  font-size: var(--text-xs);
+  margin: 0 0 0.65rem;
+}
+
+.collector-pause-hint {
+  font-size: var(--text-xs);
+  margin: 0 0 0.65rem;
 }
 
 .stats-layout {

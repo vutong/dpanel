@@ -1,4 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
+import { requestForceRefresh } from '../../../utils/cache-meta'
 import { assertNodeSite, assertSiteActive, getSite, normalizeSiteDomain } from '../../../utils/sites'
 import { writeSiteResources } from '../../../utils/site-resources'
 import { runScript } from '../../../utils/stack'
@@ -31,6 +32,6 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const appDirBytes = await getAppDirSizeBytes(domain)
-  return { domain, config: saved, appDirBytes }
+  await requestForceRefresh('site-resources')
+  return { domain, config: saved, appDirBytes: null }
 })

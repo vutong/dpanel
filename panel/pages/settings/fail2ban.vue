@@ -1,6 +1,7 @@
 <template>
   <div>
     <h1>Fail2ban</h1>
+    <CacheHint :cache="summaryCache" />
     <p class="page-desc">
       Ban IPs after repeated SSH failures, panel login failures, or exploit scans. Runs on the VPS host
       (not inside Docker).
@@ -342,6 +343,7 @@ type SecurityEvent = {
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
 
 const data = ref<Fail2banSummary | null>(null)
+const summaryCache = ref<CacheMetaFields | null>(null)
 const jailsDetail = ref<JailRow[] | null>(null)
 const bannedPayload = ref<Fail2banBannedPayload | null>(null)
 
@@ -471,7 +473,8 @@ async function loadSummary(silent = false) {
   }
   const prev = data.value
   try {
-    const res = await $fetch<Fail2banSummary>('/api/security/fail2ban')
+    const res = await $fetch<Fail2banSummary & { _cache?: CacheMetaFields }>('/api/security/fail2ban')
+    summaryCache.value = res._cache ?? null
     if (res.ok === false) {
       if (prev?.installed === true) {
         data.value = {

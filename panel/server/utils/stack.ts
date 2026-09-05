@@ -10,10 +10,34 @@ import {
   writeFileSync
 } from 'node:fs'
 import { promisify } from 'node:util'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { setCacheOpRunning } from './cache-meta'
+import { writeRegistryAtomic } from './cache-store'
 
 const execFileAsync = promisify(execFile)
+
+const PROCESS_ALIVE_TTL_MS = 2000
+const processAliveCache = new Map<string, { at: number; alive: boolean }>()
+
+async function bashAliveCheck(script: string, timeoutMs = 8000): Promise<boolean> {
+  try {
+    await execFileAsync('bash', ['-lc', script], { timeout: timeoutMs, encoding: 'utf8' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function cachedProcessAlive(key: string, check: () => Promise<boolean>): Promise<boolean> {
+  const hit = processAliveCache.get(key)
+  if (hit && Date.now() - hit.at < PROCESS_ALIVE_TTL_MS) {
+    return hit.alive
+  }
+  const alive = await check()
+  processAliveCache.set(key, { at: Date.now(), alive })
+  return alive
+}
 
 export function stackRoot(): string {
   return process.env.STACK_ROOT || '/opt/stack'
@@ -118,6 +142,7 @@ export function beginSiteOp(domain: string, op: SiteOpKind, message: string): vo
   writeFileSync(logPath, '', 'utf8')
 
   writeSiteOpStatus(domain, op, 'running', message)
+  void setCacheOpRunning(true)
 }
 
 export function systemUpdateLogPath(): string {
@@ -133,26 +158,17 @@ export function systemUpdateLockPath(): string {
 }
 
 /** True if a panel/system update process (or its docker runner) looks alive. */
-export function isSystemUpdateProcessAlive(): boolean {
-  try {
-    const r = spawnSync(
-      'bash',
+export async function isSystemUpdateProcessAlive(): Promise<boolean> {
+  return cachedProcessAlive('system-update', () =>
+    bashAliveCheck(
       [
-        '-lc',
-        [
-          "pgrep -af 'panel-update\\.sh' >/dev/null 2>&1",
-          "|| pgrep -af 'panel-update-host' >/dev/null 2>&1",
-          "|| pgrep -af 'infra/scripts/update\\.sh' >/dev/null 2>&1",
-          // docker run alpine … panel-update-host (compose build can take a long time)
-          "|| docker ps --format '{{.Command}}' 2>/dev/null | grep -q 'panel-update-host'"
-        ].join(' ')
-      ],
-      { timeout: 8000, encoding: 'utf8' }
+        "pgrep -af 'panel-update\\.sh' >/dev/null 2>&1",
+        "|| pgrep -af 'panel-update-host' >/dev/null 2>&1",
+        "|| pgrep -af 'infra/scripts/update\\.sh' >/dev/null 2>&1",
+        "|| docker ps --format '{{.Command}}' 2>/dev/null | grep -q 'panel-update-host'"
+      ].join(' ')
     )
-    return r.status === 0
-  } catch {
-    return false
-  }
+  )
 }
 
 /**
@@ -195,6 +211,7 @@ export function beginSystemUpdate(message: string): void {
   mkdirSync(dirname(logPath), { recursive: true })
   writeFileSync(logPath, '', 'utf8')
   writeSystemUpdateStatus('running', message)
+  void setCacheOpRunning(true)
 }
 
 export function writeSystemUpdateStatus(
@@ -218,6 +235,9 @@ export function writeSystemUpdateStatus(
     ),
     'utf8'
   )
+  if (status !== 'running') {
+    void setCacheOpRunning(false)
+  }
 }
 
 export function writeSiteOpStatus(
@@ -244,6 +264,9 @@ export function writeSiteOpStatus(
     ),
     'utf8'
   )
+  if (status !== 'running') {
+    void setCacheOpRunning(false)
+  }
 }
 
 export function siteOpStatusPath(domain: string): string {
@@ -255,7 +278,7 @@ export function siteOpsLockPath(): string {
 }
 
 /** True if update/rebuild for this domain looks alive. */
-export function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): boolean {
+export async function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): Promise<boolean> {
   const safeDomain = domain.replace(/[^a-zA-Z0-9.-]/g, '')
   if (!safeDomain) return false
   const script =
@@ -266,30 +289,16 @@ export function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): boolean {
         : op === 'fix-permissions'
           ? `site-fix-permissions\\.sh ${safeDomain}`
           : `site-(update|rebuild|fix-permissions)\\.sh ${safeDomain}`
-  try {
-    const r = spawnSync(
-      'bash',
-      ['-lc', `pgrep -af '${script}' >/dev/null 2>&1`],
-      { timeout: 8000, encoding: 'utf8' }
-    )
-    return r.status === 0
-  } catch {
-    return false
-  }
+  return cachedProcessAlive(`site-op:${safeDomain}:${op || 'any'}`, () =>
+    bashAliveCheck(`pgrep -af '${script}' >/dev/null 2>&1`)
+  )
 }
 
 /** True if any site-update / site-rebuild script is running (any domain). */
-export function isAnySiteOpProcessAlive(): boolean {
-  try {
-    const r = spawnSync(
-      'bash',
-      ['-lc', "pgrep -af 'site-(update|rebuild|fix-permissions)\\.sh ' >/dev/null 2>&1"],
-      { timeout: 8000, encoding: 'utf8' }
-    )
-    return r.status === 0
-  } catch {
-    return false
-  }
+export async function isAnySiteOpProcessAlive(): Promise<boolean> {
+  return cachedProcessAlive('site-op:any', () =>
+    bashAliveCheck("pgrep -af 'site-(update|rebuild|fix-permissions)\\.sh ' >/dev/null 2>&1")
+  )
 }
 
 export type ClearStuckJobsResult = {
@@ -417,6 +426,8 @@ export function clearStuckJobs(): ClearStuckJobsResult {
     /* ignore */
   }
 
+  void setCacheOpRunning(false)
+
   return {
     ok: true,
     killedProcesses: true,
@@ -500,7 +511,7 @@ export async function readAuth() {
 export async function updateAuthPassword(passwordHash: string): Promise<void> {
   const auth = await readAuth()
   const path = authFilePath()
-  await writeFile(path, JSON.stringify({ ...auth, passwordHash }), 'utf8')
+  await writeRegistryAtomic(path, { ...auth, passwordHash })
   try {
     chmodSync(path, 0o600)
   } catch {

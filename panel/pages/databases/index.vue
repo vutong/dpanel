@@ -1,7 +1,10 @@
 <template>
   <div>
     <div class="header">
-      <h1>Databases</h1>
+      <div>
+        <h1>Databases</h1>
+        <CacheHint :cache="listCache" />
+      </div>
       <NuxtLink to="/databases/create" class="btn btn-primary">+ Create database</NuxtLink>
     </div>
 
@@ -181,8 +184,11 @@ type DatabaseRow = {
   createdAt?: string | null
 }
 
-const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[] }>('/api/databases')
+const { data, pending, refresh } = useFetch<{ databases: DatabaseRow[]; _cache?: CacheMetaFields }>(
+  '/api/databases'
+)
 const databases = computed(() => data.value?.databases ?? [])
+const listCache = computed(() => data.value?._cache)
 const listLoading = computed(() => pending.value)
 
 const modifyTarget = ref<DatabaseRow | null>(null)
@@ -298,10 +304,13 @@ async function confirmDelete() {
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 1.25rem;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+.header h1 {
+  margin: 0 0 0.25rem;
 }
 .muted { color: var(--muted); }
 .muted a { margin-left: 0.35rem; }

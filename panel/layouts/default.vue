@@ -61,8 +61,39 @@
 </template>
 
 <script setup lang="ts">
+import type { PanelPresenceSection } from '~/composables/usePanelPresence'
+import { PanelPresenceKey } from '~/composables/usePanelPresence'
+
 const route = useRoute()
 const showNav = computed(() => route.path !== '/login')
+
+const presenceSections = computed<PanelPresenceSection[]>(() => {
+  const path = route.path
+  const sections: PanelPresenceSection[] = []
+  if (path === '/' || path === '') sections.push('dashboard')
+  if (path.startsWith('/settings')) sections.push('settings')
+  if (path.startsWith('/databases')) sections.push('databases')
+  if (path.startsWith('/websites')) sections.push('websites')
+  return sections
+})
+
+const presenceDomain = computed(() => {
+  const path = route.path
+  const match = path.match(/^\/websites\/([^/]+)/)
+  if (!match?.[1]) return undefined
+  try {
+    return decodeURIComponent(match[1]).trim().toLowerCase()
+  } catch {
+    return undefined
+  }
+})
+
+const { isLeader, isVisible } = usePanelPresence({
+  sections: presenceSections,
+  domain: presenceDomain
+})
+
+provide(PanelPresenceKey, { isLeader, isVisible })
 
 const { data: health } = useFetch<{ version?: string }>('/api/health', {
   key: 'dpanel-health-version'
@@ -71,6 +102,11 @@ const panelVersion = computed(() => health.value?.version || '')
 
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' })
+  clearNuxtData('auth-me')
+  clearNuxtData('dashboard-summary')
+  clearNuxtData('security-status-dashboard')
+  clearNuxtData('security-fail2ban-dashboard')
+  clearNuxtData('dpanel-health-version')
   await navigateTo('/login')
 }
 </script>

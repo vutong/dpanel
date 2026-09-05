@@ -70,15 +70,33 @@ server {
         proxy_redirect off;
     }
 
+    location ~ ^/api/(docker/stats|security/|websites/.+/operation|system/update/(operation|log)) {
+        limit_req zone=panel_poll burst=30 nodelay;
+        proxy_pass http://dpanel_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 15s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+
     location / {
-        proxy_pass http://dpanel:3000;
+        limit_req zone=panel_api burst=80 nodelay;
+        proxy_pass http://dpanel_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_connect_timeout 15s;
+        proxy_send_timeout 900s;
+        proxy_read_timeout 900s;
     }
 }
 
@@ -97,15 +115,33 @@ server {
         proxy_redirect off;
     }
 
+    location ~ ^/api/(docker/stats|security/|websites/.+/operation|system/update/(operation|log)) {
+        limit_req zone=panel_poll burst=30 nodelay;
+        proxy_pass http://dpanel_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 15s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+
     location / {
-        proxy_pass http://dpanel:3000;
+        limit_req zone=panel_api burst=80 nodelay;
+        proxy_pass http://dpanel_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_connect_timeout 15s;
+        proxy_send_timeout 900s;
+        proxy_read_timeout 900s;
     }
 }
 EOF

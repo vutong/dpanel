@@ -1,6 +1,7 @@
 <template>
   <div>
     <h1>ClamAV</h1>
+    <CacheHint :cache="summaryCache" />
     <p class="page-desc">
       Scan website files under <code>apps/</code> for known malware. Daemon runs on the VPS host.
       First install may require a signature download (freshclam).
@@ -261,6 +262,7 @@ const { data: sitesData } = useFetch<{ sites?: { domain: string }[] }>('/api/web
 const sites = computed(() => sitesData.value?.sites ?? [])
 
 const data = ref<ClamData | null>(null)
+const summaryCache = ref<CacheMetaFields | null>(null)
 const loading = ref(true)
 const installBusy = ref(false)
 const updateBusy = ref(false)
@@ -387,7 +389,8 @@ async function loadSummary(silent = false) {
   }
   const prev = data.value
   try {
-    const res = await $fetch<ClamData>('/api/security/clamav')
+    const res = await $fetch<ClamData & { _cache?: CacheMetaFields }>('/api/security/clamav')
+    summaryCache.value = res._cache ?? null
     if (res.ok === false) {
       if (prev?.installed === true) {
         data.value = {

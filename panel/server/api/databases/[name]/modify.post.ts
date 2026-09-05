@@ -1,4 +1,5 @@
 import { requireAuth } from '../../../utils/auth-guard'
+import { requestForceRefresh } from '../../../utils/cache-meta'
 import { parseScriptJson, runScript } from '../../../utils/stack'
 
 type DbModifyResult = {
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: result.error || 'Failed to reset password'
       })
     }
+    await requestForceRefresh('databases-list')
     return result
   } catch (e: unknown) {
     if (e && typeof e === 'object' && 'statusCode' in e) throw e

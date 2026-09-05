@@ -1,6 +1,7 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { stackRoot } from './stack'
+import { writeRegistryAtomic } from './cache-store'
 
 export type SiteRecord = {
   domain: string
@@ -120,7 +121,7 @@ export async function updateSiteGithubUrl(domain: string, githubUrl: string): Pr
     throw createError({ statusCode: 404, statusMessage: 'Site not found' })
   }
   sites[idx] = { ...sites[idx], githubUrl: url }
-  await writeFile(sitesPath(), `${JSON.stringify(sites, null, 2)}\n`, 'utf8')
+  await writeRegistryAtomic(sitesPath(), sites)
   return sites[idx]
 }
 

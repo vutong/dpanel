@@ -303,9 +303,14 @@ wait_for_healthy_stack() {
   source "${STACK_ROOT}/infra/scripts/_helpers.sh"
   if wait_for_dpanel_ready 120; then
     log "Panel healthy"
+  else
+    log "Warning: health check timeout — run: dpanel logs dpanel"
+  fi
+  if wait_for_collector_healthy 180; then
+    log "Cache collector healthy"
     return 0
   fi
-  log "Warning: health check timeout — run: dpanel logs dpanel"
+  log "Warning: cache-collector not healthy yet — stats may warm slowly (run: docker compose ps cache-collector)"
 }
 
 # --- Main ---
@@ -402,6 +407,7 @@ rsync -a --delete \
 DIRS=(
   "${STACK_ROOT}/apps/${PANEL_DOMAIN}"
   "${STACK_ROOT}/data/panel"
+  "${STACK_ROOT}/data/panel/cache"
   "${STACK_ROOT}/data/mariadb/volume"
   "${STACK_ROOT}/data/redis/persistence"
   "${STACK_ROOT}/data/redis/dump"

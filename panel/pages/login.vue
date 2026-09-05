@@ -50,13 +50,10 @@
             />
           </div>
         </div>
-        <button class="btn btn-primary login-submit" type="submit" :disabled="loading || checking">
+        <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
           <span v-if="loading" class="login-btn-inner">
             <span class="login-btn-spinner" aria-hidden="true" />
             Signing in…
-          </span>
-          <span v-else-if="checking" class="login-btn-inner">
-            <span class="skeleton skeleton-text" style="width: 4rem; background: rgba(255,255,255,0.35)" aria-hidden="true" />
           </span>
           <span v-else>Sign in</span>
         </button>
@@ -73,20 +70,16 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
-const checking = ref(true)
 
-onMounted(async () => {
+onMounted(() => {
   initTheme()
-  try {
-    const me = await $fetch<{ authenticated?: boolean }>('/api/auth/me')
-    if (me?.authenticated) {
-      await navigateTo('/')
-      return
-    }
-  } catch {
-    /* show login form */
-  }
-  checking.value = false
+  void $fetch<{ authenticated?: boolean }>('/api/auth/me')
+    .then(async (me) => {
+      if (me?.authenticated) await navigateTo('/')
+    })
+    .catch(() => {
+      /* show login form */
+    })
 })
 
 async function submit() {
