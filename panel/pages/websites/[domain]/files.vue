@@ -206,10 +206,11 @@
                     @click="downloadRel(joinRel(cwd, e.name), e.name)"
                   />
                   <IconButton
+                    v-if="e.type === 'file' && !isImageFile(e.name)"
                     icon="edit"
-                    title="Rename"
+                    title="Edit"
                     :disabled="mutationsLocked || busy || e.escaped"
-                    @click="openRenameOne(e.name)"
+                    @click="openEditOne(e)"
                   />
                   <IconButton
                     icon="trash"
@@ -235,6 +236,43 @@
           <button type="button" class="btn btn-ghost" @click="mkdirOpen = false">Cancel</button>
           <button type="button" class="btn btn-primary" :disabled="busy || !mkdirName.trim()" @click="confirmMkdir">
             Create
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editOpen" class="modal-backdrop" @click.self="closeEdit">
+      <div class="modal card preview-modal" role="dialog" aria-modal="true">
+        <div class="preview-head">
+          <h2>Edit — {{ editName }}</h2>
+          <button type="button" class="btn btn-ghost btn-sm" @click="closeEdit">
+            <AppIcon name="x" :size="16" />
+          </button>
+        </div>
+        <div v-if="editLoading" class="preview-skel" aria-hidden="true">
+          <span class="skeleton skeleton-block" style="height: 14rem" />
+        </div>
+        <p v-else-if="editError" class="alert alert-error">{{ editError }}</p>
+        <template v-else>
+          <textarea
+            v-model="editContent"
+            class="edit-textarea input"
+            rows="18"
+            spellcheck="false"
+            autocomplete="off"
+            :disabled="busy"
+          />
+          <p v-if="editTruncated" class="muted">File was truncated — only the first 256 KB is editable.</p>
+        </template>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" :disabled="busy" @click="closeEdit">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="busy || editLoading || !!editError"
+            @click="confirmSaveEdit"
+          >
+            {{ busy ? 'Saving…' : 'Save' }}
           </button>
         </div>
       </div>
@@ -427,7 +465,20 @@ const previewText = ref('')
 const previewImageUrl = ref('')
 const previewError = ref('')
 const previewTruncated = ref(false)
+const editOpen = ref(false)
+const editLoading = ref(false)
+const editName = ref('')
+const editRel = ref('')
+const editContent = ref('')
+const editError = ref('')
+const editTruncated = ref(false)
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
+
+const IMAGE_FILE_RE = /\.(jpe?g|png|gif|webp|bmp|ico)$/i
+
+function isImageFile(name: string) {
+  return IMAGE_FILE_RE.test(name)
+}
 
 async function startFixPermissions() {
   if (listing.value?.runtime !== 'php' || readOnly.value) return
@@ -654,6 +705,68 @@ async function confirmMkdir() {
     await $fetch(`${apiBase.value}/mkdir`, { method: 'POST', body: { path: joinRel(cwd.value, name) } })
     mkdirOpen.value = false
     showAlert(`Created ${name}`, true)
+    await refresh()
+  } catch (e: unknown) {
+    showAlert(apiErr(e), false)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function openEditOne(e: FileEntry) {
+  if (e.type !== 'file' || e.escaped || isImageFile(e.name)) return
+  editOpen.value = true
+  editLoading.value = true
+  editName.value = e.name
+  editRel.value = joinRel(cwd.value, e.name)
+  editContent.value = ''
+  editError.value = ''
+  editTruncated.value = false
+  try {
+    const res = await fetch(`${apiBase.value}/preview?path=${encodeURIComponent(editRel.value)}`, {
+      credentials: 'same-origin'
+    })
+    const ct = res.headers.get('content-type') || ''
+    if (!res.ok) {
+      let message = 'Cannot open file'
+      try {
+        const body = (await res.json()) as { statusMessage?: string }
+        if (body.statusMessage) message = body.statusMessage
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    if (ct.startsWith('image/')) {
+      throw new Error('Cannot edit image files — download instead')
+    }
+    const data = (await res.json()) as { content?: string; truncated?: boolean }
+    editContent.value = data.content || ''
+    editTruncated.value = !!data.truncated
+  } catch (err: unknown) {
+    editError.value = err instanceof Error ? err.message : 'Cannot open file'
+  } finally {
+    editLoading.value = false
+  }
+}
+
+function closeEdit() {
+  editOpen.value = false
+  editContent.value = ''
+  editError.value = ''
+}
+
+async function confirmSaveEdit() {
+  if (mutationsLocked.value || editLoading.value || editError.value || !editRel.value) return
+  busy.value = true
+  clearAlert()
+  try {
+    await $fetch(`${apiBase.value}/content`, {
+      method: 'PUT',
+      body: { path: editRel.value, content: editContent.value }
+    })
+    closeEdit()
+    showAlert(`Saved ${editName.value}`, true)
     await refresh()
   } catch (e: unknown) {
     showAlert(apiErr(e), false)
@@ -1009,6 +1122,15 @@ function onDrop(ev: DragEvent) {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.edit-textarea {
+  width: 100%;
+  min-height: 14rem;
+  max-height: 55vh;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 .modal-actions {
   display: flex;

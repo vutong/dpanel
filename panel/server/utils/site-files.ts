@@ -558,6 +558,54 @@ export async function previewText(domain: string, relRaw: unknown) {
   }
 }
 
+export async function writeTextFileInSite(domain: string, relRaw: unknown, content: string) {
+  const target = await resolveJailPath(domain, relRaw, { mustExist: true })
+  assertWritable(target.site)
+  assertNotRoot(target)
+  assertPanelSafe(domain, target.rel)
+
+  const name = basename(target.rel || target.domain)
+  if (isImageName(name)) fail(400, 'Cannot edit image files — download instead')
+
+  let lst
+  try {
+    lst = await lstat(target.abs)
+  } catch {
+    fail(404, 'Path not found')
+  }
+  if (!lst.isFile()) fail(400, 'Not a file')
+
+  const buf = Buffer.from(String(content ?? ''), 'utf8')
+  if (buf.includes(0)) fail(400, 'Binary content not allowed')
+  if (buf.byteLength > MAX_PREVIEW_TEXT_BYTES) {
+    fail(413, `File too large to edit (max ${MAX_PREVIEW_TEXT_BYTES / 1024} KB)`)
+  }
+
+  const tmpAbs = join(dirname(target.abs), `.${name}.editing-${randomBytes(8).toString('hex')}`)
+  try {
+    const fh = await open(tmpAbs, 'w')
+    try {
+      await fh.write(buf)
+    } finally {
+      await fh.close()
+    }
+    await applyOwnershipForSite({ ...target, abs: tmpAbs, rel: target.rel }, 'file')
+    await rename(tmpAbs, target.abs)
+  } catch (e: unknown) {
+    try {
+      await rm(tmpAbs, { force: true })
+    } catch {
+      /* ignore */
+    }
+    const err = e as NodeJS.ErrnoException & { statusCode?: number }
+    if (err.statusCode) throw e
+    if (err.code === 'EACCES' || err.code === 'EPERM') fail(403, 'Permission denied')
+    fail(500, err.message || 'Cannot save file')
+  }
+
+  return { ok: true as const, path: target.rel, bytes: buf.byteLength }
+}
+
 export async function uploadToDir(
   domain: string,
   dirRelRaw: unknown,
