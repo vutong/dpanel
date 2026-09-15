@@ -50,6 +50,13 @@ github_auth_failed_message() {
   return 1
 }
 
+# Git 2.35+ blocks pull when repo dir owner != current user (panel root vs PHP www-data).
+github_git_in() {
+  local app_dir="$1"
+  shift
+  git -c "safe.directory=${app_dir}" "$@"
+}
+
 # Clone into empty dir (uses ${APP_DIR}/_repo_tmp then moves contents).
 github_clone_into() {
   local app_dir="$1"
@@ -121,19 +128,19 @@ github_pull_into() {
   (
     cd "${app_dir}"
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-      git config --local credential.helper "!f() { echo username=${git_user}; echo password=${GITHUB_TOKEN}; }; f" 2>/dev/null || true
+      github_git_in "${app_dir}" config --local credential.helper "!f() { echo username=${git_user}; echo password=${GITHUB_TOKEN}; }; f" 2>/dev/null || true
     fi
     # Always update origin when GITHUB_URL is set (URL change from panel; token optional for public repos).
     if [[ "${GITHUB_URL:-}" =~ ^https://github\.com/(.+)$ ]]; then
       gh_path="${BASH_REMATCH[1]%.git}"
       if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${gh_path}.git" 2>/dev/null || true
+        github_git_in "${app_dir}" remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${gh_path}.git" 2>/dev/null || true
       else
-        git remote set-url origin "https://github.com/${gh_path}.git" 2>/dev/null || true
+        github_git_in "${app_dir}" remote set-url origin "https://github.com/${gh_path}.git" 2>/dev/null || true
       fi
     fi
-    git fetch origin 2>>"${pull_err}" || true
-    if ! git pull --ff-only 2>>"${pull_err}" && ! git pull 2>>"${pull_err}"; then
+    github_git_in "${app_dir}" fetch origin 2>>"${pull_err}" || true
+    if ! github_git_in "${app_dir}" pull --ff-only 2>>"${pull_err}" && ! github_git_in "${app_dir}" pull 2>>"${pull_err}"; then
       exit 1
     fi
   )

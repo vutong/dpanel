@@ -79,7 +79,8 @@ if [[ -d "${APP_DIR}/.git" ]]; then
     echo "[dpanel] git restore . (discard local changes before pull)"
     (
       cd "${APP_DIR}"
-      git restore . 2>/dev/null || git checkout -- . 2>/dev/null || true
+      github_git_in "${APP_DIR}" restore . 2>/dev/null \
+        || github_git_in "${APP_DIR}" checkout -- . 2>/dev/null || true
     )
   fi
   if ! github_pull_into "${APP_DIR}"; then
