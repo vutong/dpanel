@@ -31,7 +31,10 @@ export default defineEventHandler(async (event) => {
     const status = JSON.parse(raw) as { status?: string; op?: string }
     if (status.status === 'running') {
       const op =
-        status.op === 'update' || status.op === 'rebuild' || status.op === 'fix-permissions'
+        status.op === 'update' ||
+        status.op === 'rebuild' ||
+        status.op === 'fix-permissions' ||
+        status.op === 'create'
           ? (status.op as SiteOpKind)
           : undefined
       if (await isSiteOpProcessAlive(domain, op)) {

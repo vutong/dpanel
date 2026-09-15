@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
+export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions' | 'create'
 
 type SiteOpStatus = {
   op?: string
@@ -96,6 +96,7 @@ const logViewport = ref<HTMLElement | null>(null)
 const title = computed(() => {
   if (props.op === 'rebuild') return 'Rebuild'
   if (props.op === 'fix-permissions') return 'Fix permissions'
+  if (props.op === 'create') return 'Create website'
   return 'Update from Git'
 })
 
@@ -179,7 +180,9 @@ async function fetchStatus() {
         ? 'Rebuild complete'
         : props.op === 'fix-permissions'
           ? 'Permissions fixed'
-          : 'Pull complete'
+          : props.op === 'create'
+            ? 'Website created'
+            : 'Pull complete'
       : 'Operation failed')
   emit('done', { ok: s.status === 'ok', message: `${props.domain}: ${msg}` })
 }
@@ -204,7 +207,9 @@ function startStreaming() {
       ? 'Starting rebuild…'
       : props.op === 'fix-permissions'
         ? 'Fixing permissions…'
-        : 'Pulling from Git…'
+        : props.op === 'create'
+          ? 'Cloning from GitHub…'
+          : 'Pulling from Git…'
   phase.value = 'running'
 
   void fetchLogChunk()

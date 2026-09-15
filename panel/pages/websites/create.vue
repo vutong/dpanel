@@ -65,14 +65,16 @@
     <SiteOpStreamModal
       :open="streamOpen"
       :domain="createdDomain"
-      op="rebuild"
-      @close="onBuildStreamClose"
-      @done="onBuildStreamDone"
+      :op="streamOp"
+      @close="onStreamClose"
+      @done="onStreamDone"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import type { SiteOpKind } from '~/components/SiteOpStreamModal.vue'
+
 const domain = ref('')
 const runtime = ref('')
 const cloneGithub = ref(false)
@@ -85,6 +87,7 @@ const message = ref('')
 const ok = ref(false)
 const gitTokenStorage = useGitHubTokenStorage()
 const streamOpen = ref(false)
+const streamOp = ref<SiteOpKind>('create')
 const createdDomain = ref('')
 
 watch(runtime, (v) => {
@@ -116,6 +119,7 @@ async function submit() {
       submitting.value = false
       return
     }
+
     await $fetch('/api/websites', {
       method: 'POST',
       body: {
@@ -125,33 +129,16 @@ async function submit() {
         githubToken: token || undefined
       }
     })
-    ok.value = true
 
     if (cloneGithub.value) {
       gitTokenStorage.persist(domainNorm, token, saveToken.value)
-    }
-
-    const shouldBuild = cloneGithub.value && buildApp.value && runtime.value === 'node'
-    if (shouldBuild) {
-      message.value = 'Website created. Starting build…'
       createdDomain.value = domainNorm
-      try {
-        await $fetch(`/api/websites/${encodeURIComponent(domainNorm)}/rebuild`, {
-          method: 'POST',
-          body: { nodeModulesMode: 'auto' }
-        })
-        streamOpen.value = true
-      } catch (e: unknown) {
-        const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-        message.value =
-          err.data?.statusMessage ||
-          err.statusMessage ||
-          'Website created but could not start build — open the site and use Rebuild.'
-        await navigateTo(`/websites/${encodeURIComponent(domainNorm)}`)
-      }
+      streamOp.value = 'create'
+      streamOpen.value = true
       return
     }
 
+    ok.value = true
     message.value =
       runtime.value === 'node'
         ? 'Website created. Deploy code if needed, then use Rebuild to build and run the Node SSR app.'
@@ -182,18 +169,53 @@ async function submit() {
   }
 }
 
-function onBuildStreamClose() {
-  streamOpen.value = false
-  void navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
+async function startRebuildAfterCreate() {
+  try {
+    await $fetch(`/api/websites/${encodeURIComponent(createdDomain.value)}/rebuild`, {
+      method: 'POST',
+      body: { nodeModulesMode: 'auto' }
+    })
+    streamOp.value = 'rebuild'
+  } catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
+    ok.value = true
+    message.value =
+      err.data?.statusMessage ||
+      err.statusMessage ||
+      'Website created but could not start build — open the site and use Rebuild.'
+    streamOpen.value = false
+    await navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
+  }
 }
 
-function onBuildStreamDone(payload: { ok: boolean; message: string }) {
+function onStreamClose() {
+  streamOpen.value = false
+  void navigateTo('/websites')
+}
+
+async function onStreamDone(payload: { ok: boolean; message: string }) {
   ok.value = payload.ok
   message.value = payload.message
-  if (payload.ok) {
+
+  if (!payload.ok) return
+
+  if (streamOp.value === 'create') {
+    const shouldBuild = buildApp.value && runtime.value === 'node'
+    if (shouldBuild) {
+      await startRebuildAfterCreate()
+      return
+    }
     streamOpen.value = false
-    void navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
+    await navigateTo(
+      runtime.value === 'node'
+        ? `/websites/${encodeURIComponent(createdDomain.value)}`
+        : '/websites'
+    )
+    return
   }
+
+  streamOpen.value = false
+  await navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
 }
 </script>
 

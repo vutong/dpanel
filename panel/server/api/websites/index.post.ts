@@ -1,5 +1,5 @@
 import { requireAuth } from '../../utils/auth-guard'
-import { parseScriptJson, runScript } from '../../utils/stack'
+import { beginSiteOp, parseScriptJson, runScript, runScriptDetached } from '../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -27,10 +27,20 @@ export default defineEventHandler(async (event) => {
   if (githubUrl) {
     args.push(githubUrl)
     if (githubToken) extraEnv.GITHUB_TOKEN = githubToken
+    beginSiteOp(domain, 'create', 'Cloning from GitHub…')
+    runScriptDetached('site-create.sh', args, extraEnv, domain, 'create')
+    return {
+      ok: true,
+      accepted: true,
+      background: true,
+      domain,
+      runtime,
+      op: 'create' as const
+    }
   }
 
   try {
-    const out = await runScript('site-create.sh', args, 300_000, extraEnv)
+    const out = await runScript('site-create.sh', args, 120_000, extraEnv)
     return parseScriptJson(out)
   } catch (e: unknown) {
     let msg =

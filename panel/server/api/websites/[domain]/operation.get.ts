@@ -53,7 +53,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const op = (
-    status.op === 'update' || status.op === 'rebuild' || status.op === 'fix-permissions'
+    status.op === 'update' ||
+    status.op === 'rebuild' ||
+    status.op === 'fix-permissions' ||
+    status.op === 'create'
       ? status.op
       : undefined
   ) as SiteOpKind | undefined

@@ -85,10 +85,10 @@ function siteLogBasename(domain: string, op: string): string {
   return `site-${op}-${slug}.log`
 }
 
-export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
+export type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions' | 'create'
 
 /** Log sources for the site log viewer (Eye). */
-export type SiteLogKind = SiteOpKind | 'create' | 'container'
+export type SiteLogKind = SiteOpKind | 'container'
 
 export function domainSlug(domain: string): string {
   return domain.replace(/\./g, '-').replace(/[^a-zA-Z0-9-]/g, '')
@@ -125,6 +125,7 @@ export function beginSiteOp(domain: string, op: SiteOpKind, message: string): vo
         `pkill -9 -f 'site-update\\.sh ${safeDomain}' 2>/dev/null || true`,
         `pkill -9 -f 'site-rebuild\\.sh ${safeDomain}' 2>/dev/null || true`,
         `pkill -9 -f 'site-fix-permissions\\.sh ${safeDomain}' 2>/dev/null || true`,
+        `pkill -9 -f 'site-create\\.sh ${safeDomain}' 2>/dev/null || true`,
         'sleep 0.2'
       ].join('; ')
     ],
@@ -288,7 +289,9 @@ export async function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): Pro
         ? `site-rebuild\\.sh ${safeDomain}`
         : op === 'fix-permissions'
           ? `site-fix-permissions\\.sh ${safeDomain}`
-          : `site-(update|rebuild|fix-permissions)\\.sh ${safeDomain}`
+          : op === 'create'
+            ? `site-create\\.sh ${safeDomain}`
+            : `site-(update|rebuild|fix-permissions|create)\\.sh ${safeDomain}`
   return cachedProcessAlive(`site-op:${safeDomain}:${op || 'any'}`, () =>
     bashAliveCheck(`pgrep -af '${script}' >/dev/null 2>&1`)
   )
@@ -297,7 +300,7 @@ export async function isSiteOpProcessAlive(domain: string, op?: SiteOpKind): Pro
 /** True if any site-update / site-rebuild script is running (any domain). */
 export async function isAnySiteOpProcessAlive(): Promise<boolean> {
   return cachedProcessAlive('site-op:any', () =>
-    bashAliveCheck("pgrep -af 'site-(update|rebuild|fix-permissions)\\.sh ' >/dev/null 2>&1")
+    bashAliveCheck("pgrep -af 'site-(update|rebuild|fix-permissions|create)\\.sh ' >/dev/null 2>&1")
   )
 }
 
@@ -324,6 +327,7 @@ export function clearStuckJobs(): ClearStuckJobsResult {
         "pkill -9 -f 'site-rebuild\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'site-update\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'site-fix-permissions\\.sh' 2>/dev/null || true",
+        "pkill -9 -f 'site-create\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/panel-update\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/panel-update-host\\.sh' 2>/dev/null || true",
         "pkill -9 -f 'infra/scripts/update\\.sh' 2>/dev/null || true",
@@ -382,7 +386,10 @@ export function clearStuckJobs(): ClearStuckJobsResult {
           if (data.status !== 'running') continue
           const domain = (data.domain || name.replace(/\.json$/, '')).trim().toLowerCase()
           const op: SiteOpKind =
-            data.op === 'update' || data.op === 'rebuild' || data.op === 'fix-permissions'
+            data.op === 'update' ||
+            data.op === 'rebuild' ||
+            data.op === 'fix-permissions' ||
+            data.op === 'create'
               ? data.op
               : 'rebuild'
           writeSiteOpStatus(domain, op, 'error', 'Cleared stuck job (Clean Job)')
