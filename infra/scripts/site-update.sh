@@ -67,6 +67,7 @@ sys.exit(1)
 [[ -n "${GITHUB_URL}" ]] || die "No GitHub URL for this site — add repository when creating the site"
 
 mkdir -p "${APP_DIR}"
+export GITHUB_URL
 
 gh_err="$(mktemp)"
 if ! github_preflight 2>"${gh_err}"; then

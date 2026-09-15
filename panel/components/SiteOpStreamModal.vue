@@ -220,7 +220,7 @@ function startStreaming() {
   logTimer = setInterval(() => {
     if (gen !== pollGen) return
     void fetchLogChunk().catch(() => {})
-  }, 1200)
+  }, 800)
   statusTimer = setInterval(() => {
     if (gen !== pollGen) return
     void fetchStatus().catch(() => {})

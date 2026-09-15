@@ -44,18 +44,16 @@ LOG="${STACK_ROOT}/logs/node/site-create-${SLUG}.log"
 if [[ -n "$GITHUB_URL" ]]; then
   trap on_exit EXIT
   mkdir -p "${STACK_ROOT}/logs/node"
-  : >>"${LOG}"
+  : >"${LOG}"
   exec >>"${LOG}" 2>&1
   echo "[dpanel] $(date '+%Y-%m-%d %H:%M:%S') site-create ${DOMAIN} (${RUNTIME})"
   site_op_status_write "${DOMAIN}" "create" "running" "Cloning from GitHub…"
 fi
 
-mkdir -p "$APP_DIR"
-
 if [[ -n "$GITHUB_URL" ]]; then
   [[ -f "${STACK_ROOT}/infra/scripts/_github.sh" ]] \
     || die "Missing infra/scripts/_github.sh — run: sudo dpanel update"
-  export GITHUB_TOKEN
+  export GITHUB_TOKEN GITHUB_URL
   site_op_status_write "${DOMAIN}" "create" "running" "Checking GitHub access…"
   gh_err="$(mktemp)"
   if ! github_preflight 2>"${gh_err}"; then
@@ -64,20 +62,28 @@ if [[ -n "$GITHUB_URL" ]]; then
   rm -f "${gh_err}"
   site_op_status_write "${DOMAIN}" "create" "running" "Cloning repository…"
   if ! github_clone_into "${APP_DIR}" "${GITHUB_URL}"; then
-    die "git clone failed — token may be expired; use a new PAT (ghp_) with repo scope"
+    if grep -qiE 'no space left|unable to write new index file|checkout failed|disk may be full' "${LOG}" 2>/dev/null; then
+      die "Git checkout failed — disk may be full under apps/. Check Dashboard disk usage, free space, then retry Create."
+    fi
+    die "git clone failed — see create log above (token, disk space, or repo URL)"
   fi
   if [[ "$RUNTIME" == "php" ]]; then
     site_op_status_write "${DOMAIN}" "create" "running" "Fixing permissions…"
+    github_log "Fixing PHP file ownership (www-data)…"
     if ! site_fix_permissions "${DOMAIN}" "quick"; then
-      echo "[dpanel] WARNING: permission fix after clone had errors — use Fix permissions in Deploy & code" >&2
+      github_log "WARNING: permission fix after clone had errors — use Fix permissions in Deploy & code"
+    else
+      github_log "Permissions OK"
     fi
   fi
 else
+  mkdir -p "$APP_DIR"
   echo "Deploy application code to ${DOMAIN}" > "${APP_DIR}/.gitkeep"
 fi
 
 if [[ -n "$GITHUB_URL" ]]; then
   site_op_status_write "${DOMAIN}" "create" "running" "Configuring site…"
+  github_log "Writing nginx vhost for ${RUNTIME}…"
 fi
 
 if [[ "$RUNTIME" == "node" ]]; then
@@ -86,6 +92,11 @@ if [[ "$RUNTIME" == "node" ]]; then
   NODE_SVC="node-${SLUG}"
 else
   write_nginx_php_site "${DOMAIN}"
+fi
+
+if [[ -n "$GITHUB_URL" ]]; then
+  github_log "Nginx config written"
+  github_log "Registering site in panel (sites.json)…"
 fi
 
 ensure_python3 || die "python3 required — run: sudo apt-get install -y python3"
@@ -116,6 +127,7 @@ with open(path, "w") as f:
 PY
 
 if [[ -n "$GITHUB_URL" ]]; then
+  github_log "Site registered in panel"
   site_op_status_write "${DOMAIN}" "create" "running" "Applying nginx & services…"
   OP_FINALIZED=1
   site_op_status_write "${DOMAIN}" "create" "ok" "Website created"
@@ -127,7 +139,7 @@ echo "{\"ok\":true,\"domain\":\"${DOMAIN}\",\"runtime\":\"${RUNTIME}\"}"
 
 site_finalize_async "site-create-${SLUG}" "${NODE_SVC}"
 if [[ -n "$GITHUB_URL" ]]; then
-  echo "[dpanel] Site ${DOMAIN} registered — nginx/Node apply in background (see logs/node/site-create-${SLUG}.log)"
+  github_log "Queued nginx reload / Node service start in background"
 else
   echo "[dpanel] Site ${DOMAIN} registered — nginx/Node apply in background (see logs/node/site-create-${SLUG}.log)" >&2
 fi

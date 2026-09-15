@@ -51,9 +51,8 @@ export default defineEventHandler(async (event) => {
     const st = await stat(path)
     const size = st.size
     if (offset >= size) {
-      const empty = { domain, op, offset: size, chunk: '', size, slug: domainSlug(domain), full: false }
-      writeMicroCache(cacheKey, empty)
-      return empty
+      // Do not cache tail-at-EOF — log file may still be growing during site ops.
+      return { domain, op, offset: size, chunk: '', size, slug: domainSlug(domain), full: false }
     }
     const buf = await readFile(path)
     const text = buf.toString('utf8')
@@ -67,8 +66,7 @@ export default defineEventHandler(async (event) => {
     writeMicroCache(cacheKey, result)
     return result
   } catch {
-    const empty = { domain, op, offset: 0, chunk: '', size: 0, slug: domainSlug(domain), full: false }
-    writeMicroCache(cacheKey, empty)
-    return empty
+    // Log file may not exist yet (job just started) — do not cache.
+    return { domain, op, offset: 0, chunk: '', size: 0, slug: domainSlug(domain), full: false }
   }
 })
