@@ -286,6 +286,7 @@
       :open="!!streamOp"
       :domain="domainParam"
       :op="streamOp ?? 'rebuild'"
+      :resume="streamResume"
       @close="onStreamClose"
       @done="onStreamDone"
     />
@@ -539,7 +540,7 @@ type Site = {
   suspendedAt?: string | null
 }
 type Resources = { cpuLimit: number; memoryMb: number; diskGb: number; appDirBytes?: number | null }
-type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions'
+type SiteOpKind = 'update' | 'rebuild' | 'fix-permissions' | 'create'
 type NodeModulesMode = 'auto' | 'keep' | 'clean'
 
 const rebuildModeOptions: {
@@ -628,6 +629,7 @@ function onClamScanStarted(scanId: string) {
 
 const busy = ref(false)
 const streamOp = ref<SiteOpKind | null>(null)
+const streamResume = ref(false)
 const envOpen = ref(false)
 const logOpen = ref(false)
 const routingOpen = ref(false)
@@ -711,6 +713,7 @@ async function confirmUpdate() {
     updateOpen.value = false
     chainRebuildAfterUpdate.value = chainRebuild
     busy.value = true
+    streamResume.value = false
     streamOp.value = 'update'
     await refresh()
   } catch (e: unknown) {
@@ -728,6 +731,7 @@ async function startFixPermissions() {
       method: 'POST'
     })
     busy.value = true
+    streamResume.value = false
     streamOp.value = 'fix-permissions'
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -753,6 +757,7 @@ async function confirmRebuild() {
       body: { nodeModulesMode: nodeModulesMode.value },
     })
     busy.value = true
+    streamResume.value = false
     streamOp.value = 'rebuild'
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
@@ -763,6 +768,7 @@ async function confirmRebuild() {
 function onStreamClose() {
   busy.value = false
   streamOp.value = null
+  streamResume.value = false
   chainRebuildAfterUpdate.value = false
 }
 
@@ -775,11 +781,13 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
         body: { nodeModulesMode: nodeModulesMode.value },
       })
       busy.value = true
+      streamResume.value = false
       streamOp.value = 'rebuild'
       return
     } catch (e: unknown) {
       busy.value = false
       streamOp.value = null
+      streamResume.value = false
       const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
       showAlert(
         err.data?.statusMessage || err.statusMessage || 'Pull succeeded but could not start rebuild',
@@ -795,7 +803,7 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
   showAlert(payload.message, payload.ok)
 }
 
-// Resume console after refresh if update/rebuild is still running (same idea as Update Dpanel).
+// Resume console after refresh if a site op is still running or failed (same idea as Update Dpanel).
 onMounted(() => {
   if (!import.meta.client || !domainParam.value) return
   void resumeClamPoll()
@@ -803,10 +811,19 @@ onMounted(() => {
     `/api/websites/${encodeURIComponent(domainParam.value)}/operation`
   )
     .then((s) => {
-      if (s.status !== 'running') return
-      if (s.op !== 'update' && s.op !== 'rebuild' && s.op !== 'fix-permissions') return
+      const op = s.op
+      if (
+        op !== 'update' &&
+        op !== 'rebuild' &&
+        op !== 'fix-permissions' &&
+        op !== 'create'
+      ) {
+        return
+      }
+      if (s.status !== 'running' && s.status !== 'error') return
       busy.value = true
-      streamOp.value = s.op as SiteOpKind
+      streamResume.value = true
+      streamOp.value = op as SiteOpKind
     })
     .catch(() => {})
 })

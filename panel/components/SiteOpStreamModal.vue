@@ -72,10 +72,12 @@ const props = defineProps<{
   open: boolean
   domain: string
   op: SiteOpKind
+  /** After F5 — accept terminal status from the server without the new-run stale guard. */
+  resume?: boolean
 }>()
 
 const emit = defineEmits<{
-  close: []
+  close: [payload?: { terminal?: boolean }]
   done: [payload: { ok: boolean; message: string }]
 }>()
 
@@ -165,6 +167,7 @@ async function fetchStatus() {
 
   const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN
   const isFresh =
+    props.resume ||
     sawRunningForStream ||
     (!Number.isNaN(updatedAtMs) && updatedAtMs >= streamStartedAtMs - 1500)
   // Stale ok/error from a previous hung/failed run — keep waiting for this run.
@@ -226,7 +229,7 @@ function startStreaming() {
 
 function onCloseClick() {
   if (phase.value === 'running') return
-  emit('close')
+  emit('close', { terminal: true })
 }
 
 function onBackdropClick() {
@@ -234,7 +237,7 @@ function onBackdropClick() {
 }
 
 watch(
-  () => [props.open, props.domain, props.op] as const,
+  () => [props.open, props.domain, props.op, props.resume] as const,
   ([isOpen]) => {
     if (isOpen) startStreaming()
     else stopTimers()

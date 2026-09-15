@@ -2,7 +2,14 @@
   <div>
     <h1>Create website</h1>
     <p class="muted">Enter domain and runtime. Optionally clone application code from GitHub.</p>
-    <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">{{ message }}</div>
+    <div v-if="resuming" class="alert alert-info">
+      Resuming {{ streamOp === 'rebuild' ? 'build' : 'create' }} for
+      <strong>{{ createdDomain }}</strong> — log continues below.
+    </div>
+    <div v-if="message" :class="['alert', ok ? 'alert-success' : 'alert-error']">
+      {{ message }}
+      <p v-if="!ok && createFailedHint" class="error-hint">{{ createFailedHint }}</p>
+    </div>
     <form class="card form" @submit.prevent="submit">
       <div class="field">
         <label class="label">Domain</label>
@@ -66,6 +73,7 @@
       :open="streamOpen"
       :domain="createdDomain"
       :op="streamOp"
+      :resume="streamResume"
       @close="onStreamClose"
       @done="onStreamDone"
     />
@@ -85,9 +93,13 @@ const githubToken = ref('')
 const submitting = ref(false)
 const message = ref('')
 const ok = ref(false)
+const createFailedHint = ref('')
 const gitTokenStorage = useGitHubTokenStorage()
+const createOpSession = useCreateOpSession()
 const streamOpen = ref(false)
 const streamOp = ref<SiteOpKind>('create')
+const streamResume = ref(false)
+const resuming = ref(false)
 const createdDomain = ref('')
 
 watch(runtime, (v) => {
@@ -101,10 +113,66 @@ watch(cloneGithub, (v) => {
   }
 })
 
+function openCreateStream(domainNorm: string, op: SiteOpKind, resume: boolean) {
+  createdDomain.value = domainNorm
+  streamOp.value = op
+  streamResume.value = resume
+  resuming.value = resume
+  streamOpen.value = true
+  createOpSession.save({
+    domain: domainNorm,
+    op: op === 'rebuild' ? 'rebuild' : 'create',
+    runtime: runtime.value,
+    buildApp: buildApp.value
+  })
+}
+
+async function resumePendingCreate() {
+  const pending = createOpSession.load()
+  if (!pending?.domain) return
+
+  try {
+    const s = await $fetch<{ status?: string; op?: string }>(
+      `/api/websites/${encodeURIComponent(pending.domain)}/operation`
+    )
+    const op =
+      s.op === 'rebuild' ? 'rebuild' : s.op === 'create' ? 'create' : pending.op
+    if (s.status === 'running' && (op === 'create' || op === 'rebuild')) {
+      domain.value = pending.domain
+      runtime.value = pending.runtime
+      buildApp.value = pending.buildApp
+      cloneGithub.value = true
+      openCreateStream(pending.domain, op, true)
+      return
+    }
+    if ((s.status === 'error' || s.status === 'ok') && (op === 'create' || op === 'rebuild')) {
+      domain.value = pending.domain
+      runtime.value = pending.runtime
+      buildApp.value = pending.buildApp
+      cloneGithub.value = true
+      openCreateStream(pending.domain, op, true)
+      if (s.status === 'ok') createOpSession.clear()
+      return
+    }
+    createOpSession.clear()
+  } catch {
+    /* no status — drop stale session */
+    createOpSession.clear()
+  }
+}
+
+onMounted(() => {
+  if (!import.meta.client) return
+  void resumePendingCreate()
+})
+
 async function submit() {
   message.value = ''
+  createFailedHint.value = ''
   submitting.value = true
   ok.value = false
+  streamResume.value = false
+  resuming.value = false
   try {
     if (!runtime.value) {
       message.value = 'Please select a runtime'
@@ -132,9 +200,7 @@ async function submit() {
 
     if (cloneGithub.value) {
       gitTokenStorage.persist(domainNorm, token, saveToken.value)
-      createdDomain.value = domainNorm
-      streamOp.value = 'create'
-      streamOpen.value = true
+      openCreateStream(domainNorm, 'create', false)
       return
     }
 
@@ -176,6 +242,8 @@ async function startRebuildAfterCreate() {
       body: { nodeModulesMode: 'auto' }
     })
     streamOp.value = 'rebuild'
+    streamResume.value = false
+    createOpSession.updateOp('rebuild')
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
     ok.value = true
@@ -184,12 +252,16 @@ async function startRebuildAfterCreate() {
       err.statusMessage ||
       'Website created but could not start build — open the site and use Rebuild.'
     streamOpen.value = false
+    createOpSession.clear()
     await navigateTo(`/websites/${encodeURIComponent(createdDomain.value)}`)
   }
 }
 
-function onStreamClose() {
+function onStreamClose(payload?: { terminal?: boolean }) {
   streamOpen.value = false
+  streamResume.value = false
+  resuming.value = false
+  if (payload?.terminal) createOpSession.clear()
   void navigateTo('/websites')
 }
 
@@ -197,7 +269,16 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
   ok.value = payload.ok
   message.value = payload.message
 
-  if (!payload.ok) return
+  if (!payload.ok) {
+    createFailedHint.value =
+      streamOp.value === 'create'
+        ? 'Fix the repository URL or token and try Create again. If the domain already appears under Websites, open it and use Update from Git — or delete the site and recreate.'
+        : 'Open the site page and use Rebuild to try again.'
+    return
+  }
+
+  createFailedHint.value = ''
+  createOpSession.clear()
 
   if (streamOp.value === 'create') {
     const shouldBuild = buildApp.value && runtime.value === 'node'
@@ -237,4 +318,10 @@ async function onStreamDone(payload: { ok: boolean; message: string }) {
   line-height: 1.45;
 }
 .hint code { font-size: 0.8rem; }
+.error-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  opacity: 0.95;
+}
 </style>

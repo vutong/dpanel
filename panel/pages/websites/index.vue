@@ -9,6 +9,14 @@
 
     <PageAlert :message="msg" :success="ok" :alert-key="alertKey" @dismiss="clearAlert" />
 
+    <div v-if="pendingCreate" class="card pending-create">
+      <span>
+        {{ pendingCreate.op === 'rebuild' ? 'Building' : 'Creating' }}
+        <strong>{{ pendingCreate.domain }}</strong> in progress.
+      </span>
+      <NuxtLink to="/websites/create" class="btn btn-ghost btn-sm">View log</NuxtLink>
+    </div>
+
     <div v-if="listLoading" class="card table-wrap" aria-busy="true">
       <table class="table">
         <thead>
@@ -116,7 +124,25 @@ const { data, pending, refresh } = useFetch<{ sites: Site[] }>('/api/websites')
 const sites = computed(() => data.value?.sites ?? [])
 const listLoading = computed(() => pending.value)
 const busy = ref('')
+const pendingCreate = ref<{ domain: string; op: 'create' | 'rebuild' } | null>(null)
+const createOpSession = useCreateOpSession()
 const { msg, ok, alertKey, clearAlert, showAlert } = usePageAlert()
+
+onMounted(() => {
+  if (!import.meta.client) return
+  const session = createOpSession.load()
+  if (!session?.domain) return
+  void $fetch<{ status?: string; op?: string }>(
+    `/api/websites/${encodeURIComponent(session.domain)}/operation`
+  )
+    .then((s) => {
+      if (s.status !== 'running') return
+      const op = s.op === 'rebuild' ? 'rebuild' : s.op === 'create' ? 'create' : session.op
+      if (op !== 'create' && op !== 'rebuild') return
+      pendingCreate.value = { domain: session.domain, op }
+    })
+    .catch(() => {})
+})
 
 function formatDate(iso?: string) {
   if (!iso) return '—'
@@ -150,6 +176,17 @@ async function restoreSite(domain: string) {
 }
 .header h1 {
   margin: 0 0 0.25rem;
+}
+.pending-create {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-color: var(--accent-muted);
+  background: var(--accent-muted);
 }
 .muted {
   color: var(--muted);
