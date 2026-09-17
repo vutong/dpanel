@@ -1,8 +1,8 @@
 import { readBody } from 'h3'
 import { requireApiCredentials } from '../../utils/api-auth'
+import { applySiteRoutingNow } from '../../utils/apply-site-routing'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
 import { assertNodeSite, assertSiteActive, getSite } from '../../utils/sites'
-import { runScriptDetached } from '../../utils/stack'
 
 /**
  * Replace extraDomains for a Node site with the exact hostname list from the app (MongoDB).
@@ -43,13 +43,14 @@ export default defineEventHandler(async (event) => {
     extraDomains: [...nextSet]
   })
 
-  runScriptDetached('site-routing-apply.sh', [siteDomain])
+  const applied = await applySiteRoutingNow(siteDomain)
 
   return {
     ok: true,
     siteDomain,
     total: nextSet.size,
     added,
-    removed
+    removed,
+    ...applied
   }
 })

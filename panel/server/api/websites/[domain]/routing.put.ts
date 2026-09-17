@@ -1,7 +1,7 @@
 import { requireAuth } from '../../../utils/auth-guard'
+import { applySiteRoutingNow } from '../../../utils/apply-site-routing'
 import { assertNodeSite, assertSiteActive, getSite, normalizeSiteDomain } from '../../../utils/sites'
 import { readSiteRouting, writeSiteRouting } from '../../../utils/site-routing'
-import { runScript } from '../../../utils/stack'
 
 export default defineEventHandler(async (event) => {
   requireAuth(event)
@@ -17,15 +17,7 @@ export default defineEventHandler(async (event) => {
     extraDomains: current.extraDomains
   })
 
-  try {
-    await runScript('site-routing-apply.sh', [domain], 60_000)
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'nginx apply failed'
-    throw createError({
-      statusCode: 500,
-      statusMessage: `Routing saved but nginx reload failed: ${msg}`
-    })
-  }
+  await applySiteRoutingNow(domain)
 
   return saved
 })

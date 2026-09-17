@@ -1,8 +1,8 @@
 import { readBody } from 'h3'
 import { requireApiCredentials } from '../../utils/api-auth'
+import { applySiteRoutingNow } from '../../utils/apply-site-routing'
 import { normalizeHostname, readSiteRouting, writeSiteRouting } from '../../utils/site-routing'
 import { assertNodeSite, assertSiteActive, getSite } from '../../utils/sites'
-import { runScriptDetached } from '../../utils/stack'
 
 /** App containers register extra hostnames (e.g. store custom domains). */
 export default defineEventHandler(async (event) => {
@@ -43,7 +43,13 @@ export default defineEventHandler(async (event) => {
     extraDomains: [...set]
   })
 
-  runScriptDetached('site-routing-apply.sh', [siteDomain])
+  const applied = await applySiteRoutingNow(siteDomain)
 
-  return { ok: true, siteDomain, hostname, action }
+  return {
+    ok: true,
+    siteDomain,
+    hostname,
+    action,
+    ...applied
+  }
 })

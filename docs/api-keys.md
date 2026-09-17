@@ -24,7 +24,9 @@ Headers: `x-dpanel-api-key`, `x-dpanel-api-secret`
 | `POST /api/internal/routing-domains` | read_write |
 | `POST /api/internal/routing-reconcile` | read_write |
 
-Check response: `{ "available": true }` or `{ "available": false }`.
+`routing-domains` / `routing-reconcile` **đợi** `site-routing-apply.sh` (nginx vhost + reload) rồi mới `ok`. Fail apply → HTTP 500 (`Routing saved but nginx reload failed: …`), không trả thành công khi `00-default-404.conf` vẫn bắt hostname. Response có `applied`, `extraDomains`, `serverNames`.
+
+`GET /api/sites/check` chỉ đọc occupancy JSON — **không** chứng minh nginx live.
 
 Availability is **exact** match on site primary domain, `extraDomains`, wildcard base, or `www.{wildcardBase}` — not every host under `*.wildcardBase`.
 

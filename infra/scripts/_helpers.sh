@@ -430,7 +430,7 @@ try:
     print(wb)
     print(' '.join(extras))
 except Exception:
-    pass
+    sys.exit(1)
 " "${routing_json}" 2>/dev/null && return 0
   fi
 
@@ -445,7 +445,9 @@ try {
     .map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
   console.log(wb);
   console.log(extras.join(' '));
-} catch {}
+} catch (e) {
+  process.exit(1);
+}
 " "${routing_json}" 2>/dev/null && return 0
   fi
 
@@ -516,6 +518,37 @@ site_apply_nginx_routing() {
   if [[ -f "${routing_json}" ]] && grep -q '"wildcardBase"[[:space:]]*:[[:space:]]*"[^"]' "${routing_json}" 2>/dev/null; then
     if ! grep -qF '*.' "${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf" 2>/dev/null; then
       echo "[dpanel] ERROR: wildcard configured in ${routing_json} but missing in nginx vhost" >&2
+      return 1
+    fi
+  fi
+
+  local conf_file="${STACK_ROOT}/infra/nginx/conf.d/${domain}.conf"
+  if [[ -f "${routing_json}" ]] && ensure_python3 >/dev/null 2>&1 && [[ -n "${PYBIN:-}" ]]; then
+    local missing_extras
+    missing_extras="$("${PYBIN}" -c "
+import json, re, sys
+routing_path, conf_path = sys.argv[1], sys.argv[2]
+try:
+    with open(routing_path) as f:
+        extras = [str(x).strip().lower() for x in (json.load(f).get('extraDomains') or []) if str(x).strip()]
+except Exception:
+    print('UNREADABLE')
+    sys.exit(0)
+try:
+    text = open(conf_path).read()
+except Exception:
+    print('NOCONF')
+    sys.exit(0)
+m = re.search(r'server_name\\s+([^;]+);', text)
+names = {n.strip().lower() for n in (m.group(1).split() if m else [])}
+print(' '.join(h for h in extras if h not in names))
+" "${routing_json}" "${conf_file}" 2>/dev/null || true)"
+    if [[ "${missing_extras}" == "UNREADABLE" || "${missing_extras}" == "NOCONF" ]]; then
+      echo "[dpanel] ERROR: cannot verify extraDomains in nginx vhost" >&2
+      return 1
+    fi
+    if [[ -n "${missing_extras}" ]]; then
+      echo "[dpanel] ERROR: extraDomains missing from nginx vhost: ${missing_extras}" >&2
       return 1
     fi
   fi

@@ -187,7 +187,7 @@ docker exec "$(docker ps -q -f name=nginx)" nginx -t
 | Routing type | Where it is set | SSH apply |
 |--------------|-----------------|----------|
 | Wildcard (`*.base.com`, `shop.base.com`) | Panel → globe → **Base domain**, or edit `wildcardBase` in `site-routing/*.json` | `site-routing-apply.sh` (or full **Rebuild**) |
-| Custom merchant domains | App / MongoDB → `npm run sync:dpanel-routing` | Reconcile updates JSON; then `site-routing-apply.sh` or **Rebuild** |
+| Custom merchant domains | App / MongoDB → `POST /api/internal/routing-reconcile` (awaits nginx) or `npm run sync:dpanel-routing` | Internal API waits for `site-routing-apply.sh`; SSH apply still works |
 
 Sync custom domains from inside the site container (app must define `sync:dpanel-routing` in `package.json`):
 
