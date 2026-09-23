@@ -7,10 +7,9 @@ export NUXT_HOST="${NUXT_HOST:-0.0.0.0}"
 export NUXT_PORT="${NUXT_PORT:-3000}"
 
 if [ -f .env ]; then
-  set -a
   # shellcheck disable=SC1091
-  . ./.env
-  set +a
+  . /load-dotenv.sh
+  load_dotenv .env
   # shellcheck disable=SC1091
   . /node-env-bridge.sh 2>/dev/null || true
 fi

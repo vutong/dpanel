@@ -402,6 +402,8 @@ services:
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
       DPANEL_SITE_DOMAIN: ${domain}
+    # sh so a replaced entrypoint does not need the executable bit
+    command: ["sh", "/entrypoint.sh"]
     volumes:
       - ./apps/${domain}:/app
     networks:
@@ -674,6 +676,32 @@ _node_container_log_tail() {
   echo "[dpanel] --- end docker logs ---" >&2
 }
 
+# Copy the current node runtime into a site container (no image rebuild).
+_node_refresh_runtime() {
+  local cname="$1"
+  local src="${STACK_ROOT}/infra/docker/node/runtime"
+  local i cid
+  [[ -f "${src}/load-dotenv.js" && -f "${src}/entrypoint.sh" && -f "${src}/load-dotenv.sh" ]] || return 1
+  cid=""
+  for ((i = 0; i < 15; i++)); do
+    cid="$(docker ps -aq -f "name=^${cname}$" 2>/dev/null | head -1)"
+    [[ -n "${cid}" ]] && break
+    sleep 1
+  done
+  [[ -n "${cid}" ]] || return 1
+  for ((i = 0; i < 5; i++)); do
+    if docker cp "${src}/entrypoint.sh" "${cid}:/entrypoint.sh" \
+      && docker cp "${src}/load-dotenv.sh" "${cid}:/load-dotenv.sh" \
+      && docker cp "${src}/load-dotenv.js" "${cid}:/load-dotenv.js" \
+      && docker cp "${src}/node-env-bridge.sh" "${cid}:/node-env-bridge.sh"; then
+      docker exec "${cid}" chmod 755 /entrypoint.sh /load-dotenv.sh /node-env-bridge.sh 2>/dev/null || true
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 # npm install + build inside the per-site Node container, then restart (caller should hold site_ops_lock).
 node_container_build() {
   local domain="$1"
@@ -691,7 +719,15 @@ node_container_build() {
   }
 
   cd "${STACK_ROOT}"
+  write_node_compose_fragment "${domain}"
   stack_compose up -d "${svc}" 2>/dev/null || true
+
+  if _node_refresh_runtime "${cname}"; then
+    echo "[dpanel] Refreshing node entrypoint (safe .env load)…" >&2
+    docker restart "${cname}" >/dev/null 2>&1 || true
+  else
+    echo "[dpanel] warning: node runtime scripts were not updated in ${cname}" >&2
+  fi
 
   node_cid="$(_node_container_wait_ready "${cname}" 90)" || {
     echo "[dpanel] Node container not ready (${cname}) — check: docker ps -a | grep ${slug}" >&2
@@ -702,38 +738,43 @@ node_container_build() {
   echo "[dpanel] npm install & build for ${domain} (container ${cname})…" >&2
   docker exec -e DPANEL_NODE_MODULES_MODE="${node_modules_mode}" "${node_cid}" bash -lc '
     set -euo pipefail
-    if [ -f .env ]; then set -a; . ./.env; set +a; fi
+    if [ -f .env ] && [ -f /load-dotenv.js ]; then
+      eval "$(node /load-dotenv.js .env)"
+    fi
     mode="${DPANEL_NODE_MODULES_MODE:-auto}"
 
     install_once() {
+      # Site containers inherit NODE_ENV=production from the stack .env.
+      # npm then skips devDependencies, and nuxt prepare fails on modules such as @nuxt/eslint.
       if [ -f package-lock.json ]; then
-        npm ci || return 1
+        npm ci --include=dev || return 1
       else
-        npm install || return 1
+        npm install --include=dev || return 1
       fi
     }
 
     if [ "${mode}" = "clean" ]; then
-      rm -rf node_modules
+      echo "[dpanel] clean: removing node_modules and .nuxt" >&2
+      rm -rf node_modules .nuxt
       install_once
     elif [ "${mode}" = "keep" ]; then
       install_once
     elif [ "${mode}" = "auto" ] || [ -z "${mode}" ]; then
       if ! install_once; then
-        echo "[dpanel] auto: npm install failed; cleaning node_modules and retrying…" >&2
-        rm -rf node_modules
+        echo "[dpanel] auto: npm install failed; cleaning node_modules and .nuxt, then retrying…" >&2
+        rm -rf node_modules .nuxt
         install_once
       fi
     else
       echo "[dpanel] Invalid DPANEL_NODE_MODULES_MODE=${mode} — defaulting to auto" >&2
       if ! install_once; then
-        rm -rf node_modules
+        rm -rf node_modules .nuxt
         install_once
       fi
     fi
     if grep -q "\"mongoose\"" package.json 2>/dev/null && [ ! -d node_modules/mongoose ]; then
       echo "[dpanel] Installing mongoose (listed in package.json)…"
-      npm install mongoose
+      npm install --include=dev mongoose
     fi
     npm run build
   ' || {
@@ -835,7 +876,7 @@ site_sync_dpanel_routing_best_effort() {
   local sync_rc=0
   run_with_timeout "${sync_timeout}" docker exec "${node_cid}" sh -c '
     set -e
-    if [ -f .env ]; then set -a; . ./.env; set +a; fi
+    if [ -f .env ] && [ -f /load-dotenv.js ]; then eval "$(node /load-dotenv.js .env)"; fi
     npm run sync:dpanel-routing
   ' 2>&1 || sync_rc=$?
 

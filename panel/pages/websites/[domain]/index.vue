@@ -563,7 +563,7 @@ const rebuildModeOptions: {
   {
     value: 'clean',
     title: 'Clean',
-    desc: 'Always delete node_modules before install — slowest, most reliable.'
+    desc: 'Delete node_modules and .nuxt, then reinstall all dependencies — slowest, most reliable.'
   }
 ]
 
