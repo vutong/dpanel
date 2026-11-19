@@ -130,11 +130,17 @@
             <span class="tile-title">Update</span>
             <span class="tile-desc">Pull from Git then rebuild</span>
           </button>
-          <div v-if="site.runtime === 'node' && !site.githubUrl" class="tile tile--muted">
+          <button
+            v-if="site.runtime === 'node' && !site.githubUrl"
+            type="button"
+            class="tile"
+            :disabled="busy"
+            @click="openUpdate"
+          >
             <AppIcon name="git-pull" :size="22" />
             <span class="tile-title">No Git remote</span>
-            <span class="tile-desc">Add a GitHub URL via Update, or deploy to apps/{{ site.domain }}/</span>
-          </div>
+            <span class="tile-desc">Click to add a GitHub URL and pull, or deploy to apps/{{ site.domain }}/</span>
+          </button>
         </div>
       </section>
 
@@ -349,13 +355,24 @@
 
     <div v-if="updateOpen" class="modal-backdrop" @click.self="closeUpdateModal">
       <div class="modal card" :class="{ 'rebuild-modal': updateMode === 'full' }" role="dialog">
-        <h2>{{ updateMode === 'full' ? 'Update' : 'Update from Git' }}</h2>
+        <h2>
+          {{
+            updateMode === 'full'
+              ? 'Update'
+              : site?.githubUrl
+                ? 'Update from Git'
+                : 'Add Git remote'
+          }}
+        </h2>
         <p class="muted">
           <template v-if="updateMode === 'full'">
             Pull latest code then rebuild <strong>{{ site?.domain }}</strong>
           </template>
-          <template v-else>
+          <template v-else-if="site?.githubUrl">
             Pull latest code for <strong>{{ site?.domain }}</strong>
+          </template>
+          <template v-else>
+            Connect a GitHub repository and pull code for <strong>{{ site?.domain }}</strong>
           </template>
         </p>
         <div class="field">
@@ -420,7 +437,13 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="closeUpdateModal">Cancel</button>
           <button type="button" class="btn btn-primary" :disabled="busy" @click="confirmUpdate">
-            {{ updateMode === 'full' ? 'Update' : 'Pull from Git' }}
+            {{
+              updateMode === 'full'
+                ? 'Update'
+                : site?.githubUrl
+                  ? 'Pull from Git'
+                  : 'Add & pull'
+            }}
           </button>
         </div>
       </div>
