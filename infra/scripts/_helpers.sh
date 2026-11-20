@@ -702,6 +702,55 @@ _node_refresh_runtime() {
   return 1
 }
 
+# HTTP readiness for site Node apps. Nitro often binds IPv6-only ([::]:3000);
+# apps with HOST/NITRO_HOST=0.0.0.0 bind IPv4. Probe both families.
+# On success prints the working base URL (e.g. http://[::1]:3000) to stdout.
+_node_app_http_ready() {
+  local cid="$1"
+  local port="${2:-3000}"
+  local host path url
+  for host in "127.0.0.1" "[::1]"; do
+    for path in "/" "/api/health"; do
+      url="http://${host}:${port}${path}"
+      if docker exec "${cid}" curl -g -sf --connect-timeout 2 --max-time 3 -o /dev/null "${url}" 2>/dev/null \
+        || docker exec "${cid}" wget -q -O- --timeout=3 "${url}" >/dev/null 2>&1; then
+        echo "http://${host}:${port}"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+# Contextual hints after listen failure (avoid mongoose / MONGODB_URI false leads).
+_node_app_listen_fail_hints() {
+  local cid="$1"
+  local domain="$2"
+  local app_dir="$3"
+  local pkg="${app_dir}/package.json"
+  local envf="${app_dir}/.env"
+  local needs_mongo=0 has_uri=0
+
+  if [[ -f "${pkg}" ]] && grep -qE '"mongoose"|"mongodb"' "${pkg}" 2>/dev/null; then
+    needs_mongo=1
+  fi
+
+  if [[ "${needs_mongo}" -eq 1 ]]; then
+    if [[ -f "${pkg}" ]] && grep -q '"mongoose"' "${pkg}" 2>/dev/null \
+      && ! docker exec "${cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
+      echo "[dpanel] Hint: package.json lists mongoose but it is missing — npm install mongoose and Rebuild" >&2
+    fi
+    if [[ -f "${envf}" ]]; then
+      if grep -qE '^(NUXT_MONGODB_URI|MONGODB_URI)=' "${envf}" 2>/dev/null; then
+        has_uri=1
+      fi
+    fi
+    if [[ "${has_uri}" -eq 0 ]]; then
+      echo "[dpanel] Hint: set NUXT_MONGODB_URI in apps/${domain}/.env (panel → Edit .env); MONGODB_URI is also mapped if present" >&2
+    fi
+  fi
+}
+
 # npm install + build inside the per-site Node container, then restart (caller should hold site_ops_lock).
 node_container_build() {
   local domain="$1"
@@ -796,26 +845,20 @@ node_container_build() {
     return 1
   }
 
-  local i
+  local i ready_url=""
+  echo "[dpanel] Waiting for app on :3000 (probe 127.0.0.1 then [::1])…" >&2
   for ((i = 0; i < 45; i++)); do
-    if docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
-      || docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
-      echo "[dpanel] App responding on :3000" >&2
+    if ready_url="$(_node_app_http_ready "${node_cid}" 3000)"; then
+      echo "[dpanel] App responding on ${ready_url}" >&2
       break
     fi
     sleep 2
   done
 
-  if ! docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/ >/dev/null 2>&1 \
-    && ! docker exec "${node_cid}" wget -q -O- --timeout=3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
-    echo "[dpanel] Build OK but app not listening on :3000 yet" >&2
+  if [[ -z "${ready_url}" ]]; then
+    echo "[dpanel] Build OK but app not listening on :3000 yet (IPv4 127.0.0.1 and IPv6 ::1 both failed)" >&2
     _node_container_log_tail "${cname}" 80
-    if ! docker exec "${node_cid}" sh -c 'test -d node_modules/mongoose' 2>/dev/null; then
-      echo "[dpanel] Hint: add mongoose to package.json (npm install mongoose) and Rebuild" >&2
-    fi
-    if [[ ! -f "${app_dir}/.env" ]]; then
-      echo "[dpanel] Hint: set MONGODB_URI in apps/${domain}/.env (panel → Edit .env) then restart" >&2
-    fi
+    _node_app_listen_fail_hints "${node_cid}" "${domain}" "${app_dir}"
     return 1
   fi
 

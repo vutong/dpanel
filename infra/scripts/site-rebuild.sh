@@ -70,7 +70,7 @@ trap on_exit EXIT
 site_op_status_write "${DOMAIN}" "rebuild" "running" "npm install & build…"
 if ! node_container_build "${DOMAIN}" "${NODE_MODULES_MODE}"; then
   if [[ -f "${APP_DIR}/.output/server/index.mjs" ]]; then
-    die "Build finished but app did not start — check App logs (Eye), Edit .env (MONGODB_URI), and mongoose in package.json"
+    die "Build finished but app did not start — check App logs (Eye); if MongoDB is required set NUXT_MONGODB_URI in Edit .env"
   fi
   die "npm build failed — see log above or logs/node/site-rebuild-${SLUG}.log"
 fi
