@@ -399,8 +399,12 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      NUXT_HOST: 0.0.0.0
-      NUXT_PORT: 3000
+      HOST: "0.0.0.0"
+      NITRO_HOST: "0.0.0.0"
+      PORT: "3000"
+      NITRO_PORT: "3000"
+      NUXT_HOST: "0.0.0.0"
+      NUXT_PORT: "3000"
       DPANEL_SITE_DOMAIN: ${domain}
     # sh so a replaced entrypoint does not need the executable bit
     command: ["sh", "/entrypoint.sh"]
@@ -702,9 +706,9 @@ _node_refresh_runtime() {
   return 1
 }
 
-# HTTP readiness for site Node apps. Nitro often binds IPv6-only ([::]:3000);
-# apps with HOST/NITRO_HOST=0.0.0.0 bind IPv4. Probe both families.
-# On success prints the working base URL (e.g. http://[::1]:3000) to stdout.
+# HTTP readiness for site Node apps. Probe IPv4 then IPv6 loopback.
+# Any HTTP response counts (incl. 4xx/5xx) — curl -f would false-fail SSR error pages.
+# On success prints the working base URL (e.g. http://127.0.0.1:3000) to stdout.
 _node_app_http_ready() {
   local cid="$1"
   local port="${2:-3000}"
@@ -712,8 +716,13 @@ _node_app_http_ready() {
   for host in "127.0.0.1" "[::1]"; do
     for path in "/" "/api/health"; do
       url="http://${host}:${port}${path}"
-      if docker exec "${cid}" curl -g -sf --connect-timeout 2 --max-time 3 -o /dev/null "${url}" 2>/dev/null \
-        || docker exec "${cid}" wget -q -O- --timeout=3 "${url}" >/dev/null 2>&1; then
+      # curl without -f: connection + any HTTP status = up
+      if docker exec "${cid}" curl -g -s --connect-timeout 2 --max-time 3 -o /dev/null "${url}" 2>/dev/null; then
+        echo "http://${host}:${port}"
+        return 0
+      fi
+      # wget: exit 8 = server error response (still means listening)
+      if docker exec "${cid}" sh -c "wget -q -O /dev/null --timeout=3 '${url}' 2>/dev/null; ec=\$?; [ \$ec -eq 0 ] || [ \$ec -eq 8 ]" 2>/dev/null; then
         echo "http://${host}:${port}"
         return 0
       fi
