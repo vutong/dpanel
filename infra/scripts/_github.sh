@@ -271,9 +271,23 @@ github_pull_into() {
         github_git_in "${app_dir}" remote set-url origin "https://github.com/${gh_path}.git" 2>/dev/null || true
       fi
     fi
-    github_git_in "${app_dir}" fetch origin 2>&1 | tee -a "${pull_err}" | github_stream_redact || true
+    # Fetch failure must fail the update. Previously "|| true" hid it, so pull reused stale refs
+    # and reported "Already up to date" even when GitHub had newer commits.
+    if ! github_git_in "${app_dir}" fetch origin 2>&1 | tee -a "${pull_err}" | github_stream_redact; then
+      echo "git fetch failed — could not read latest commits from GitHub" >&2
+      exit 1
+    fi
+    local_before="$(github_git_in "${app_dir}" rev-parse --short HEAD 2>/dev/null || echo '?')"
     if ! github_git_in "${app_dir}" pull --ff-only 2>&1 | tee -a "${pull_err}" | github_stream_redact \
       && ! github_git_in "${app_dir}" pull 2>&1 | tee -a "${pull_err}" | github_stream_redact; then
+      exit 1
+    fi
+    # Verify the working tree actually matches the upstream branch after pull.
+    local_after="$(github_git_in "${app_dir}" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    upstream="$(github_git_in "${app_dir}" rev-parse --short '@{u}' 2>/dev/null || echo '?')"
+    echo "[dpanel] git HEAD: ${local_before} -> ${local_after} (upstream ${upstream})"
+    if [[ "${upstream}" != '?' && "${local_after}" != "${upstream}" ]]; then
+      echo "git pull did not reach upstream (HEAD ${local_after} != ${upstream}) — check branch tracking: git -C ${app_dir} status" >&2
       exit 1
     fi
   )
